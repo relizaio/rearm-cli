@@ -1,0 +1,22 @@
+FROM golang:1.19.4-alpine3.17@sha256:a9b24b67dc83b3383d22a14941c2b2b2ca6a103d805cac6820fd1355943beaf1 as build-stage
+WORKDIR /build
+ENV CGO_ENABLED=0
+COPY go.mod go.sum ./
+COPY ./internal/imports ./internal/imports
+RUN go build ./internal/imports
+COPY . .
+RUN apk add --update zip
+ARG VERSION=not_versioned
+RUN mkdir /$VERSION
+RUN chmod +x ./build.sh
+RUN ./build.sh darwin amd64
+RUN ./build.sh solaris amd64
+RUN for GOARCH in 386 amd64 arm; do \
+    ./build.sh freebsd $GOARCH; done;
+RUN for GOARCH in 386 amd64 arm arm64; do \
+    ./build.sh linux $GOARCH; done;
+RUN for GOARCH in 386 amd64; do \
+    ./build.sh openbsd $GOARCH; done;
+RUN for GOARCH in 386 amd64; do \
+    ./build.sh windows $GOARCH; done;
+RUN cd ../$VERSION; sha256sum * > sha256sums.txt
