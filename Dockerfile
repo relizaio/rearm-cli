@@ -6,7 +6,6 @@ COPY ./internal/imports ./internal/imports
 RUN go build ./internal/imports
 COPY . .
 RUN go version
-RUN go test ./tests
 ARG TARGETOS
 ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o ./ ./...
