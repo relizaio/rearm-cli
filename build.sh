@@ -6,9 +6,9 @@ GOOS=$GOOS GOARCH=$GOARCH go build -o ./ ./...
 
 if [[ "$GOOS" = "windows" ]]
 then
-    BIN_FILE="reliza-cli.exe"
+    BIN_FILE="rearm.exe"
 else
-    BIN_FILE="reliza-cli"
+    BIN_FILE="rearm"
 fi
 
-zip -r -j ../$VERSION/reliza-cli-$VERSION-$GOOS-$GOARCH.zip ./$BIN_FILE
+zip -r -j ../$VERSION/rearm-$VERSION-$GOOS-$GOARCH.zip ./$BIN_FILE
