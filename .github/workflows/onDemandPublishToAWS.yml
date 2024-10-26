@@ -1,0 +1,69 @@
+on:
+  repository_dispatch:
+    types: [reliza-build-event]
+
+name: Build applications and push to AWS
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record build start
+        run: echo "BUILD_START=$(date -Iseconds)" >> $GITHUB_ENV
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Obtain version from release from Reliza Hub
+        run: |
+          reliza_ver=$(docker run --rm relizaio/reliza-cli:latest getlatestrelease -k ${{ secrets.RELIZA_API_KEY }} -i ${{ secrets.RELIZA_API_ID }} -b master --project ${{ secrets.RELIZA_HUB_PROJECT_ID }} --env UAT | jq -r ".version")
+          echo $reliza_ver
+          echo "VERSION=$reliza_ver" >> $GITHUB_ENV
+      - name: Update version in version.go
+        run: sed -i "s/Version.*/Version string = \"${VERSION}\"/" cmd/version.go
+      - name: Build for all different OS and Architecture
+        run: |
+          docker build -f Dockerfile.exec -t reliza-image --build-arg VERSION=$VERSION .
+          docker run -d --name reliza-container --entrypoint sleep reliza-image infinity
+      - name: Push all zip files to AWS
+        run: |
+          docker cp reliza-container://$VERSION ./
+          aws s3 cp --recursive $VERSION s3://reliza-images/rearm-cli-download/$VERSION
+      - name: Login to DockerHub
+        uses: docker/login-action@v2.1.0
+        with:
+          username: ${{ secrets.DOCKER_LOGIN }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+          registry: registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private
+      - name: Push latest image
+        run: |
+          docker pull registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:$VERSION
+          docker tag registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:$VERSION registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:latest
+          docker registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:latest
+      - name: Add artifacts to corresponding Reliza Hub release
+        run: |
+          echo -n "-k ${{ secrets.RELIZA_API_KEY }} -i ${{ secrets.RELIZA_API_ID }} " >> reliza_command
+          echo -n "--version $VERSION " >> reliza_command
+          readarray -t sha256sums <<< $(cat $VERSION/sha256sums.txt)
+          for i in "${sha256sums[@]}"; do
+            echo -n "--artid https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/$VERSION/$(awk '{print $2}' <<< "$i") " >> reliza_command
+            echo -n "--artbuildid github$GITHUB_ACTION$GITHUB_SHA " >> reliza_command
+            echo -n "--artbuilduri https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID " >> reliza_command
+            echo -n "--artcimeta GitHub Actions " >> reliza_command
+            echo -n "--arttype Application " >> reliza_command
+            echo -n "--artdigests sha256:$(awk '{print $1}' <<< "$i") " >> reliza_command
+            echo -n "--datestart $BUILD_START " >> reliza_command
+            echo -n "--dateend $(date -Iseconds) " >> reliza_command
+          done
+          # debug
+          echo "$(cat reliza_command)"
+          # send data
+          echo docker run --rm relizaio/reliza-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
+          eval $(cat rlz_cmd_exec)
+      - name: Stop docker container
+        run: docker stop reliza-container

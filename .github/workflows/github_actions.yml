@@ -20,5 +20,6 @@ jobs:
           image_name: rearm-cli
           reliza_api_id: ${{ secrets.RELIZA_API_ID }}
           reliza_api_key: ${{ secrets.RELIZA_API_KEY }}
-          reliza_project_id: 032df44b-af79-4753-a4d9-a70048c531f6
+          reliza_project_id: ${{ secrets.RELIZA_HUB_PROJECT_ID }}
           enable_sbom: 'true'
+          # push_latest_tag: false
