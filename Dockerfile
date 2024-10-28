@@ -17,7 +17,7 @@ ARG GIT_BRANCH=git_branch_undefined
 ARG VERSION=not_versioned
 RUN mkdir /app
 RUN adduser -u 1000 -D apprunner && chown apprunner:apprunner /app
-COPY --from=build-stage --chown=apprunner:apprunner /build/rearm-cli /app/app
+COPY --from=build-stage --chown=apprunner:apprunner /build/rearm /app/app
 RUN mkdir /indir && chown apprunner:apprunner -R /indir
 RUN mkdir /outdir && chown apprunner:apprunner -R /outdir
 USER apprunner

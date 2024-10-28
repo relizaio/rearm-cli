@@ -33,7 +33,7 @@ jobs:
       - name: Push all zip files to AWS
         run: |
           docker cp rearm-container://$VERSION ./
-          aws s3 cp --recursive $VERSION s3://rearm-images/rearm-cli-download/$VERSION
+          aws s3 cp --recursive $VERSION s3://rearm-images/rearm-download/$VERSION
       - name: Login to DockerHub
         uses: docker/login-action@v2.1.0
         with:
@@ -42,16 +42,16 @@ jobs:
           registry: registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private
       - name: Push latest image
         run: |
-          docker pull registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:$VERSION
-          docker tag registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:$VERSION registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:latest
-          docker registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm-cli:latest
+          docker pull registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm:$VERSION
+          docker tag registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm:$VERSION registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm:latest
+          docker registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private/rearm:latest
       - name: Add artifacts to corresponding Reliza Hub release
         run: |
           echo -n "-k ${{ secrets.RELIZA_API_KEY }} -i ${{ secrets.RELIZA_API_ID }} " >> reliza_command
           echo -n "--version $VERSION " >> reliza_command
           readarray -t sha256sums <<< $(cat $VERSION/sha256sums.txt)
           for i in "${sha256sums[@]}"; do
-            echo -n "--artid https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/$VERSION/$(awk '{print $2}' <<< "$i") " >> reliza_command
+            echo -n "--artid https://d7ge14utcyki8.cloudfront.net/rearm-download/$VERSION/$(awk '{print $2}' <<< "$i") " >> reliza_command
             echo -n "--artbuildid github$GITHUB_ACTION$GITHUB_SHA " >> reliza_command
             echo -n "--artbuilduri https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID " >> reliza_command
             echo -n "--artcimeta GitHub Actions " >> reliza_command
@@ -63,7 +63,7 @@ jobs:
           # debug
           echo "$(cat reliza_command)"
           # send data
-          echo docker run --rm relizaio/rearm-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
+          echo docker run --rm relizaio/rearm:latest addartifact $(cat reliza_command) > rlz_cmd_exec
           eval $(cat rlz_cmd_exec)
       - name: Stop docker container
         run: docker stop rearm-container

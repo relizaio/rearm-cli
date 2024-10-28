@@ -15,7 +15,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 */
 package main
 
-import "github.com/relizaio/rearm-cli/cmd"
+import "github.com/relizaio/rearm/cmd"
 
 func main() {
 	cmd.Execute()

@@ -1,4 +1,4 @@
-module github.com/relizaio/rearm-cli
+module github.com/relizaio/rearm
 
 go 1.20
 

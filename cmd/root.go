@@ -1270,7 +1270,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rearm-cli.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rearm.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&rearmUri, "uri", "u", "https://app.relizahub.com", "FQDN of ReARM server")
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "API Key Secret")
 	rootCmd.PersistentFlags().StringVarP(&apiKeyId, "apikeyid", "i", "", "API Key ID")
@@ -1495,7 +1495,7 @@ func initConfig(cmd *cobra.Command) {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		// Search config in home directory with name ".rearm-cli" (without extension).
+		// Search config in home directory with name ".rearm" (without extension).
 		v.AddConfigPath(home)
 		v.SetConfigName(defaultConfigFilename)
 	}
