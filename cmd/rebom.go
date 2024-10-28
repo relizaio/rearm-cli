@@ -186,7 +186,7 @@ func ReadBomJsonFromFile(filePath string) map[string]interface{} {
 
 func addBomToRebomFunc() {
 	var bomInput BomInput
-	bomInput.Meta = "sent from reliza cli"
+	bomInput.Meta = "sent from rearm cli"
 	bomInput.Bom = ReadBomJsonFromFile(infile)
 
 	// fmt.Println(bomInput)

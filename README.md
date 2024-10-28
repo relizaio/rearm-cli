@@ -1,16 +1,16 @@
-![Docker Image CI](https://github.com/relizaio/reliza-cli/actions/workflows/dockerimage.yml/badge.svg?branch=master)
-[![Go Report Card](https://goreportcard.com/badge/github.com/relizaio/reliza-cli)](https://goreportcard.com/report/github.com/relizaio/reliza-cli)
+![Docker Image CI](https://github.com/relizaio/rearm-cli/actions/workflows/dockerimage.yml/badge.svg?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/relizaio/rearm-cli)](https://goreportcard.com/report/github.com/relizaio/rearm-cli)
 # Rearm CLI
 
 This tool allows for command-line interactions with [ReARM at relizahub.com](https://relizahub.com) (currently in public preview mode). Particularly, Rearm CLI can stream metadata about instances, releases, artifacts, resolve bundles based on ReARM data. Available as either a Docker image or binary.
 
 Video tutorial about key functionality of ReARM is available on [YouTube](https://www.youtube.com/watch?v=yDlf5fMBGuI).
 
-Argo CD GitOps Integration using Kustomize [tutorial](https://itnext.io/building-kubernetes-cicd-pipeline-with-github-actions-argocd-and-reliza-hub-e7120b9be870).
+Argo CD GitOps Integration using Kustomize [tutorial](https://itnext.io/building-kubernetes-cicd-pipeline-with-github-actions-argocd-and-rearm-hub-e7120b9be870).
 
 Community forum and support is available at [r/Reliza](https://reddit.com/r/Reliza).
 
-Docker image is available at [relizaio/reliza-cli](https://hub.docker.com/r/relizaio/reliza-cli)
+Docker image is available at [relizaio/rearm-cli](https://hub.docker.com/r/relizaio/rearm-cli)
 
 ## Download Rearm CLI
 
@@ -18,19 +18,19 @@ Below are the available downloads for the latest version of the Rearm CLI (2024.
 
 The CLI is distributed as a single binary. Install by unzipping it and moving it to a directory included in your system's PATH.
 
-[SHA256 checksums](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/sha256sums.txt)
+[SHA256 checksums](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/sha256sums.txt)
 
-macOS: [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-darwin-amd64.zip)
+macOS: [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-darwin-amd64.zip)
 
-FreeBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-freebsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-freebsd-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-freebsd-arm.zip)
+FreeBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-freebsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-freebsd-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-freebsd-arm.zip)
 
-Linux: [32-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-linux-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-linux-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-linux-arm.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-linux-arm64.zip)
+Linux: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-linux-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-linux-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-linux-arm.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-linux-arm64.zip)
 
-OpenBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-openbsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-openbsd-amd64.zip)
+OpenBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-openbsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-openbsd-amd64.zip)
 
-Solaris: [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-solaris-amd64.zip)
+Solaris: [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-solaris-amd64.zip)
 
-Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-windows-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/reliza-cli-download/2024.07.0/reliza-cli-2024.07.0-windows-amd64.zip)
+Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-windows-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-cli-download/2024.07.0/rearm-cli-2024.07.0-windows-amd64.zip)
 
 It is possible to set authentication data via explicit flags, login command (see below) or following environment variables:
 
@@ -39,15 +39,15 @@ It is possible to set authentication data via explicit flags, login command (see
 - URI - for ReARM Uri (if not set, default at https://app.relizahub.com is used)
 
 # Table of Contents - Use Cases
-1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-reliza-hub)
-2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-reliza-hub)
+1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm-hub)
+2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm-hub)
 3. [Check If Artifact Hash Already Present In Some Release](#3-use-case-check-if-artifact-hash-already-present-in-some-release)
 4. [Request Latest Release Per Component Or Bundle](#6-use-case-request-latest-release-per-component-or-bundle)
-6. [Persist ReARM Credentials in a Config File](#10-use-case-persist-reliza-hub-credentials-in-a-config-file)
-8. [Create New Component in ReARM](#12-use-case-create-new-component-in-reliza-hub)
-9. [Add new artifacts to release in ReARM](#14-use-case-add-new-artifacts-to-release-in-reliza-hub)
-12. [Send Pull Request Data to ReARM](#19-use-case-send-pull-request-data-to-reliza-hub)
-13. [Attach a downloadable artifact to a Release on ReARM](#20-use-case-attach-a-downloadable-artifact-to-a-release-on-reliza-hub)
+6. [Persist ReARM Credentials in a Config File](#10-use-case-persist-rearm-hub-credentials-in-a-config-file)
+8. [Create New Component in ReARM](#12-use-case-create-new-component-in-rearm-hub)
+9. [Add new artifacts to release in ReARM](#14-use-case-add-new-artifacts-to-release-in-rearm-hub)
+12. [Send Pull Request Data to ReARM](#19-use-case-send-pull-request-data-to-rearm-hub)
+13. [Attach a downloadable artifact to a Release on ReARM](#20-use-case-attach-a-downloadable-artifact-to-a-release-on-rearm-hub)
 ## 1. Use Case: Get Version Assignment From ReARM
 
 This use case requests Version from ReARM for our component. Note that component schema must be preset on ReARM prior to using this API. API key must also be generated for the component from ReARM.
@@ -55,7 +55,7 @@ This use case requests Version from ReARM for our component. Note that component
 Sample command for semver version schema:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -66,7 +66,7 @@ docker run --rm relizaio/reliza-cli    \
 Sample command with commit details for a git commit:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -81,7 +81,7 @@ docker run --rm relizaio/reliza-cli    \
 Sample command to obtain only version info and skip creating the release:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -116,17 +116,17 @@ This use case is commonly used in the CI workflow to stream Release metadata to 
 Sample command to send release details:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     addrelease    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
     -b master    \
     -v 20.02.3    \
-    --vcsuri github.com/relizaio/reliza-cli    \
+    --vcsuri github.com/relizaio/rearm-cli    \
     --vcstype git    \
     --commit 7bfc5ce7b0da277d139f7993f90761223fa54442    \
     --vcstag 20.02.3    \
-    --artid relizaio/reliza-cli    \
+    --artid relizaio/rearm-cli    \
     --artbuildid 1    \
     --artcimeta Github Actions    \
     --arttype Docker    \
@@ -183,16 +183,16 @@ Flags stand for:
 
 Note that multiple artifacts per release are supported. In which case artifact specific flags (artid, arbuildid, artbuilduri, artcimeta, arttype, artdigests, tagkey and tagval must be repeated for each artifact).
 
-For sample of how to use workflow in CI, refer to the GitHub Actions build yaml of this component [here](https://github.com/relizaio/reliza-cli/blob/master/.github/workflows/dockerimage.yml).
+For sample of how to use workflow in CI, refer to the GitHub Actions build yaml of this component [here](https://github.com/relizaio/rearm-cli/blob/master/.github/workflows/dockerimage.yml).
 
 ## 3. Use Case: Check If Artifact Hash Already Present In Some Release
 
-This is particularly useful for monorepos to see if there was a change in sub-component or not. We are using this technique in our sample [playground component](https://github.com/relizaio/reliza-hub-playground). We supply an artifact hash to ReARM - and if it's present already, we get release details; if not - we get an empty json response {}. Search space is scoped to a single component which is defined by API Id and API Key.
+This is particularly useful for monorepos to see if there was a change in sub-component or not. We are using this technique in our sample [playground component](https://github.com/relizaio/rearm-hub-playground). We supply an artifact hash to ReARM - and if it's present already, we get release details; if not - we get an empty json response {}. Search space is scoped to a single component which is defined by API Id and API Key.
 
 Sample command:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     checkhash    \
     -i component_or_org_wide_api_id    \
     -k component_or_org_wide_api_key    \
@@ -214,7 +214,7 @@ This use case is when ReARM is queried either by CI or CD environment or by inte
 Sample command:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     getlatestrelease    \
     -i api_id    \
     -k api_key    \
@@ -241,7 +241,7 @@ Flags stand for:
 Here is a full example how we can use the getlatestrelease command leveraging jq to obtain the latest docker image with sha256 that we need to use for integration (don't forget to change api_id, api_key, component, branch and env to proper values as needed):
 
 ```bash
-rlzclientout=$(docker run --rm relizaio/reliza-cli    \
+rlzclientout=$(docker run --rm relizaio/rearm-cli    \
     getlatestrelease    \
     -i api_id    \
     -k api_key    \
@@ -255,14 +255,14 @@ rlzclientout=$(docker run --rm relizaio/reliza-cli    \
 
 This use case is for the case when we want to persist ReARM API Credentials and URL in a config file.
 
-The `login` command saves `API ID`, `API KEY` and `URI` as specified by flags in a config file `.reliza.env` in the home directory for the executing user.
+The `login` command saves `API ID`, `API KEY` and `URI` as specified by flags in a config file `.rearm.env` in the home directory for the executing user.
 
 Sample Command:
 
 ```bash
 docker run --rm \
     -v ~:/home/apprunner \
-    relizaio/reliza-cli \
+    relizaio/rearm-cli \
     login \
     -i api_id \
     -k api_key \
@@ -273,7 +273,7 @@ Flags stand for:
 
 - **-i** - flag for api id.
 - **-k** - flag for api key.
-- **-u** - flag for reliza hub uri.
+- **-u** - flag for rearm hub uri.
 
 ## 12. Use Case: Create New Component in ReARM
 
@@ -282,7 +282,7 @@ This use case creates a new component for our organization. API key must be gene
 Sample command to create component:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     createcomponent    \
     -i org_api_id    \
     -k org_api_key    \
@@ -290,7 +290,7 @@ docker run --rm relizaio/reliza-cli    \
     --type component
     --versionschema semver
     --featurebranchversioning Branch.Micro
-    --vcsuri github.com/relizaio/reliza-cli
+    --vcsuri github.com/relizaio/rearm-cli
     --includeapi
 ```
 
@@ -317,12 +317,12 @@ This use case adds 1 or more artifacts to an existing release. API key must be g
 Sample command to add artifact:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     addartifact    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
     -v 20.02.3    \
-    --artid relizaio/reliza-cli    \
+    --artid relizaio/rearm-cli    \
     --artbuildid 1    \
     --artcimeta Github Actions    \
     --arttype Docker    \
@@ -378,7 +378,7 @@ This use case lets you do a helm style override of the default helm chart values
 
 Sample command:
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     helmvalues <Absolute or Relative Path to the Chart>   \
     -f <values-override-1.yaml>    \
     -f <values-override-2.yaml>    \
@@ -398,7 +398,7 @@ Sample command to send Pull Request details:
 
 Sample command:
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     prdata \
     -i component_or_organization_wide_api_id    \
     -k component_or_organization_wide_api_key    \
@@ -435,7 +435,7 @@ This use case is to attach a downloadable artifact to a Release on ReARM. For ex
 Sample command:
 
 ```bash
-docker run --rm relizaio/reliza-cli    \
+docker run --rm relizaio/rearm-cli    \
     addDownloadableArtifact \
     -i api_id \ 
     -k api_key    \

@@ -28,12 +28,12 @@ jobs:
         run: sed -i "s/Version.*/Version string = \"${VERSION}\"/" cmd/version.go
       - name: Build for all different OS and Architecture
         run: |
-          docker build -f Dockerfile.exec -t reliza-image --build-arg VERSION=$VERSION .
-          docker run -d --name reliza-container --entrypoint sleep reliza-image infinity
+          docker build -f Dockerfile.exec -t rearm-image --build-arg VERSION=$VERSION .
+          docker run -d --name rearm-container --entrypoint sleep rearm-image infinity
       - name: Push all zip files to AWS
         run: |
-          docker cp reliza-container://$VERSION ./
-          aws s3 cp --recursive $VERSION s3://reliza-images/rearm-cli-download/$VERSION
+          docker cp rearm-container://$VERSION ./
+          aws s3 cp --recursive $VERSION s3://rearm-images/rearm-cli-download/$VERSION
       - name: Login to DockerHub
         uses: docker/login-action@v2.1.0
         with:
@@ -63,7 +63,7 @@ jobs:
           # debug
           echo "$(cat reliza_command)"
           # send data
-          echo docker run --rm relizaio/reliza-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
+          echo docker run --rm relizaio/rearm-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
           eval $(cat rlz_cmd_exec)
       - name: Stop docker container
-        run: docker stop reliza-container
+        run: docker stop rearm-container
