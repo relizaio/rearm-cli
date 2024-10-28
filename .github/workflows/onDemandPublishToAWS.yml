@@ -33,7 +33,7 @@ jobs:
       - name: Push all zip files to AWS
         run: |
           docker cp rearm-container://$VERSION ./
-          aws s3 cp --recursive $VERSION s3://rearm-images/rearm-download/$VERSION
+          aws s3 cp --recursive $VERSION s3://reliza-images/rearm-download/$VERSION
       - name: Login to DockerHub
         uses: docker/login-action@v2.1.0
         with:
