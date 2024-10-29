@@ -63,7 +63,7 @@ jobs:
           # debug
           echo "$(cat reliza_command)"
           # send data
-          echo docker run --rm relizaio/rearm:latest addartifact $(cat reliza_command) > rlz_cmd_exec
+          echo docker run --rm relizaio/reliza-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
           eval $(cat rlz_cmd_exec)
       - name: Stop docker container
         run: docker stop rearm-container
