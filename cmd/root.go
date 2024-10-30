@@ -209,7 +209,7 @@ const FULL_RELEASE_GQL_DATA = RELEASE_GQL_DATA + `
         }
 		dateFrom
 		dateTo
-		buildDuration
+		duration
 		packageType
 		version
 		publisher
