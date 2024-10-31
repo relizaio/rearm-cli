@@ -28,6 +28,7 @@ import (
 var (
 	approvalEntry string
 	approvalRole  string
+	approvalState string
 )
 
 type Approval struct {
@@ -48,7 +49,7 @@ var approveReleaseCmd = &cobra.Command{
 		}
 
 		body := map[string]interface{}{}
-		approval := Approval{ApprovalEntry: approvalEntry, ApprovalRoleId: approvalRole, State: "APPROVED"}
+		approval := Approval{ApprovalEntry: approvalEntry, ApprovalRoleId: approvalRole, State: approvalState}
 		approvals := make([]Approval, 1)
 		approvals[0] = approval
 		body["approvals"] = approvals
@@ -83,7 +84,9 @@ func init() {
 	approveReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component or product which release should be approved (either releaseid or releaseversion and component must be set)")
 	approveReleaseCmd.PersistentFlags().StringVar(&approvalEntry, "approvalentry", "", "UUID of approval to approve")
 	approveReleaseCmd.PersistentFlags().StringVar(&approvalRole, "approvalrole", "", "Approval role with which to approve")
-	approveReleaseCmd.MarkPersistentFlagRequired("approvalEntry")
-	approveReleaseCmd.MarkPersistentFlagRequired("approvalRole")
+	approveReleaseCmd.PersistentFlags().StringVar(&approvalState, "approvalstate", "", "Approval state, possible values: APPROVED, DISAPPROVED")
+	approveReleaseCmd.MarkPersistentFlagRequired("approvalentry")
+	approveReleaseCmd.MarkPersistentFlagRequired("approvalrole")
+	approveReleaseCmd.MarkPersistentFlagRequired("approvalstate")
 	rootCmd.AddCommand(approveReleaseCmd)
 }
