@@ -684,7 +684,6 @@ var addreleaseCmd = &cobra.Command{
 
 		// 		fmt.Println(body)
 		jsonBody, _ := json.Marshal(body)
-		fmt.Println(string(jsonBody))
 		if debug == "true" {
 			fmt.Println(string(jsonBody))
 		}
@@ -710,7 +709,7 @@ var addreleaseCmd = &cobra.Command{
 			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 			client.SetHeader("Authorization", "Basic "+auth)
 		}
-		c := client.R().SetDebug(true)
+		c := client.R()
 		for key, value := range filesMap {
 			if bytesValue, ok := value.([]byte); ok {
 				c.SetFileReader(key, key, bytes.NewReader(bytesValue))
