@@ -91,7 +91,7 @@ docker run --rm relizaio/rearm-cli    \
 
 Flags stand for:
 
-- **getversion** - command that denotes we are obtaining the next available release version for the branch. Note that if the call succeeds, the version assignment will be recorded and will not be given again by ReARM, even if it is not consumed. It will create the release in pending status.
+- **getversion** - command that denotes we are obtaining the next available release version for the branch. Note that if the call succeeds, the version assignment will be recorded and will not be given again by ReARM, even if it is not consumed. It will create the release with 'PENDING' lifecycle.
 - **-i** - flag for component api id (required).
 - **-k** - flag for component api key (required).
 - **-b** - flag to denote branch (required). If the branch is not recorded yet, ReARM will attempt to create it.
@@ -106,7 +106,7 @@ Flags stand for:
 - **--vcstag** - flag to denote vcs tag (optional). This is needed to include vcs tag into commit, if present.
 - **--metadata** - flag to set version metadata (optional). This may be semver metadata or custom version schema metadata.
 - **--modifier** - flag to set version modifier (optional). This may be semver modifier or custom version schema metadata.
-- **--manual** - flag to indicate a manual release (optional). Sets status as "draft", otherwise "pending" status is used.
+- **--manual** - flag to indicate a manual release (optional). Sets lifecycle as 'DRAFT', otherwise 'PENDING' lifecycle is set.
 - **--onlyversion** - boolean flag to skip creation of the release (optional). Default is false.
 
 ## 2. Use Case: Send Release Metadata to ReARM
@@ -151,7 +151,7 @@ Flags stand for:
 - **commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release.
 - **date** - flag to denote date time with timezone when commit was made, iso strict formatting with timezone is required, i.e. for git use git log --date=iso-strict (optional).
 - **vcstag** - flag to denote vcs tag (optional). This is needed to include vcs tag into commit, if present.
-- **status** - flag to denote release status (optional). Supply "rejected" for failed releases, otherwise "complete" is used.
+- **lifecycle** - flag to denote release lifecycle (optional). Set to 'REJECTED' for failed releases, otherwise 'DRAFT' is used, may be also set to 'ASSEMBLED'.
 - **artid** - flag to denote artifact identifier (optional). This is required to add artifact metadata into release.
 - **artbuildid** - flag to denote artifact build id (optional). This flag is optional and may be used to indicate build system id of the release (i.e., this could be circleci build number).
 - **artbuilduri** - flag to denote artifact build uri (optional). This flag is optional and is used to denote the uri for where the build takes place.
@@ -209,7 +209,7 @@ Flags stand for:
 
 ## 6. Use Case: Request Latest Release Per Component Or Bundle
 
-This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Bundle. Only releases with *COMPLETE* status may be returned.
+This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Bundle. Only releases with *ASSEMBLED* lifecycle may be returned.
 
 Sample command:
 
@@ -236,7 +236,7 @@ Flags stand for:
 - **--tagval** - flag to denote tag value to use as a selector for artifact (optional, if provided tagkey flag must also be supplied).
 - **--instance** - flag to denote specific instance for which release should match (optional, if supplied namespace flag is also used and env flag gets overrided by instance's environment).
 - **--namespace** - flag to denote specific namespace within instance, if instance is supplied (optional).
-- **--status** - Status of the last known release to return, default is complete (optional, can be - [complete, pending or rejected]). If set to "pending", will return either pending or complete release. If set to "rejected", will return either pending or complete or rejected releases.
+- **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
 
 Here is a full example how we can use the getlatestrelease command leveraging jq to obtain the latest docker image with sha256 that we need to use for integration (don't forget to change api_id, api_key, component, branch and env to proper values as needed):
 

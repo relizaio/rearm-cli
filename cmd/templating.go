@@ -12,7 +12,7 @@ import (
 )
 
 func getLatestReleaseFunc(debug string, rearmUri string, component string, bundle string, branch string,
-	tagKey string, tagVal string, apiKeyId string, apiKey string, status string) []byte {
+	tagKey string, tagVal string, apiKeyId string, apiKey string, lifecycle string) []byte {
 	if debug == "true" {
 		fmt.Println("Using ReARM at", rearmUri)
 	}
@@ -35,8 +35,8 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, bundl
 		body["branch"] = branch
 	}
 
-	if len(status) > 0 {
-		body["status"] = strings.ToUpper(status)
+	if len(lifecycle) > 0 {
+		body["lifecycle"] = strings.ToUpper(lifecycle)
 	}
 
 	client := graphql.NewClient(rearmUri + "/graphql")

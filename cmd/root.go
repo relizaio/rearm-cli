@@ -110,7 +110,7 @@ var component string
 var componentName string
 var componentType string
 var state string
-var status string
+var lifecycle string
 var supportedOsArr []string
 var supportedCpuArchArr []string
 var tagKey string
@@ -123,7 +123,6 @@ var tagsArr []string
 var targetBranch string
 var title string
 var version string
-var version2 string
 var versionSchema string
 var vcsName string
 var vcsTag string
@@ -152,7 +151,7 @@ const RELEASE_GQL_DATA = `
 	lastUpdatedBy
 	createdDate
 	version
-	status
+	lifecycle
 	org
 	component
 	branch
@@ -308,8 +307,8 @@ var addreleaseCmd = &cobra.Command{
 		filesCounter := 0
 
 		body := map[string]interface{}{"branch": branch, "version": version}
-		if len(status) > 0 {
-			body["status"] = strings.ToUpper(status)
+		if len(lifecycle) > 0 {
+			body["lifecycle"] = strings.ToUpper(lifecycle)
 		}
 		if len(endpoint) > 0 {
 			body["endpoint"] = endpoint
@@ -1044,7 +1043,7 @@ var getVersionCmd = &cobra.Command{
 			body["sourceCodeEntry"] = commitMap
 		}
 		if manual {
-			body["status"] = "draft"
+			body["lifecycle"] = "DRAFT"
 		}
 
 		if len(commits) > 0 {
@@ -1141,7 +1140,7 @@ var getLatestReleaseCmd = &cobra.Command{
 	Long: `This CLI command would connect to ReARM and would obtain latest release for specified Component and Branch
 			or specified Bundle and Feature Set.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getLatestReleaseFunc(debug, rearmUri, component, bundle, branch, tagKey, tagVal, apiKeyId, apiKey, status)
+		getLatestReleaseFunc(debug, rearmUri, component, bundle, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
 	},
 }
 
@@ -1310,7 +1309,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringArrayVar(&dilArtsJson, "dilartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringVar(&releaseArts, "releasearts", "", "Release Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
-	addreleaseCmd.PersistentFlags().StringVar(&status, "status", "", "Status of release - set to 'rejected' for failed releases, otherwise 'completed' is used (optional).")
+	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
 
 	addDeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add artifact to (either releaseid or component, branch, and version must be set)")
 	addDeliverableCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
@@ -1382,7 +1381,7 @@ func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace within instance for which to check release, only matters if instance is supplied (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&tagKey, "tagkey", "", "Tag key to use for picking artifact (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&tagVal, "tagval", "", "Tag value to use for picking artifact (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&status, "status", "", "Status of the release, default is completed (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of the release, default is 'DRAFT' (optional)")
 
 	prDataCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
 	prDataCmd.PersistentFlags().StringVarP(&state, "state", "s", "", "State of the Pull Request")
