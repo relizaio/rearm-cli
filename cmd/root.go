@@ -189,7 +189,7 @@ const FULL_RELEASE_GQL_DATA = RELEASE_GQL_DATA + `
 	}
 	artifactDetails {
 		uuid
-		identifier
+		displayIdentifier
 		org
 		branch
 		buildId
