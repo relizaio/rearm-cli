@@ -197,10 +197,7 @@ const FULL_RELEASE_GQL_DATA = RELEASE_GQL_DATA + `
 		cicdMeta
 		digests
 		isInternal
-		artifactType {
-			name
-			aliases
-		}
+		type
 		notes
 		tags {
             key
