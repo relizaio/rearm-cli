@@ -975,7 +975,7 @@ var createComponentCmd = &cobra.Command{
 			body["featureBranchVersioning"] = featureBranchVersioning
 		}
 		if len(vcsUuid) > 0 {
-			body["vcsRepositoryUuid"] = vcsUuid
+			body["vcs"] = vcsUuid
 		}
 
 		if len(vcsUri) > 0 {
