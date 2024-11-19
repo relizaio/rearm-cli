@@ -606,35 +606,6 @@ var addreleaseCmd = &cobra.Command{
 						if vcsType != "" {
 							commitMap["type"] = vcsType
 						}
-						if sceArts != "" {
-							var sceArtifacts []Artifact
-							err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
-							if err != nil {
-								fmt.Println("Error parsing Artifact Input: ", err)
-							} else {
-								artifactsObject := make([]Artifact, len(sceArtifacts))
-								for j, artifactInput := range sceArtifacts {
-									if artifactInput.FilePath != "" {
-										fileBytes, err := os.ReadFile(artifactInput.FilePath)
-										if err != nil {
-											fmt.Println("Error reading file: ", err)
-										} else {
-											filesCounter++
-											currentIndex := strconv.Itoa(filesCounter)
-
-											locationMap[currentIndex] = []string{"variables.releaseInputProg.commits." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
-											filesMap[currentIndex] = fileBytes
-											artifactInput.File = nil
-										}
-										artifactInput.FilePath = ""
-										artifactsObject[j] = artifactInput
-									}
-								}
-								// TODO: replace file path with actual file
-								commitMap["artifacts"] = artifactsObject
-							}
-
-						}
 
 						body["sourceCodeEntry"] = commitMap
 					}
@@ -676,6 +647,34 @@ var addreleaseCmd = &cobra.Command{
 
 		if fsBomPath != "" {
 			body["fsBom"] = RawBomInput{RawBom: ReadBomJsonFromFile(fsBomPath), BomType: "APPLICATION"}
+		}
+
+		if sceArts != "" {
+			var sceArtifacts []Artifact
+			err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
+			if err != nil {
+				fmt.Println("Error parsing Artifact Input: ", err)
+			} else {
+				artifactsObject := make([]Artifact, len(sceArtifacts))
+				for j, artifactInput := range sceArtifacts {
+					if artifactInput.FilePath != "" {
+						fileBytes, err := os.ReadFile(artifactInput.FilePath)
+						if err != nil {
+							fmt.Println("Error reading file: ", err)
+						} else {
+							filesCounter++
+							currentIndex := strconv.Itoa(filesCounter)
+							locationMap[currentIndex] = []string{"variables.releaseInputProg.sceArts." + strconv.Itoa(j) + ".file"}
+							filesMap[currentIndex] = fileBytes
+							artifactInput.File = nil
+						}
+						artifactInput.FilePath = ""
+						artifactsObject[j] = artifactInput
+					}
+				}
+				body["sceArts"] = artifactsObject
+			}
+
 		}
 
 		// 		fmt.Println(body)
