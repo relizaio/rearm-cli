@@ -314,10 +314,10 @@ var addreleaseCmd = &cobra.Command{
 			body["component"] = component
 		}
 		if len(dilId) > 0 {
-			deliverables := make([]map[string]interface{}, len(dilId))
+			outboundDeliverables := make([]map[string]interface{}, len(dilId))
 			softwareMetadatas := make([]map[string]interface{}, len(dilId))
 			for i, aid := range dilId {
-				deliverables[i] = map[string]interface{}{"displayIdentifier": aid}
+				outboundDeliverables[i] = map[string]interface{}{"displayIdentifier": aid}
 				softwareMetadatas[i] = map[string]interface{}{}
 			}
 
@@ -387,7 +387,7 @@ var addreleaseCmd = &cobra.Command{
 			}
 
 			for i, _ := range dilId {
-				deliverables[i]["softwareMetadata"] = softwareMetadatas[i]
+				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
 			}
 
 			if len(dilType) > 0 && len(dilType) != len(dilId) {
@@ -395,7 +395,7 @@ var addreleaseCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dilType) > 0 {
 				for i, at := range dilType {
-					deliverables[i]["type"] = at
+					outboundDeliverables[i]["type"] = at
 				}
 			}
 
@@ -405,7 +405,7 @@ var addreleaseCmd = &cobra.Command{
 			} else if len(supportedOsArr) > 0 {
 				for i, ad := range supportedOsArr {
 					adSpl := strings.Split(ad, ",")
-					deliverables[i]["supportedOs"] = adSpl
+					outboundDeliverables[i]["supportedOs"] = adSpl
 				}
 			}
 			if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(dilId) {
@@ -414,7 +414,7 @@ var addreleaseCmd = &cobra.Command{
 			} else if len(supportedCpuArchArr) > 0 {
 				for i, ad := range supportedCpuArchArr {
 					adSpl := strings.Split(ad, ",")
-					deliverables[i]["supportedCpuArchitectures"] = adSpl
+					outboundDeliverables[i]["supportedCpuArchitectures"] = adSpl
 				}
 			}
 
@@ -423,7 +423,7 @@ var addreleaseCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dilVersion) > 0 {
 				for i, av := range dilVersion {
-					deliverables[i]["version"] = av
+					outboundDeliverables[i]["version"] = av
 				}
 			}
 
@@ -432,7 +432,7 @@ var addreleaseCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dilPublisher) > 0 {
 				for i, ap := range dilPublisher {
-					deliverables[i]["publisher"] = ap
+					outboundDeliverables[i]["publisher"] = ap
 				}
 			}
 
@@ -441,7 +441,7 @@ var addreleaseCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dilGroup) > 0 {
 				for i, ag := range dilGroup {
-					deliverables[i]["group"] = ag
+					outboundDeliverables[i]["group"] = ag
 				}
 			}
 
@@ -463,7 +463,7 @@ var addreleaseCmd = &cobra.Command{
 							Value: keyValue[1],
 						})
 					}
-					deliverables[i]["tags"] = tags
+					outboundDeliverables[i]["tags"] = tags
 				}
 			}
 
@@ -485,7 +485,7 @@ var addreleaseCmd = &cobra.Command{
 							Identity:    keyValue[1],
 						})
 					}
-					deliverables[i]["identities"] = bomIdentities
+					outboundDeliverables[i]["identities"] = bomIdentities
 				}
 			}
 			if len(dilArtsJson) > 0 && len(dilArtsJson) != len(dilId) {
@@ -509,7 +509,7 @@ var addreleaseCmd = &cobra.Command{
 									filesCounter++
 									currentIndex := strconv.Itoa(filesCounter)
 
-									locationMap[currentIndex] = []string{"variables.releaseInputProg.deliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
+									locationMap[currentIndex] = []string{"variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
 									filesMap[currentIndex] = fileBytes
 									artifactInput.File = nil
 
@@ -519,11 +519,11 @@ var addreleaseCmd = &cobra.Command{
 							}
 						}
 						// TODO: replace file path with actual file
-						deliverables[i]["artifacts"] = artifactsObject
+						outboundDeliverables[i]["artifacts"] = artifactsObject
 					}
 				}
 			}
-			body["deliverables"] = deliverables
+			body["outboundDeliverables"] = outboundDeliverables
 		}
 
 		if commit != "" {
