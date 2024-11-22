@@ -41,36 +41,36 @@ var apiKeyId string
 var apiKey string
 
 // var artBuildId []string
-// var dilBuildId []string
+// var odelBuildId []string
 // var artBomFilePaths []string
-// var dilCiMeta []string
-// var dilDigests []string
+// var odelCiMeta []string
+// var odelDigests []string
 // var artId []string
-// var dilType []string
+// var odelType []string
 
 // var artifactType string
-// var dilVersion []string
-// var dilPublisher []string
-// var dilGroup []string
-// var dilPackage []string
-var dilArtsJson []string
-var dilBuildId []string
-var dilBuildUri []string
-var dilBomFilePaths []string
-var dilCiMeta []string
-var dilDigests []string
-var dilId []string
-var dilType []string
+// var odelVersion []string
+// var odelPublisher []string
+// var odelGroup []string
+// var odelPackage []string
+var odelArtsJson []string
+var odelBuildId []string
+var odelBuildUri []string
+var odelBomFilePaths []string
+var odelCiMeta []string
+var odelDigests []string
+var odelId []string
+var odelType []string
 var releaseArts string
 var sceArts string
 
-// var dilifactType string
-var dilVersion []string
-var dilPublisher []string
-var dilGroup []string
-var dilPackage []string
+// var odelifactType string
+var odelVersion []string
+var odelPublisher []string
+var odelGroup []string
+var odelPackage []string
 
-// var dilName []string
+// var odelName []string
 var branch string
 var bundle string
 var cfgFile string
@@ -313,54 +313,54 @@ var addreleaseCmd = &cobra.Command{
 		if len(component) > 0 {
 			body["component"] = component
 		}
-		if len(dilId) > 0 {
-			outboundDeliverables := make([]map[string]interface{}, len(dilId))
-			softwareMetadatas := make([]map[string]interface{}, len(dilId))
-			for i, aid := range dilId {
+		if len(odelId) > 0 {
+			outboundDeliverables := make([]map[string]interface{}, len(odelId))
+			softwareMetadatas := make([]map[string]interface{}, len(odelId))
+			for i, aid := range odelId {
 				outboundDeliverables[i] = map[string]interface{}{"displayIdentifier": aid}
 				softwareMetadatas[i] = map[string]interface{}{}
 			}
 
 			// now do some length validations and add elements
-			if len(dilBuildId) > 0 && len(dilBuildId) != len(dilId) {
-				fmt.Println("number of --dilBuildId flags must be either zero or match number of --dilid flags")
+			if len(odelBuildId) > 0 && len(odelBuildId) != len(odelId) {
+				fmt.Println("number of --odelBuildId flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilBuildId) > 0 {
-				for i, abid := range dilBuildId {
+			} else if len(odelBuildId) > 0 {
+				for i, abid := range odelBuildId {
 					softwareMetadatas[i]["buildId"] = abid
 				}
 			}
 
-			if len(dilBuildUri) > 0 && len(dilBuildUri) != len(dilId) {
-				fmt.Println("number of --dilbuildUri flags must be either zero or match number of --dilid flags")
+			if len(odelBuildUri) > 0 && len(odelBuildUri) != len(odelId) {
+				fmt.Println("number of --odelbuildUri flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilBuildUri) > 0 {
-				for i, aburi := range dilBuildUri {
+			} else if len(odelBuildUri) > 0 {
+				for i, aburi := range odelBuildUri {
 					softwareMetadatas[i]["buildUri"] = aburi
 				}
 			}
 
-			if len(dilCiMeta) > 0 && len(dilCiMeta) != len(dilId) {
-				fmt.Println("number of --dilcimeta flags must be either zero or match number of --dilid flags")
+			if len(odelCiMeta) > 0 && len(odelCiMeta) != len(odelId) {
+				fmt.Println("number of --odelcimeta flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilCiMeta) > 0 {
-				for i, acm := range dilCiMeta {
+			} else if len(odelCiMeta) > 0 {
+				for i, acm := range odelCiMeta {
 					softwareMetadatas[i]["cicdMeta"] = acm
 				}
 			}
 
-			if len(dilDigests) > 0 && len(dilDigests) != len(dilId) {
-				fmt.Println("number of --dildigests flags must be either zero or match number of --dilid flags")
+			if len(odelDigests) > 0 && len(odelDigests) != len(odelId) {
+				fmt.Println("number of --odeldigests flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilDigests) > 0 {
-				for i, ad := range dilDigests {
+			} else if len(odelDigests) > 0 {
+				for i, ad := range odelDigests {
 					adSpl := strings.Split(ad, ",")
 					softwareMetadatas[i]["digests"] = adSpl
 				}
 			}
 
-			if len(dateStart) > 0 && len(dateStart) != len(dilId) {
-				fmt.Println("number of --datestart flags must be either zero or match number of --dilid flags")
+			if len(dateStart) > 0 && len(dateStart) != len(odelId) {
+				fmt.Println("number of --datestart flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(dateStart) > 0 {
 				for i, ds := range dateStart {
@@ -368,8 +368,8 @@ var addreleaseCmd = &cobra.Command{
 				}
 			}
 
-			if len(dateEnd) > 0 && len(dateEnd) != len(dilId) {
-				fmt.Println("number of --dateEnd flags must be either zero or match number of --dilid flags")
+			if len(dateEnd) > 0 && len(dateEnd) != len(odelId) {
+				fmt.Println("number of --dateEnd flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(dateEnd) > 0 {
 				for i, de := range dateEnd {
@@ -377,30 +377,30 @@ var addreleaseCmd = &cobra.Command{
 				}
 			}
 
-			if len(dilPackage) > 0 && len(dilPackage) != len(dilId) {
-				fmt.Println("number of --dilpackage flags must be either zero or match number of --dilid flags")
+			if len(odelPackage) > 0 && len(odelPackage) != len(odelId) {
+				fmt.Println("number of --odelpackage flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilPackage) > 0 {
-				for i, ap := range dilPackage {
+			} else if len(odelPackage) > 0 {
+				for i, ap := range odelPackage {
 					softwareMetadatas[i]["packageType"] = strings.ToUpper(ap)
 				}
 			}
 
-			for i, _ := range dilId {
+			for i, _ := range odelId {
 				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
 			}
 
-			if len(dilType) > 0 && len(dilType) != len(dilId) {
-				fmt.Println("number of --diltype flags must be either zero or match number of --dilid flags")
+			if len(odelType) > 0 && len(odelType) != len(odelId) {
+				fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilType) > 0 {
-				for i, at := range dilType {
+			} else if len(odelType) > 0 {
+				for i, at := range odelType {
 					outboundDeliverables[i]["type"] = at
 				}
 			}
 
-			if len(supportedOsArr) > 0 && len(supportedOsArr) != len(dilId) {
-				fmt.Println("number of --osarr flags must be either zero or match number of --dilid flags")
+			if len(supportedOsArr) > 0 && len(supportedOsArr) != len(odelId) {
+				fmt.Println("number of --osarr flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(supportedOsArr) > 0 {
 				for i, ad := range supportedOsArr {
@@ -408,8 +408,8 @@ var addreleaseCmd = &cobra.Command{
 					outboundDeliverables[i]["supportedOs"] = adSpl
 				}
 			}
-			if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(dilId) {
-				fmt.Println("number of --supportedcpuarcharr flags must be either zero or match number of --dilid flags")
+			if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(odelId) {
+				fmt.Println("number of --supportedcpuarcharr flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(supportedCpuArchArr) > 0 {
 				for i, ad := range supportedCpuArchArr {
@@ -418,35 +418,35 @@ var addreleaseCmd = &cobra.Command{
 				}
 			}
 
-			if len(dilVersion) > 0 && len(dilVersion) != len(dilId) {
-				fmt.Println("number of --dilversion flags must be either zero or match number of --dilid flags")
+			if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
+				fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilVersion) > 0 {
-				for i, av := range dilVersion {
+			} else if len(odelVersion) > 0 {
+				for i, av := range odelVersion {
 					outboundDeliverables[i]["version"] = av
 				}
 			}
 
-			if len(dilPublisher) > 0 && len(dilPublisher) != len(dilId) {
-				fmt.Println("number of --dilpublisher flags must be either zero or match number of --dilid flags")
+			if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
+				fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilPublisher) > 0 {
-				for i, ap := range dilPublisher {
+			} else if len(odelPublisher) > 0 {
+				for i, ap := range odelPublisher {
 					outboundDeliverables[i]["publisher"] = ap
 				}
 			}
 
-			if len(dilGroup) > 0 && len(dilGroup) != len(dilId) {
-				fmt.Println("number of --dilgroup flags must be either zero or match number of --dilid flags")
+			if len(odelGroup) > 0 && len(odelGroup) != len(odelId) {
+				fmt.Println("number of --odelgroup flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilGroup) > 0 {
-				for i, ag := range dilGroup {
+			} else if len(odelGroup) > 0 {
+				for i, ag := range odelGroup {
 					outboundDeliverables[i]["group"] = ag
 				}
 			}
 
-			if len(tagsArr) > 0 && len(tagsArr) != len(dilId) {
-				fmt.Println("number of --tagsarr flags must be either zero or match number of --dilid flags")
+			if len(tagsArr) > 0 && len(tagsArr) != len(odelId) {
+				fmt.Println("number of --tagsarr flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(tagsArr) > 0 {
 				for i, tags := range tagsArr {
@@ -467,8 +467,8 @@ var addreleaseCmd = &cobra.Command{
 				}
 			}
 
-			if len(identities) > 0 && len(identities) != len(dilId) {
-				fmt.Println("number of --identities flags must be either zero or match number of --dilid flags")
+			if len(identities) > 0 && len(identities) != len(odelId) {
+				fmt.Println("number of --identities flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(identities) > 0 {
 				for i, delIdentities := range identities {
@@ -488,11 +488,11 @@ var addreleaseCmd = &cobra.Command{
 					outboundDeliverables[i]["identities"] = bomIdentities
 				}
 			}
-			if len(dilArtsJson) > 0 && len(dilArtsJson) != len(dilId) {
-				fmt.Println("number of --dilartsjson flags must be either zero or match number of --dilid flags")
+			if len(odelArtsJson) > 0 && len(odelArtsJson) != len(odelId) {
+				fmt.Println("number of --odelartsjson flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilArtsJson) > 0 {
-				for i, artifactsInputString := range dilArtsJson {
+			} else if len(odelArtsJson) > 0 {
+				for i, artifactsInputString := range odelArtsJson {
 					var artifactsInput []Artifact
 					err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
 					if err != nil {
@@ -754,62 +754,62 @@ var addDeliverableCmd = &cobra.Command{
 			body["version"] = version
 		}
 
-		if len(dilId) > 0 {
+		if len(odelId) > 0 {
 			// use artifacts, construct artifact array
-			artifacts := make([]map[string]interface{}, len(dilId))
-			for i, aid := range dilId {
+			artifacts := make([]map[string]interface{}, len(odelId))
+			for i, aid := range odelId {
 				artifacts[i] = map[string]interface{}{"identifier": aid}
 			}
 
 			// now do some length validations and add elements
-			if len(dilBuildId) > 0 && len(dilBuildId) != len(dilId) {
-				fmt.Println("number of --dilbuildid flags must be either zero or match number of --dilid flags")
+			if len(odelBuildId) > 0 && len(odelBuildId) != len(odelId) {
+				fmt.Println("number of --odelbuildid flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilBuildId) > 0 {
-				for i, abid := range dilBuildId {
+			} else if len(odelBuildId) > 0 {
+				for i, abid := range odelBuildId {
 					artifacts[i]["buildId"] = abid
 				}
 			}
 
-			if len(dilBuildUri) > 0 && len(dilBuildUri) != len(dilId) {
-				fmt.Println("number of --dilbuildUri flags must be either zero or match number of --dilid flags")
+			if len(odelBuildUri) > 0 && len(odelBuildUri) != len(odelId) {
+				fmt.Println("number of --odelbuildUri flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilBuildUri) > 0 {
-				for i, aburi := range dilBuildUri {
+			} else if len(odelBuildUri) > 0 {
+				for i, aburi := range odelBuildUri {
 					artifacts[i]["buildUri"] = aburi
 				}
 			}
 
-			if len(dilCiMeta) > 0 && len(dilCiMeta) != len(dilId) {
-				fmt.Println("number of --dilcimeta flags must be either zero or match number of --dilid flags")
+			if len(odelCiMeta) > 0 && len(odelCiMeta) != len(odelId) {
+				fmt.Println("number of --odelcimeta flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilCiMeta) > 0 {
-				for i, acm := range dilCiMeta {
+			} else if len(odelCiMeta) > 0 {
+				for i, acm := range odelCiMeta {
 					artifacts[i]["cicdMeta"] = acm
 				}
 			}
 
-			if len(dilType) > 0 && len(dilType) != len(dilId) {
-				fmt.Println("number of --diltype flags must be either zero or match number of --dilid flags")
+			if len(odelType) > 0 && len(odelType) != len(odelId) {
+				fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilType) > 0 {
-				for i, at := range dilType {
+			} else if len(odelType) > 0 {
+				for i, at := range odelType {
 					artifacts[i]["type"] = at
 				}
 			}
 
-			if len(dilDigests) > 0 && len(dilDigests) != len(dilId) {
-				fmt.Println("number of --dildigests flags must be either zero or match number of --dilid flags")
+			if len(odelDigests) > 0 && len(odelDigests) != len(odelId) {
+				fmt.Println("number of --odeldigests flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilDigests) > 0 {
-				for i, ad := range dilDigests {
+			} else if len(odelDigests) > 0 {
+				for i, ad := range odelDigests {
 					adSpl := strings.Split(ad, ",")
 					artifacts[i]["digests"] = adSpl
 				}
 			}
 
-			if len(dateStart) > 0 && len(dateStart) != len(dilId) {
-				fmt.Println("number of --datestart flags must be either zero or match number of --dilid flags")
+			if len(dateStart) > 0 && len(dateStart) != len(odelId) {
+				fmt.Println("number of --datestart flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(dateStart) > 0 {
 				for i, ds := range dateStart {
@@ -817,8 +817,8 @@ var addDeliverableCmd = &cobra.Command{
 				}
 			}
 
-			if len(dateEnd) > 0 && len(dateEnd) != len(dilId) {
-				fmt.Println("number of --dateEnd flags must be either zero or match number of --dilid flags")
+			if len(dateEnd) > 0 && len(dateEnd) != len(odelId) {
+				fmt.Println("number of --dateEnd flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(dateEnd) > 0 {
 				for i, de := range dateEnd {
@@ -826,50 +826,50 @@ var addDeliverableCmd = &cobra.Command{
 				}
 			}
 
-			if len(dilVersion) > 0 && len(dilVersion) != len(dilId) {
-				fmt.Println("number of --dilversion flags must be either zero or match number of --dilid flags")
+			if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
+				fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilVersion) > 0 {
-				for i, av := range dilVersion {
+			} else if len(odelVersion) > 0 {
+				for i, av := range odelVersion {
 					artifacts[i]["version"] = av
 				}
 			}
 
-			if len(dilPublisher) > 0 && len(dilPublisher) != len(dilId) {
-				fmt.Println("number of --dilpublisher flags must be either zero or match number of --dilid flags")
+			if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
+				fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilPublisher) > 0 {
-				for i, ap := range dilPublisher {
+			} else if len(odelPublisher) > 0 {
+				for i, ap := range odelPublisher {
 					artifacts[i]["publisher"] = ap
 				}
 			}
 
-			if len(dilPackage) > 0 && len(dilPackage) != len(dilId) {
-				fmt.Println("number of --dilpackage flags must be either zero or match number of --dilid flags")
+			if len(odelPackage) > 0 && len(odelPackage) != len(odelId) {
+				fmt.Println("number of --odelpackage flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilPackage) > 0 {
-				for i, ap := range dilPackage {
+			} else if len(odelPackage) > 0 {
+				for i, ap := range odelPackage {
 					artifacts[i]["packageType"] = strings.ToUpper(ap)
 				}
 			}
 
-			if len(dilGroup) > 0 && len(dilGroup) != len(dilId) {
-				fmt.Println("number of --dilgroup flags must be either zero or match number of --dilid flags")
+			if len(odelGroup) > 0 && len(odelGroup) != len(odelId) {
+				fmt.Println("number of --odelgroup flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
-			} else if len(dilGroup) > 0 {
-				for i, ag := range dilGroup {
+			} else if len(odelGroup) > 0 {
+				for i, ag := range odelGroup {
 					artifacts[i]["group"] = ag
 				}
 			}
 
-			// if len(tagKeyArr) > 0 && len(tagKeyArr) != len(dilId) {
-			// 	fmt.Println("number of --tagkey flags must be either zero or match number of --dilid flags")
+			// if len(tagKeyArr) > 0 && len(tagKeyArr) != len(odelId) {
+			// 	fmt.Println("number of --tagkey flags must be either zero or match number of --odelid flags")
 			// 	os.Exit(2)
-			// } else if len(tagValArr) > 0 && len(tagValArr) != len(dilId) {
-			// 	fmt.Println("number of --tagval flags must be either zero or match number of --dilid flags")
+			// } else if len(tagValArr) > 0 && len(tagValArr) != len(odelId) {
+			// 	fmt.Println("number of --tagval flags must be either zero or match number of --odelid flags")
 			// 	os.Exit(2)
 			// } else if len(tagKeyArr) > 0 && len(tagValArr) < 1 {
-			// 	fmt.Println("number of --tagval and --tagkey flags must be the same and must match number of --dilid flags")
+			// 	fmt.Println("number of --tagval and --tagkey flags must be the same and must match number of --odelid flags")
 			// 	os.Exit(2)
 			// } else if len(tagKeyArr) > 0 {
 			// 	for i, key := range tagKeyArr {
@@ -1284,25 +1284,25 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional)")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
 	addreleaseCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilId, "dilid", []string{}, "Deliverable ID (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilBuildId, "dilbuildid", []string{}, "Deliverable Build ID (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilBuildUri, "dilbuilduri", []string{}, "Deliverable Build URI (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilCiMeta, "dilcimeta", []string{}, "Deliverable CI Meta (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilType, "diltype", []string{}, "Deliverable Type (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilDigests, "dildigests", []string{}, "Deliverable Digests (multiple allowed, separate several digests for one Deliverable with commas)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelId, "odelid", []string{}, "Deliverable ID (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelbuildid", []string{}, "Deliverable Build ID (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelBuildUri, "odelbuilduri", []string{}, "Deliverable Build URI (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelCiMeta, "odelcimeta", []string{}, "Deliverable CI Meta (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelType, "odeltype", []string{}, "Deliverable Type (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelDigests, "odeldigests", []string{}, "Deliverable Digests (multiple allowed, separate several digests for one Deliverable with commas)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&tagsArr, "tagsarr", []string{}, "Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&identities, "identities", []string{}, "Deliverable Identity IdenityType-Idenity Pairs (multiple allowed, separate several IdenityType-Idenity pairs for one Deliverable with commas, and seprate IdenityType-Idenity in a pair with colon)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&dateStart, "datestart", []string{}, "Deliverable Build Start date and time (optional, multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&dateEnd, "dateend", []string{}, "Deliverable Build End date and time (optional, multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilVersion, "dilversion", []string{}, "Deliverable version, if different from release (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilPackage, "dilpackage", []string{}, "Deliverable package type (multiple allowed)")
-	// addreleaseCmd.PersistentFlags().StringArrayVar(&dilName, "dilname", []string{}, "Deliverable name (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilPublisher, "dilpublisher", []string{}, "Deliverable publisher (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilGroup, "dilgroup", []string{}, "Deliverable group (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilBomFilePaths, "dilboms", []string{}, "Deliverable Sbom file paths (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelVersion, "odelversion", []string{}, "Deliverable version, if different from release (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelPackage, "odelpackage", []string{}, "Deliverable package type (multiple allowed)")
+	// addreleaseCmd.PersistentFlags().StringArrayVar(&odelName, "odelname", []string{}, "Deliverable name (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelPublisher, "odelpublisher", []string{}, "Deliverable publisher (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelGroup, "odelgroup", []string{}, "Deliverable group (multiple allowed)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelBomFilePaths, "odelboms", []string{}, "Deliverable Sbom file paths (multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&supportedOsArr, "osarr", []string{}, "Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&dilArtsJson, "dilartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringVar(&releaseArts, "releasearts", "", "Release Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
@@ -1310,27 +1310,27 @@ func init() {
 	addDeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add artifact to (either releaseid or component, branch, and version must be set)")
 	addDeliverableCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
 	addDeliverableCmd.PersistentFlags().StringVar(&version, "version", "", "Release version")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilId, "dilid", []string{}, "Artifact ID (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilBuildId, "dilbuildid", []string{}, "Artifact Build ID (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilBuildId, "dilBuildId", []string{}, "Artifact Build URI (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilCiMeta, "dilCiMeta", []string{}, "Artifact CI Meta (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilType, "dilType", []string{}, "Artifact Type (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilDigests, "dilDigests", []string{}, "Artifact Digests (multiple allowed, separate several digests for one artifact with commas)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelId, "odelid", []string{}, "Artifact ID (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelbuildid", []string{}, "Artifact Build ID (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelBuildId", []string{}, "Artifact Build URI (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelCiMeta, "odelCiMeta", []string{}, "Artifact CI Meta (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelType, "odelType", []string{}, "Artifact Type (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelDigests, "odelDigests", []string{}, "Artifact Digests (multiple allowed, separate several digests for one artifact with commas)")
 	// addDeliverableCmd.PersistentFlags().StringArrayVar(&tagKeyArr, "tagkey", []string{}, "Artifact Tag Keys (multiple allowed, separate several tag keys for one artifact with commas)")
 	// addDeliverableCmd.PersistentFlags().StringArrayVar(&tagValArr, "tagval", []string{}, "Artifact Tag Values (multiple allowed, separate several tag values for one artifact with commas)")
 	addDeliverableCmd.PersistentFlags().StringArrayVar(&dateStart, "datestart", []string{}, "Artifact Build Start date and time (optional, multiple allowed)")
 	addDeliverableCmd.PersistentFlags().StringArrayVar(&dateEnd, "dateend", []string{}, "Artifact Build End date and time (optional, multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilVersion, "dilVersion", []string{}, "Artifact version, if different from release (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilPackage, "dilPackage", []string{}, "Artifact package type (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilPublisher, "dilPublisher", []string{}, "Artifact publisher (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dilGroup, "dilGroup", []string{}, "Artifact group (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelVersion, "odelVersion", []string{}, "Artifact version, if different from release (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelPackage, "odelPackage", []string{}, "Artifact package type (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelPublisher, "odelPublisher", []string{}, "Artifact publisher (multiple allowed)")
+	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelGroup, "odelGroup", []string{}, "Artifact group (multiple allowed)")
 
 	// flags for is approval needed check command
 	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release (either releaseid or releaseversion and component must be set)")
 	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseVersion, "releaseversion", "", "Version of release (either releaseid or releaseversion and component must be set)")
 	downloadableArtifactCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component or bundle for release (either instance and component or releaseid or releaseversion and component must be set)")
 	downloadableArtifactCmd.PersistentFlags().StringVarP(&filePath, "file", "f", "", "Path to the artifact")
-	// downloadableArtifactCmd.PersistentFlags().StringVar(&dilType, "dilType", "GENERIC", "Type of artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value")
+	// downloadableArtifactCmd.PersistentFlags().StringVar(&odelType, "odelType", "GENERIC", "Type of artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value")
 
 	// flags for createcomponent command
 	createComponentCmd.PersistentFlags().StringVar(&componentName, "name", "", "Name of component to create")
