@@ -56,7 +56,6 @@ var apiKey string
 var odelArtsJson []string
 var odelBuildId []string
 var odelBuildUri []string
-var odelBomFilePaths []string
 var odelCiMeta []string
 var odelDigests []string
 var odelId []string
@@ -734,14 +733,18 @@ var addreleaseCmd = &cobra.Command{
 	},
 }
 
-var addDeliverableCmd = &cobra.Command{
-	Use:   "addDeliverable",
-	Short: "Add artifacts to a release",
-	Long:  `This CLI command would connect to ReARM and add artifacts to a release using a valid API key.`,
+var addODeliverableCmd = &cobra.Command{
+	Use:   "addodeliverable",
+	Short: "Add outbound deliverables to a release",
+	Long:  `This CLI command would connect to ReARM and add outbound deliverables to a release using a valid API key.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
+
+		locationMap := make(map[string][]string)
+		filesMap := make(map[string]interface{})
+		filesCounter := 0
 
 		body := map[string]interface{}{}
 		if len(releaseId) > 0 {
@@ -755,19 +758,20 @@ var addDeliverableCmd = &cobra.Command{
 		}
 
 		if len(odelId) > 0 {
-			// use artifacts, construct artifact array
-			artifacts := make([]map[string]interface{}, len(odelId))
+			outboundDeliverables := make([]map[string]interface{}, len(odelId))
+			softwareMetadatas := make([]map[string]interface{}, len(odelId))
 			for i, aid := range odelId {
-				artifacts[i] = map[string]interface{}{"identifier": aid}
+				outboundDeliverables[i] = map[string]interface{}{"displayIdentifier": aid}
+				softwareMetadatas[i] = map[string]interface{}{}
 			}
 
 			// now do some length validations and add elements
 			if len(odelBuildId) > 0 && len(odelBuildId) != len(odelId) {
-				fmt.Println("number of --odelbuildid flags must be either zero or match number of --odelid flags")
+				fmt.Println("number of --odelBuildId flags must be either zero or match number of --odelid flags")
 				os.Exit(2)
 			} else if len(odelBuildId) > 0 {
 				for i, abid := range odelBuildId {
-					artifacts[i]["buildId"] = abid
+					softwareMetadatas[i]["buildId"] = abid
 				}
 			}
 
@@ -776,7 +780,7 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(odelBuildUri) > 0 {
 				for i, aburi := range odelBuildUri {
-					artifacts[i]["buildUri"] = aburi
+					softwareMetadatas[i]["buildUri"] = aburi
 				}
 			}
 
@@ -785,16 +789,7 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(odelCiMeta) > 0 {
 				for i, acm := range odelCiMeta {
-					artifacts[i]["cicdMeta"] = acm
-				}
-			}
-
-			if len(odelType) > 0 && len(odelType) != len(odelId) {
-				fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelType) > 0 {
-				for i, at := range odelType {
-					artifacts[i]["type"] = at
+					softwareMetadatas[i]["cicdMeta"] = acm
 				}
 			}
 
@@ -804,7 +799,7 @@ var addDeliverableCmd = &cobra.Command{
 			} else if len(odelDigests) > 0 {
 				for i, ad := range odelDigests {
 					adSpl := strings.Split(ad, ",")
-					artifacts[i]["digests"] = adSpl
+					softwareMetadatas[i]["digests"] = adSpl
 				}
 			}
 
@@ -813,7 +808,7 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dateStart) > 0 {
 				for i, ds := range dateStart {
-					artifacts[i]["dateFrom"] = ds
+					softwareMetadatas[i]["dateFrom"] = ds
 				}
 			}
 
@@ -822,25 +817,7 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(dateEnd) > 0 {
 				for i, de := range dateEnd {
-					artifacts[i]["dateTo"] = de
-				}
-			}
-
-			if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
-				fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelVersion) > 0 {
-				for i, av := range odelVersion {
-					artifacts[i]["version"] = av
-				}
-			}
-
-			if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
-				fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelPublisher) > 0 {
-				for i, ap := range odelPublisher {
-					artifacts[i]["publisher"] = ap
+					softwareMetadatas[i]["dateTo"] = de
 				}
 			}
 
@@ -849,7 +826,57 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(odelPackage) > 0 {
 				for i, ap := range odelPackage {
-					artifacts[i]["packageType"] = strings.ToUpper(ap)
+					softwareMetadatas[i]["packageType"] = strings.ToUpper(ap)
+				}
+			}
+
+			for i, _ := range odelId {
+				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
+			}
+
+			if len(odelType) > 0 && len(odelType) != len(odelId) {
+				fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(odelType) > 0 {
+				for i, at := range odelType {
+					outboundDeliverables[i]["type"] = at
+				}
+			}
+
+			if len(supportedOsArr) > 0 && len(supportedOsArr) != len(odelId) {
+				fmt.Println("number of --osarr flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(supportedOsArr) > 0 {
+				for i, ad := range supportedOsArr {
+					adSpl := strings.Split(ad, ",")
+					outboundDeliverables[i]["supportedOs"] = adSpl
+				}
+			}
+			if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(odelId) {
+				fmt.Println("number of --supportedcpuarcharr flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(supportedCpuArchArr) > 0 {
+				for i, ad := range supportedCpuArchArr {
+					adSpl := strings.Split(ad, ",")
+					outboundDeliverables[i]["supportedCpuArchitectures"] = adSpl
+				}
+			}
+
+			if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
+				fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(odelVersion) > 0 {
+				for i, av := range odelVersion {
+					outboundDeliverables[i]["version"] = av
+				}
+			}
+
+			if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
+				fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(odelPublisher) > 0 {
+				for i, ap := range odelPublisher {
+					outboundDeliverables[i]["publisher"] = ap
 				}
 			}
 
@@ -858,50 +885,137 @@ var addDeliverableCmd = &cobra.Command{
 				os.Exit(2)
 			} else if len(odelGroup) > 0 {
 				for i, ag := range odelGroup {
-					artifacts[i]["group"] = ag
+					outboundDeliverables[i]["group"] = ag
 				}
 			}
 
-			// if len(tagKeyArr) > 0 && len(tagKeyArr) != len(odelId) {
-			// 	fmt.Println("number of --tagkey flags must be either zero or match number of --odelid flags")
-			// 	os.Exit(2)
-			// } else if len(tagValArr) > 0 && len(tagValArr) != len(odelId) {
-			// 	fmt.Println("number of --tagval flags must be either zero or match number of --odelid flags")
-			// 	os.Exit(2)
-			// } else if len(tagKeyArr) > 0 && len(tagValArr) < 1 {
-			// 	fmt.Println("number of --tagval and --tagkey flags must be the same and must match number of --odelid flags")
-			// 	os.Exit(2)
-			// } else if len(tagKeyArr) > 0 {
-			// 	for i, key := range tagKeyArr {
-			// 		tagKeys := strings.Split(key, ",")
-			// 		tagVals := strings.Split(tagValArr[i], ",")
-			// 		if len(tagKeys) != len(tagVals) {
-			// 			fmt.Println("number of keys and values per each --tagval and --tagkey flag must be the same")
-			// 			os.Exit(2)
-			// 		}
+			if len(tagsArr) > 0 && len(tagsArr) != len(odelId) {
+				fmt.Println("number of --tagsarr flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(tagsArr) > 0 {
+				for i, tags := range tagsArr {
+					tagPairs := strings.Split(tags, ",")
+					var tags []TagInput
+					for _, tagPair := range tagPairs {
+						keyValue := strings.Split(tagPair, ":")
+						if len(keyValue) != 2 {
+							fmt.Println("Each tag should have key and value")
+							os.Exit(2)
+						}
+						tags = append(tags, TagInput{
+							Key:   keyValue[0],
+							Value: keyValue[1],
+						})
+					}
+					outboundDeliverables[i]["tags"] = tags
+				}
+			}
 
-			// 		k := make([]TagRecord, 0)
-			// 		for j := range tagKeys {
-			// 			tr := TagRecord{
-			// 				Key:   tagKeys[j],
-			// 				Value: tagVals[j],
-			// 			}
-			// 			k = append(k, tr)
-			// 		}
-			// 		artifacts[i]["tags"] = k
-			// 	}
-			// }
+			if len(identities) > 0 && len(identities) != len(odelId) {
+				fmt.Println("number of --identities flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(identities) > 0 {
+				for i, delIdentities := range identities {
+					identityPairs := strings.Split(delIdentities, ",")
+					var bomIdentities []BomIdentity
+					for _, identityPair := range identityPairs {
+						keyValue := strings.Split(identityPair, ":")
+						if len(keyValue) != 2 {
+							fmt.Println("Each tag should have key and value")
+							os.Exit(2)
+						}
+						bomIdentities = append(bomIdentities, BomIdentity{
+							IdenityType: keyValue[0],
+							Identity:    keyValue[1],
+						})
+					}
+					outboundDeliverables[i]["identities"] = bomIdentities
+				}
+			}
+			if len(odelArtsJson) > 0 && len(odelArtsJson) != len(odelId) {
+				fmt.Println("number of --odelartsjson flags must be either zero or match number of --odelid flags")
+				os.Exit(2)
+			} else if len(odelArtsJson) > 0 {
+				for i, artifactsInputString := range odelArtsJson {
+					var artifactsInput []Artifact
+					err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
+					if err != nil {
+						fmt.Println("Error parsing Artifact Input: ", err)
+					} else {
+						artifactsObject := make([]Artifact, len(artifactsInput))
+						for j, artifactInput := range artifactsInput {
+							artifactsObject[j] = Artifact{}
+							if artifactInput.FilePath != "" {
+								fileBytes, err := os.ReadFile(artifactInput.FilePath)
+								if err != nil {
+									fmt.Println("Error reading file: ", err)
+								} else {
+									filesCounter++
+									currentIndex := strconv.Itoa(filesCounter)
 
-			body["artifacts"] = artifacts
+									locationMap[currentIndex] = []string{"variables.addODeliverableInput.deliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
+									filesMap[currentIndex] = fileBytes
+									artifactInput.File = nil
+
+								}
+								artifactInput.FilePath = ""
+								artifactsObject[j] = artifactInput
+							}
+						}
+						// TODO: replace file path with actual file
+						outboundDeliverables[i]["artifacts"] = artifactsObject
+					}
+				}
+			}
+			body["deliverables"] = outboundDeliverables
 		}
 
-		req := graphql.NewRequest(`
-			mutation ($AddDeliverableInput: AddDeliverableInput) {
-				addDeliverable(release: $AddDeliverableInput) {` + RELEASE_GQL_DATA + `}
+		jsonBody, _ := json.Marshal(body)
+		if debug == "true" {
+			fmt.Println(string(jsonBody))
+		}
+
+		od := make(map[string]interface{})
+		od["operationName"] = "addOutboundDeliverablesProgrammatic"
+		od["variables"] = map[string]interface{}{"addODeliverableInput": body}
+		od["query"] = `mutation addOutboundDeliverablesProgrammatic($addODeliverableInput: AddODeliverableInput!) {addOutboundDeliverablesProgrammatic(deliverables:$addODeliverableInput) {` + RELEASE_GQL_DATA + `}}`
+
+		jsonOd, _ := json.Marshal(od)
+		operations := map[string]string{"operations": string(jsonOd)}
+
+		fileMapJson, _ := json.Marshal(locationMap)
+		fileMapFd := map[string]string{"map": string(fileMapJson)}
+		// write a wrapper to send the gql upload request via post form data
+		client := resty.New()
+		session, _ := getSession()
+		if session != nil {
+			client.SetHeader("X-CSRF-Token", session.Token)
+			client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId)
+		}
+		if len(apiKeyId) > 0 && len(apiKey) > 0 {
+			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+			client.SetHeader("Authorization", "Basic "+auth)
+		}
+		c := client.R()
+		for key, value := range filesMap {
+			if bytesValue, ok := value.([]byte); ok {
+				c.SetFileReader(key, key, bytes.NewReader(bytesValue))
+			} else {
+				// Handle error case: value is not []byte
+				fmt.Printf("Warning: Value for key '%s' is not []byte\n", key)
 			}
-		`)
-		req.Var("AddDeliverableInput", body)
-		fmt.Println(sendRequest(req, "addDeliverable"))
+		}
+
+		resp, err := c.SetHeader("Content-Type", "multipart/form-data").
+			SetHeader("User-Agent", "Reliza Go Client").
+			SetHeader("Accept-Encoding", "gzip, deflate").
+			SetHeader("Apollo-Require-Preflight", "true").
+			SetMultipartFormData(operations).
+			SetMultipartFormData(fileMapFd).
+			SetBasicAuth(apiKeyId, apiKey).
+			Post(rearmUri + "/graphql")
+
+		printResponse(err, resp)
 	},
 }
 
@@ -1299,7 +1413,6 @@ func init() {
 	// addreleaseCmd.PersistentFlags().StringArrayVar(&odelName, "odelname", []string{}, "Deliverable name (multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelPublisher, "odelpublisher", []string{}, "Deliverable publisher (multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelGroup, "odelgroup", []string{}, "Deliverable group (multiple allowed)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&odelBomFilePaths, "odelboms", []string{}, "Deliverable Sbom file paths (multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&supportedOsArr, "osarr", []string{}, "Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
@@ -1307,23 +1420,26 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
 
-	addDeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add artifact to (either releaseid or component, branch, and version must be set)")
-	addDeliverableCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
-	addDeliverableCmd.PersistentFlags().StringVar(&version, "version", "", "Release version")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelId, "odelid", []string{}, "Artifact ID (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelbuildid", []string{}, "Artifact Build ID (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelBuildId", []string{}, "Artifact Build URI (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelCiMeta, "odelCiMeta", []string{}, "Artifact CI Meta (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelType, "odelType", []string{}, "Artifact Type (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelDigests, "odelDigests", []string{}, "Artifact Digests (multiple allowed, separate several digests for one artifact with commas)")
-	// addDeliverableCmd.PersistentFlags().StringArrayVar(&tagKeyArr, "tagkey", []string{}, "Artifact Tag Keys (multiple allowed, separate several tag keys for one artifact with commas)")
-	// addDeliverableCmd.PersistentFlags().StringArrayVar(&tagValArr, "tagval", []string{}, "Artifact Tag Values (multiple allowed, separate several tag values for one artifact with commas)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dateStart, "datestart", []string{}, "Artifact Build Start date and time (optional, multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&dateEnd, "dateend", []string{}, "Artifact Build End date and time (optional, multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelVersion, "odelVersion", []string{}, "Artifact version, if different from release (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelPackage, "odelPackage", []string{}, "Artifact package type (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelPublisher, "odelPublisher", []string{}, "Artifact publisher (multiple allowed)")
-	addDeliverableCmd.PersistentFlags().StringArrayVar(&odelGroup, "odelGroup", []string{}, "Artifact group (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add deliverable to (either releaseid or component, branch, and version must be set)")
+	addODeliverableCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
+	addODeliverableCmd.PersistentFlags().StringVar(&version, "version", "", "Release version")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelId, "odelid", []string{}, "Deliverable ID (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildId, "odelbuildid", []string{}, "Deliverable Build ID (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelBuildUri, "odelbuilduri", []string{}, "Deliverable Build URI (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelCiMeta, "odelcimeta", []string{}, "Deliverable CI Meta (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelType, "odeltype", []string{}, "Deliverable Type (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelDigests, "odeldigests", []string{}, "Deliverable Digests (multiple allowed, separate several digests for one Deliverable with commas)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&tagsArr, "tagsarr", []string{}, "Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&identities, "identities", []string{}, "Deliverable Identity IdenityType-Idenity Pairs (multiple allowed, separate several IdenityType-Idenity pairs for one Deliverable with commas, and seprate IdenityType-Idenity in a pair with colon)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&dateStart, "datestart", []string{}, "Deliverable Build Start date and time (optional, multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&dateEnd, "dateend", []string{}, "Deliverable Build End date and time (optional, multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelVersion, "odelversion", []string{}, "Deliverable version, if different from release (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelPackage, "odelpackage", []string{}, "Deliverable package type (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelPublisher, "odelpublisher", []string{}, "Deliverable publisher (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelGroup, "odelgroup", []string{}, "Deliverable group (multiple allowed)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedOsArr, "osarr", []string{}, "Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
+	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 
 	// flags for is approval needed check command
 	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release (either releaseid or releaseversion and component must be set)")
@@ -1400,7 +1516,7 @@ func init() {
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(printversionCmd)
 	rootCmd.AddCommand(addreleaseCmd)
-	rootCmd.AddCommand(addDeliverableCmd)
+	rootCmd.AddCommand(addODeliverableCmd)
 	rootCmd.AddCommand(checkReleaseByHashCmd)
 	rootCmd.AddCommand(getLatestReleaseCmd)
 	rootCmd.AddCommand(createComponentCmd)
