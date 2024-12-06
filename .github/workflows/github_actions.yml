@@ -16,7 +16,7 @@ jobs:
           registry_username: ${{ secrets.DOCKER_LOGIN }}
           registry_password: ${{ secrets.DOCKER_TOKEN }}
           registry_host: registry.relizahub.com
-          image_namespace: registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-private
+          image_namespace: registry.relizahub.com/0c42eaee-5ab9-42fc-8735-f4a53b87d0a9-public
           image_name: rearm
           reliza_api_id: ${{ secrets.RELIZA_API_ID }}
           reliza_api_key: ${{ secrets.RELIZA_API_KEY }}
