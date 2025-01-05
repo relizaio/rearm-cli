@@ -209,7 +209,7 @@ Flags stand for:
 
 ## 6. Use Case: Request Latest Release Per Component Or Bundle
 
-This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Bundle. Only releases with *ASSEMBLED* lifecycle may be returned.
+This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Bundle.
 
 Sample command:
 
