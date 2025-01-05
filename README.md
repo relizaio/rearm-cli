@@ -451,9 +451,28 @@ Flags stand for:
 - **--releaseversion** - flag to specify release string version with the component flag above (either this flag and component or releaseid must be provided).
 - **--artifactType** - flag to specify type of the artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value .
 
-# Development of Reliza-CLI
+## 21. Use Case: Synchronize Live Git Branches with ReARM
 
-## Adding dependencies to Reliza-CLI
+Sends a list of Live Git branches to ReARM. Non-live branches present on ReARM will be archived.
+
+Sample command:
+
+```bash
+docker run --rm relizaio/rearm-cli    \
+    syncbranches \
+    -i api_id \ 
+    -k api_key    \
+    --component component_uuid    \
+    --livebranches $(git branch -r --format="%(refname)" | base64 -w 0)
+```
+
+Flags stand for:
+- **--component** - flag to specify component uuid, which can be obtained from the component settings on ReARM UI (either this flag or component's API key must be used).
+- **--livebranches** - base64'd list of git branches, for local branches use `git branch --format=\"%(refname)\" | base64 -w 0` to obtain, for remote branches use `git branch -r --format=\"%(refname)\" | base64 -w 0`. Choose between local and remote branches based on your CI context.
+
+# Development of ReARM CLI
+
+## Adding dependencies to ReARM CLI
 
 Dependencies are handled using go modules and imports file is automatically generated. If importing a github repository use this command first:
 
