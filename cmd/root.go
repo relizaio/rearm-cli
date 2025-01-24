@@ -156,7 +156,6 @@ const RELEASE_GQL_DATA = `
 	branch
 	parentReleases {
 		release
-		artifact
 	}
 	sourceCodeEntry
 	artifacts
