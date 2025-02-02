@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/relizaio/rearm-cli)](https://goreportcard.com/report/github.com/relizaio/rearm-cli)
 # Rearm CLI
 
-This tool allows for command-line interactions with [ReARM at relizahub.com](https://relizahub.com) (currently in public preview mode). Particularly, Rearm CLI can stream metadata about instances, releases, artifacts, resolve bundles based on ReARM data. Available as either a Docker image or binary.
+This tool allows for command-line interactions with [ReARM at relizahub.com](https://relizahub.com) (currently in public preview mode). Particularly, Rearm CLI can stream metadata about instances, releases, artifacts, resolve products based on ReARM data. Available as either a Docker image or binary.
 
 Video tutorial about key functionality of ReARM is available on [YouTube](https://www.youtube.com/watch?v=yDlf5fMBGuI).
 
@@ -42,7 +42,7 @@ It is possible to set authentication data via explicit flags, login command (see
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm-hub)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm-hub)
 3. [Check If Artifact Hash Already Present In Some Release](#3-use-case-check-if-artifact-hash-already-present-in-some-release)
-4. [Request Latest Release Per Component Or Bundle](#6-use-case-request-latest-release-per-component-or-bundle)
+4. Request Latest Release Per Component Or Product
 6. [Persist ReARM Credentials in a Config File](#10-use-case-persist-rearm-hub-credentials-in-a-config-file)
 8. [Create New Component in ReARM](#12-use-case-create-new-component-in-rearm-hub)
 9. [Add new artifacts to release in ReARM](#14-use-case-add-new-artifacts-to-release-in-rearm-hub)
@@ -207,9 +207,9 @@ Flags stand for:
 - **--hash** - flag to denote actual hash (required). By convention, hash must include hashing algorithm as its first part, i.e. sha256: or sha512:
 - **--component** - flag to denote UUID of specific Component, UUID must be obtained from ReARM (optional, required if org-wide or user api key is used).
 
-## 6. Use Case: Request Latest Release Per Component Or Bundle
+## 6. Use Case: Request Latest Release Per Component Or Product
 
-This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Bundle.
+This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Product.
 
 Sample command:
 
@@ -225,12 +225,12 @@ docker run --rm relizaio/rearm-cli    \
 
 Flags stand for:
 
-- **getlatestrelease** - command that denotes we are requesting latest release data for Component or Bundle from ReARM
+- **getlatestrelease** - command that denotes we are requesting latest release data for Component or Product from ReARM
 - **-i** - flag for api id which can be either api id for this component or organization-wide read API (required).
 - **-k** - flag for api key which can be either api key for this component or organization-wide read API (required).
-- **--component** - flag to denote UUID of specific Component or Bundle, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component api key is used, otherwise required).
-- **--bundle** - flag to denote UUID of Bundle which packages Component or Bundle for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
-- **--branch** - flag to denote required branch of chosen Component or Bundle (optional, if not supplied settings from ReARM UI are used).
+- **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component api key is used, otherwise required).
+- **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
+- **--branch** - flag to denote required branch of chosen Component or Product (optional, if not supplied settings from ReARM UI are used).
 - **--env** - flag to denote environment to which release approvals should match. Environment can be one of: DEV, BUILD, TEST, SIT, UAT, PAT, STAGING, PRODUCTION. If not supplied, latest release will be returned regardless of approvals (optional).
 - **--tagkey** - flag to denote tag key to use as a selector for artifact (optional, if provided tagval flag must also be supplied). Note that currently only single tag is supported.
 - **--tagval** - flag to denote tag value to use as a selector for artifact (optional, if provided tagkey flag must also be supplied).
@@ -300,7 +300,7 @@ Flags stand for:
 - **-i** - flag for org api id (required).
 - **-k** - flag for org api key (required).
 - **name** - flag to denote component name (required).
-- **type** - flag to denote component type (required). Supported values: component, bundle.
+- **type** - flag to denote component type (required). Supported values: component, product.
 - **defaultbranch** - flag to denote default branch name (optional, if not set "main" will be used). Available names are either main or master.
 - **versionschema** - flag to denote version schema (optional, if not set "semver" will be used). [Available version schemas](https://github.com/relizaio/versioning).
 - **featurebranchversioning** - flag to denote feature branch version schema (optional, if not set "Branch.Micro will be used).

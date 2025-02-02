@@ -70,7 +70,6 @@ var odelPackage []string
 
 // var odelName []string
 var branch string
-var bundle string
 var product string
 var cfgFile string
 var closedDate string
@@ -1072,8 +1071,8 @@ var createComponentCmd = &cobra.Command{
 		body := map[string]interface{}{"name": componentName}
 		if len(componentType) > 0 {
 			body["type"] = strings.ToUpper(componentType)
-			if strings.ToUpper(componentType) == "BUNDLE" {
-				body["type"] = "BUNDLE"
+			if strings.ToUpper(componentType) == "PRODUCT" {
+				body["type"] = "PRODUCT"
 			}
 		}
 		if len(defaultBranch) > 0 {
@@ -1432,14 +1431,14 @@ func init() {
 	// flags for is approval needed check command
 	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release (either releaseid or releaseversion and component must be set)")
 	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseVersion, "releaseversion", "", "Version of release (either releaseid or releaseversion and component must be set)")
-	downloadableArtifactCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component or bundle for release (either instance and component or releaseid or releaseversion and component must be set)")
+	downloadableArtifactCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component or product for release (either instance and component or releaseid or releaseversion and component must be set)")
 	downloadableArtifactCmd.PersistentFlags().StringVarP(&filePath, "file", "f", "", "Path to the artifact")
 	// downloadableArtifactCmd.PersistentFlags().StringVar(&odelType, "odelType", "GENERIC", "Type of artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value")
 
 	// flags for createcomponent command
 	createComponentCmd.PersistentFlags().StringVar(&componentName, "name", "", "Name of component to create")
 	createComponentCmd.MarkPersistentFlagRequired("name")
-	createComponentCmd.PersistentFlags().StringVar(&componentType, "type", "", "Specify to create either a component or bundle")
+	createComponentCmd.PersistentFlags().StringVar(&componentType, "type", "", "Specify to create either a component or product")
 	createComponentCmd.MarkPersistentFlagRequired("type")
 	createComponentCmd.PersistentFlags().StringVar(&defaultBranch, "defaultbranch", "main", "Default branch name of component, default set to main. Available names are either main or master.")
 	createComponentCmd.PersistentFlags().StringVar(&versionSchema, "versionschema", "semver", "Version schema of component, default set to semver. Available version schemas: https://github.com/relizaio/versioning")

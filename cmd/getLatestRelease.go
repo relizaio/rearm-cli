@@ -47,16 +47,16 @@ type ConditionGroupOnReleaseInput struct {
 
 var getLatestReleaseCmd = &cobra.Command{
 	Use:   "getlatestrelease",
-	Short: "Obtains latest release for Component or Bundle",
+	Short: "Obtains latest release for Component or Product",
 	Long: `This CLI command would connect to ReARM and would obtain latest release for specified Component and Branch
-			or specified Bundle and Feature Set.`,
+			or specified Product and Feature Set.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getLatestReleaseFunc(debug, rearmUri, component, bundle, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
+		getLatestReleaseFunc(debug, rearmUri, component, product, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
 	},
 }
 
 
-func getLatestReleaseFunc(debug string, rearmUri string, component string, bundle string, branch string,
+func getLatestReleaseFunc(debug string, rearmUri string, component string, product string, branch string,
 	tagKey string, tagVal string, apiKeyId string, apiKey string, lifecycle string) []byte {
 	if debug == "true" {
 		fmt.Println("Using ReARM at", rearmUri)

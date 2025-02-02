@@ -9,23 +9,23 @@ import (
 	"github.com/machinebox/graphql"
 )
 
-func getBundleVersionCycloneDxExportV1(apiKeyId string, apiKey string, bundle string,
+func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product string,
 	environment string, version string) []byte {
 
-	if len(bundle) <= 0 && (len(version) <= 0 || len(environment) <= 0) {
+	if len(product) <= 0 && (len(version) <= 0 || len(environment) <= 0) {
 		//throw error and exit
-		fmt.Println("Error: Bundle name and either version or environment must be provided!")
+		fmt.Println("Error: Product name and either version or environment must be provided!")
 		os.Exit(1)
 	}
 
 	client := graphql.NewClient(rearmUri + "/graphql")
 	req := graphql.NewRequest(`
-		query ($bundleName: String!, $bundleVersion: String, $environment: String) {
-			exportAsBomProg(bundleName: $bundleName, bundleVersion: $bundleVersion, environment: $environment)
+		query ($productName: String!, $productVersion: String, $environment: String) {
+			exportAsBomProg(productName: $productName, productVersion: $productVersion, environment: $environment)
 		}
 	`)
-	req.Var("bundleName", bundle)
-	req.Var("bundleVersion", version)
+	req.Var("productName", product)
+	req.Var("productVersion", version)
 	req.Var("environment", environment)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Reliza Go Client")
