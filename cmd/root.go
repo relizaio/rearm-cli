@@ -36,7 +36,6 @@ import (
 )
 
 var action string
-var aggregated bool
 var apiKeyId string
 var apiKey string
 
@@ -72,10 +71,10 @@ var odelPackage []string
 // var odelName []string
 var branch string
 var bundle string
+var product string
 var cfgFile string
 var closedDate string
 var commit string
-var commit2 string
 var commitMessage string
 var commits string // base64-encoded list of commits obtained with: git log $LATEST_COMMIT..$CURRENT_COMMIT --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0
 var createdDate string
@@ -384,7 +383,7 @@ var addreleaseCmd = &cobra.Command{
 				}
 			}
 
-			for i, _ := range odelId {
+			for i := range odelId {
 				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
 			}
 
@@ -829,7 +828,7 @@ var addODeliverableCmd = &cobra.Command{
 				}
 			}
 
-			for i, _ := range odelId {
+			for i := range odelId {
 				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
 			}
 
@@ -1243,16 +1242,6 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
-var getLatestReleaseCmd = &cobra.Command{
-	Use:   "getlatestrelease",
-	Short: "Obtains latest release for Component or Bundle",
-	Long: `This CLI command would connect to ReARM and would obtain latest release for specified Component and Branch
-			or specified Bundle and Feature Set.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		getLatestReleaseFunc(debug, rearmUri, component, bundle, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
-	},
-}
-
 var prDataCmd = &cobra.Command{
 	Use:   "prdata",
 	Short: "Sends pull request data to ReARM",
@@ -1483,17 +1472,6 @@ func init() {
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to check artifact hash (optional, required for org-wide keys)")
 
-	// flags for latest component or bundle release
-	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Bundle UUID from ReARM of component or bundle from which to obtain latest release")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&bundle, "bundle", "", "Bundle UUID from ReARM to condition component release to this bundle bundle (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of branch or Feature Set from ReARM for which latest release is requested, if not supplied UI mapping is used (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&environment, "env", "", "Environment to obtain approvals details from (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&instance, "instance", "", "Instance ID for which to check release (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace within instance for which to check release, only matters if instance is supplied (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&tagKey, "tagkey", "", "Tag key to use for picking artifact (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&tagVal, "tagval", "", "Tag value to use for picking artifact (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of the release, default is 'DRAFT' (optional)")
-
 	prDataCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
 	prDataCmd.PersistentFlags().StringVarP(&state, "state", "s", "", "State of the Pull Request")
 	prDataCmd.PersistentFlags().StringVarP(&targetBranch, "targetBranch", "t", "", "Name of target branch")
@@ -1517,7 +1495,6 @@ func init() {
 	rootCmd.AddCommand(addreleaseCmd)
 	rootCmd.AddCommand(addODeliverableCmd)
 	rootCmd.AddCommand(checkReleaseByHashCmd)
-	rootCmd.AddCommand(getLatestReleaseCmd)
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
 	rootCmd.AddCommand(downloadableArtifactCmd)
