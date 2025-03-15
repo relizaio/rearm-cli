@@ -1370,9 +1370,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "API Key Secret")
 	rootCmd.PersistentFlags().StringVarP(&apiKeyId, "apikeyid", "i", "", "API Key ID")
 	rootCmd.PersistentFlags().StringVarP(&debug, "debug", "d", "false", "If set to true, print debug details")
-	rootCmd.MarkPersistentFlagRequired("uri")
-	rootCmd.MarkPersistentFlagRequired("apikey")
-	rootCmd.MarkPersistentFlagRequired("apikeyid")
 
 	// flags for addrelease command
 	addreleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
