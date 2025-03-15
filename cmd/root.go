@@ -220,7 +220,10 @@ const COMPONENT_GQL_DATA = `
 	org
 	type
 	versionSchema
-	vcsRepository
+	vcsRepositoryDetails {
+		uri
+		type
+	}
 	featureBranchVersioning
 	status
 	apiKeyId
