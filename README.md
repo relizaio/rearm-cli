@@ -42,6 +42,7 @@ It is possible to set authentication data via explicit flags, login command (see
 5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-hub-credentials-in-a-config-file)
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm-hub)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
+8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -125,9 +126,7 @@ docker run --rm relizaio/rearm-cli    \
     --odelbuildid 1    \
     --odelcimeta Github Actions    \
     --odeltype CONTAINER    \
-    --odeldigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd    \
-    --tagkey key1
-    --tagval val1
+    --odeldigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd
 ```
 
 Flags stand for:
@@ -311,3 +310,43 @@ You then should be able to add what you need as an import to your files. Once th
 ```bash
 go generate ./internal/imports
 ```
+
+## 8. Use Case: Add Outbound Deliverables to Release
+
+This use case adds outbound deliverables to a ReARM Release. Release must be in Pending or Draft lifecycle.
+
+Sample command:
+
+```bash
+docker run --rm relizaio/rearm-cli    \
+    addodeliverable \
+    -i api_id \ 
+    -k api_key    \
+    --odelid relizaio/rearm-cli    \
+    --odelbuildid 1    \
+    --odelcimeta Github Actions    \
+    --odeltype CONTAINER    \
+    --odeldigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd
+    --releaseid 22a98c21-ab90-4a17-94f5-2dd81be5647b
+```
+
+Flags stand for:
+- **--component** - Component UUID for this release, required if organization wide API Key is used
+- **--cpuarr** - Array of CPU architectures supported by this Deliverable (optional, multiple allowed)
+- **--dateend** - Deliverable Build End date and time (optional, multiple allowed)
+- **--datestart** - Deliverable Build Start date and time (optional, multiple allowed)
+- **--identities** - Deliverable Identity (i.e. PURL) IdenityType-Idenity Pairs (multiple allowed, separate several IdenityType-Idenity pairs for one Deliverable with commas, and seprate IdenityType-Idenity in a pair with colon)
+- **--odelartsjson** -Deliverable Artifacts json array (optional, multiple allowed, use a json array for each deliverable, similar to add release use case)
+- **--odelbuildid** - Deliverable Build ID (optional, multiple allowed)
+- **--odelbuilduri** - Deliverable Build URI (multiple allowed)
+- **--odelcimeta** - Deliverable CI Meta (multiple allowed)
+- **--odeldigests** - Deliverable Digests (multiple allowed, separate several digests for one Deliverable with commas)
+- **--odelid** - Deliverable Primary Identifier (multiple allowed)
+- **--odelpackage** - Deliverable package type (i.e. Maven) (multiple allowed)
+- **--odelpublisher** - Deliverable publisher (multiple allowed)
+- **--odelversion** -  Deliverable version, if different from release (multiple allowed)
+- **--osarr** - Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)
+- **--releaseid** - UUID of release to add deliverable to (either releaseid or component, branch, and version must be set)
+- **--tagsarr** - Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon)
+- **--version** - Release version (either releaseid or component, branch, and version must be set)
+- **--branch** - Release branch (either releaseid or component, branch, and version must be set)
