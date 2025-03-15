@@ -38,11 +38,10 @@ It is possible to set authentication data via explicit flags, login command (see
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm-hub)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm-hub)
 3. [Check If Artifact Hash Already Present In Some Release](#3-use-case-check-if-artifact-hash-already-present-in-some-release)
-4. Request Latest Release Per Component Or Product
-5. [Persist ReARM Credentials in a Config File](#10-use-case-persist-rearm-hub-credentials-in-a-config-file)
-6. [Create New Component in ReARM](#12-use-case-create-new-component-in-rearm-hub)
-7. [Add new artifacts to release in ReARM](#14-use-case-add-new-artifacts-to-release-in-rearm-hub)
-9. [Attach a downloadable artifact to a Release on ReARM](#20-use-case-attach-a-downloadable-artifact-to-a-release-on-rearm-hub)
+4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
+5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-hub-credentials-in-a-config-file)
+6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm-hub)
+7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -277,92 +276,7 @@ Flags stand for:
 - **vcstype** - flag to denote type of vcs to create for component. Supported values: git, svn, mercurial (required if ReARM cannot parse uri).
 - **includeapi** - boolean flag to return component api key and id of newly created component (optional). Default is false.
 
-## 14. Use Case: Add new artifacts to release in ReARM
-
-This use case adds 1 or more artifacts to an existing release. API key must be generated prior to using.
-
-Sample command to add artifact:
-
-```bash
-docker run --rm relizaio/rearm-cli    \
-    addartifact    \
-    -i component_or_organization_wide_rw_api_id    \
-    -k component_or_organization_wide_rw_api_key    \
-    -v 20.02.3    \
-    --artid relizaio/rearm-cli    \
-    --artbuildid 1    \
-    --artcimeta Github Actions    \
-    --arttype Docker    \
-    --artdigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd    \
-    --tagkey key1
-    --tagval val1
-```
-
-Flags stand for:
-
-- **addartifact** - command that denotes we are adding artifact(s) to a release.
-- **-i** - flag for component api id or organization-wide read-write api id (required).
-- **-k** - flag for component api key or organization-wide read-write api key (required).
-- **releaseid** - flag to specify release uuid, which can be obtained from the release view or programmatically (either this flag or component and version are required).
-- **component** - flag to denote component uuid (optional). Required if organization-wide read-write key is used and releaseid isn't, ignored if component specific api key is used.
-- **version** - version (either this flag and component or releaseid are required)
-- **artid** - flag to denote artifact identifier (optional). This is required to add artifact metadata into release.
-- **artbuildid** - flag to denote artifact build id (optional). This flag is optional and may be used to indicate build system id of the release (i.e., this could be circleci build number).
-- **artbuilduri** - flag to denote artifact build uri (optional). This flag is optional and is used to denote the uri for where the build takes place.
-- **artcimeta** - flag to denote artifact CI metadata (optional). This flag is optional and like artbuildid may be used to indicate build system metadata in free form.
-- **arttype** - flag to denote artifact type (optional). This flag is used to denote artifact type. Types are based on [CycloneDX](https://cyclonedx.org/) spec. Supported values: Docker, File, Image, Font, Library, Application, Framework, OS, Device, Firmware.
-- **datestart** - flag to denote artifact build start date and time, must conform to ISO strict date (in bash, use *date -Iseconds*, if used there must be one datestart flag entry per artifact, optional).
-- **dateend** - flag to denote artifact build end date and time, must conform to ISO strict date (in bash, use *date -Iseconds*, if used there must be one datestart flag entry per artifact, optional).
-- **artpublisher** - flag to denote artifact publisher (if used there must be one publisher flag entry per artifact, optional).
-- **artversion** - flag to denote artifact version if different from release version (if used there must be one publisher flag entry per artifact, optional).
-- **artpackage** - flag to denote artifact package type according to CycloneDX spec: MAVEN, NPM, NUGET, GEM, PYPI, DOCKER (if used there must be one publisher flag entry per artifact, optional).
-- **artgroup** - flag to denote artifact group (if used there must be one group flag entry per artifact, optional).
-- **artdigests** - flag to denote artifact digests (optional). This flag is used to indicate artifact digests. By convention, digests must be prefixed with type followed by colon and then actual digest hash, i.e. *sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd* - here type is *sha256* and digest is *4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd*. Multiple digests are supported and must be comma separated. I.e.:
-
-```bash
---artdigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd,sha1:fe4165996a41501715ea0662b6a906b55e34a2a1
-```
-
-- **tagkey** - flag to denote keys of artifact tags (optional, but every tag key must have corresponding tag value). Multiple tag keys per artifact are supported and must be comma separated. I.e.:
-
-```bash
---tagkey key1,key2
-```
-
-- **tagval** - flag to denote values of artifact tags (optional, but every tag value must have corresponding tag key). Multiple tag values per artifact are supported and must be comma separated. I.e.:
-
-```bash
---tagval val1,val2
-```
-
-Notes:
-1. Multiple artifacts per release are supported. In which case artifact specific flags (artid, arbuildid, artbuilduri, artcimeta, arttype, artdigests, tagkey and tagval must be repeated for each artifact).
-2. Artifacts may be added to Complete or Rejected releases (this can be used for adding for example test reports), however a special tag would be placed on those artifacts by ReARM.
-
-## 20. Use Case: Attach a downloadable artifact to a Release on ReARM
-
-This use case is to attach a downloadable artifact to a Release on ReARM. For example, to add a report obtained by automated tests for a release.
-
-Sample command:
-
-```bash
-docker run --rm relizaio/rearm-cli    \
-    addDownloadableArtifact \
-    -i api_id \ 
-    -k api_key    \
-    --releaseid release_uuid    \
-    --artifactType TEST_REPORT \
-    --file <path_to_the_report>
-```
-
-Flags stand for:
-- **--file | -f** - flag to specify path to the artifact file.
-- **--releaseid** - flag to specify release uuid, which can be obtained from the release view or programmatically (either this flag or component id and release version or component id and instance are required).
-- **--component** - flag to specify component uuid, which can be obtained from the component settings on ReARM UI (either this flag and release version or releaseid must be provided).
-- **--releaseversion** - flag to specify release string version with the component flag above (either this flag and component or releaseid must be provided).
-- **--artifactType** - flag to specify type of the artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value .
-
-## 21. Use Case: Synchronize Live Git Branches with ReARM
+## 7. Use Case: Synchronize Live Git Branches with ReARM
 
 Sends a list of Live Git branches to ReARM. Non-live branches present on ReARM will be archived.
 

@@ -1019,49 +1019,6 @@ var addODeliverableCmd = &cobra.Command{
 	},
 }
 
-var downloadableArtifactCmd = &cobra.Command{
-	Use:   "addDownloadableArtifact",
-	Short: "Add a downloadable artifact to a release using valid API key",
-	Long:  `This CLI command would connect to ReARM add downloadable artifact to a release.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if debug == "true" {
-			fmt.Println("Using ReARM at", rearmUri)
-		}
-
-		body := map[string]string{}
-		if len(releaseId) > 0 {
-			body["uuid"] = releaseId
-		}
-		if len(releaseVersion) > 0 {
-			body["version"] = releaseVersion
-		}
-		if len(component) > 0 {
-			body["component"] = component
-		}
-		// if len(artifactType) > 0 {
-		// 	body["artifactType"] = artifactType
-		// }
-		client := resty.New()
-		session, _ := getSession()
-		if session != nil {
-			client.SetHeader("X-CSRF-Token", session.Token)
-			client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId)
-		}
-		resp, err := client.R().
-			SetHeader("Content-Type", "application/json").
-			SetHeader("User-Agent", "Reliza Go Client").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetFile("file", filePath).
-			SetFormData(body).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/api/programmatic/v1/artifact/upload")
-
-		printResponse(err, resp)
-
-	},
-}
-
 var createComponentCmd = &cobra.Command{
 	Use:   "createcomponent",
 	Short: "Create new component",
@@ -1431,13 +1388,6 @@ func init() {
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 
-	// flags for is approval needed check command
-	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release (either releaseid or releaseversion and component must be set)")
-	downloadableArtifactCmd.PersistentFlags().StringVar(&releaseVersion, "releaseversion", "", "Version of release (either releaseid or releaseversion and component must be set)")
-	downloadableArtifactCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component or product for release (either instance and component or releaseid or releaseversion and component must be set)")
-	downloadableArtifactCmd.PersistentFlags().StringVarP(&filePath, "file", "f", "", "Path to the artifact")
-	// downloadableArtifactCmd.PersistentFlags().StringVar(&odelType, "odelType", "GENERIC", "Type of artifact - can be (TEST_REPORT, SECURITY_SCAN, DOCUMENTATION, GENERIC) or some user defined value")
-
 	// flags for createcomponent command
 	createComponentCmd.PersistentFlags().StringVar(&componentName, "name", "", "Name of component to create")
 	createComponentCmd.MarkPersistentFlagRequired("name")
@@ -1499,7 +1449,6 @@ func init() {
 	rootCmd.AddCommand(checkReleaseByHashCmd)
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
-	rootCmd.AddCommand(downloadableArtifactCmd)
 	rootCmd.AddCommand(prDataCmd)
 }
 
