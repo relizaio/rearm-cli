@@ -1,7 +1,7 @@
 /*
 The MIT License (MIT)
 
-Copyright (c) 2020 - 2022 Reliza Incorporated (Reliza (tm), https://reliza.io)
+Copyright (c) 2020 - 2025 Reliza Incorporated (Reliza (tm), https://reliza.io)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
 to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
@@ -39,19 +39,6 @@ var action string
 var apiKeyId string
 var apiKey string
 
-// var artBuildId []string
-// var odelBuildId []string
-// var artBomFilePaths []string
-// var odelCiMeta []string
-// var odelDigests []string
-// var artId []string
-// var odelType []string
-
-// var artifactType string
-// var odelVersion []string
-// var odelPublisher []string
-// var odelGroup []string
-// var odelPackage []string
 var odelArtsJson []string
 var odelBuildId []string
 var odelBuildUri []string
@@ -62,21 +49,17 @@ var odelType []string
 var releaseArts string
 var sceArts string
 
-// var odelifactType string
 var odelVersion []string
 var odelPublisher []string
 var odelGroup []string
 var odelPackage []string
 
-// var odelName []string
 var branch string
 var product string
 var cfgFile string
-var closedDate string
 var commit string
 var commitMessage string
 var commits string // base64-encoded list of commits obtained with: git log $LATEST_COMMIT..$CURRENT_COMMIT --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0
-var createdDate string
 var dateActual string
 var dateStart []string
 var dateEnd []string
@@ -85,40 +68,31 @@ var defaultBranch string
 var endpoint string
 var environment string
 var featureBranchVersioning string
-var filePath string
 var fsBomPath string
 var hash string
 var identities []string
 var includeApi bool
 var instance string
 var manual bool
-var mergedDate string
 var metadata string
 var modifier string
 var namespace string
-var number string
 var onlyVersion bool
 var infile string
-var outfile string
 var releaseId string
 var releaseVersion string
 var rearmUri string
 var component string
 var componentName string
 var componentType string
-var state string
 var lifecycle string
 var supportedOsArr []string
 var supportedCpuArchArr []string
 var tagKey string
 
-// var tagKeyArr []string
 var tagVal string
 
-// var tagValArr []string
 var tagsArr []string
-var targetBranch string
-var title string
 var version string
 var versionSchema string
 var vcsName string
@@ -126,7 +100,6 @@ var vcsTag string
 var vcsType string
 var vcsUri string
 var vcsUuid string
-var valueFiles []string
 
 const (
 	defaultConfigFilename = ".rearm"
@@ -1201,115 +1174,6 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
-var prDataCmd = &cobra.Command{
-	Use:   "prdata",
-	Short: "Sends pull request data to ReARM",
-	Long:  `This CLI command would stream pull request data from ci to ReARM`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if debug == "true" {
-			fmt.Println("Using ReARM at", rearmUri)
-		}
-
-		body := map[string]interface{}{"branch": branch}
-
-		if len(state) > 0 {
-			body["state"] = state
-		}
-		if len(component) > 0 {
-			body["component"] = component
-		}
-
-		if len(targetBranch) > 0 {
-			body["targetBranch"] = targetBranch
-		}
-		if len(endpoint) > 0 {
-			body["endpoint"] = endpoint
-		}
-		if len(title) > 0 {
-			body["title"] = title
-		}
-		if len(createdDate) > 0 {
-			body["createdDate"] = createdDate
-		}
-		if len(closedDate) > 0 {
-			body["closedDate"] = closedDate
-		}
-		if len(mergedDate) > 0 {
-			body["mergedDate"] = mergedDate
-		}
-		if len(number) > 0 {
-			body["number"] = number
-		}
-		if commit != "" {
-			commitMap := map[string]string{"uri": vcsUri, "type": vcsType, "commit": commit, "commitMessage": commitMessage}
-			if vcsTag != "" {
-				commitMap["vcsTag"] = vcsTag
-			}
-			if dateActual != "" {
-				commitMap["dateActual"] = dateActual
-			}
-			body["sourceCodeEntry"] = commitMap
-		}
-
-		if len(commits) > 0 {
-			// fmt.Println(commits)
-			plainCommits, err := base64.StdEncoding.DecodeString(commits)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-			indCommits := strings.Split(string(plainCommits), "\n")
-			commitsInBody := make([]map[string]interface{}, len(indCommits)-1)
-			for i := range indCommits {
-				if len(indCommits[i]) > 0 {
-					singleCommitEl := map[string]interface{}{}
-					commitParts := strings.Split(indCommits[i], "|||")
-					singleCommitEl["commit"] = commitParts[0]
-					singleCommitEl["dateActual"] = commitParts[1]
-					singleCommitEl["commitMessage"] = commitParts[2]
-					if len(commitParts) > 3 {
-						singleCommitEl["commitAuthor"] = commitParts[3]
-						singleCommitEl["commitEmail"] = commitParts[4]
-					}
-					commitsInBody[i] = singleCommitEl
-
-					// if commit is not present but we are here, use first line as commit
-					if len(commit) < 1 && i == 0 {
-						var commitMap map[string]string
-						if len(commitParts) > 3 {
-							commitMap = map[string]string{"commit": commitParts[0], "dateActual": commitParts[1], "commitMessage": commitParts[2], "commitAuthor": commitParts[3], "commitEmail": commitParts[4]}
-						} else {
-							commitMap = map[string]string{"commit": commitParts[0], "dateActual": commitParts[1], "commitMessage": commitParts[2]}
-						}
-						if vcsTag != "" {
-							commitMap["vcsTag"] = vcsTag
-						}
-						if vcsUri != "" {
-							commitMap["uri"] = vcsUri
-						}
-						if vcsType != "" {
-							commitMap["type"] = vcsType
-						}
-						body["sourceCodeEntry"] = commitMap
-					}
-				}
-			}
-			body["commits"] = commitsInBody
-		}
-
-		if debug == "true" {
-			fmt.Println(body)
-		}
-		req := graphql.NewRequest(`
-			mutation ($PullRequestInput: PullRequestInput) {
-				setPRData(pullRequest:$PullRequestInput)
-			}
-		`)
-		req.Var("PullRequestInput", body)
-		fmt.Println(sendRequest(req, "prdata"))
-	},
-}
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -1424,24 +1288,6 @@ func init() {
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to check artifact hash (optional, required for org-wide keys)")
 
-	prDataCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
-	prDataCmd.PersistentFlags().StringVarP(&state, "state", "s", "", "State of the Pull Request")
-	prDataCmd.PersistentFlags().StringVarP(&targetBranch, "targetBranch", "t", "", "Name of target branch")
-	prDataCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID if org-wide key is used")
-	prDataCmd.PersistentFlags().StringVar(&endpoint, "endpoint", "", "HTML endpoint of the Pull Request")
-	prDataCmd.PersistentFlags().StringVar(&title, "title", "", "Title of the Pull Request")
-	prDataCmd.PersistentFlags().StringVar(&createdDate, "createdDate", "", "Datetime when the Pull Request was created")
-	prDataCmd.PersistentFlags().StringVar(&closedDate, "closedDate", "", "Datetime when the Pull Request was closed")
-	prDataCmd.PersistentFlags().StringVar(&mergedDate, "mergedDate", "", "Datetime when the Pull Request was merged")
-	prDataCmd.PersistentFlags().StringVar(&number, "number", "", "Number of the Pull Request")
-	prDataCmd.PersistentFlags().StringVar(&commit, "commit", "", "SHA of current commit on the Pull Request (will be merged with existing list)")
-	prDataCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
-	prDataCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
-	prDataCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
-	prDataCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this pull request event, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional)")
-	prDataCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
-	prDataCmd.PersistentFlags().StringVar(&dateActual, "commitdate", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
-
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(printversionCmd)
 	rootCmd.AddCommand(addreleaseCmd)
@@ -1449,7 +1295,6 @@ func init() {
 	rootCmd.AddCommand(checkReleaseByHashCmd)
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
-	rootCmd.AddCommand(prDataCmd)
 }
 
 func sendRequest(req *graphql.Request, endpoint string) string {

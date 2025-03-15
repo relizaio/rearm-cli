@@ -18,8 +18,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"encoding/json"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -31,7 +31,7 @@ import (
 var rawBranchesBase64 string
 
 type SynchronizeBranchInput struct {
-	Component  string `json:"component"`
+	Component    string   `json:"component"`
 	LiveBranches []string `json:"liveBranches"`
 }
 
@@ -44,7 +44,7 @@ var synchronizeBranchesCmd = &cobra.Command{
 		if debug == "true" {
 			fmt.Println("Using ReARM instance at", rearmUri)
 		}
-		
+
 		plainBranches, err := base64.StdEncoding.DecodeString(rawBranchesBase64)
 		if err != nil {
 			fmt.Println(err)

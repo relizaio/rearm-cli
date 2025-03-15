@@ -6,11 +6,9 @@ require (
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/machinebox/graphql v0.2.2
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0
-	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -21,6 +19,7 @@ require (
 	github.com/matryer/is v1.4.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
