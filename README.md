@@ -1,4 +1,4 @@
-![Docker Image CI](https://github.com/relizaio/rearm-cli/actions/workflows/dockerimage.yml/badge.svg?branch=master)
+![Docker Image CI](https://github.com/relizaio/rearm-cli/actions/workflows/github_actions.yml/badge.svg?branch=main)
 [![Go Report Card](https://goreportcard.com/badge/github.com/relizaio/rearm-cli)](https://goreportcard.com/report/github.com/relizaio/rearm-cli)
 # Rearm CLI
 
