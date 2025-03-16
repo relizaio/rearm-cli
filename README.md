@@ -6,7 +6,7 @@ This tool allows for command-line interactions with [ReARM](https://github.com/r
 
 Community forum and support is available via [Discord](https://discord.com/invite/UTxjBf9juQ) - use #rearm channel.
 
-Docker image is available at [relizaio/rearm-cli](https://hub.docker.com/r/relizaio/rearm-cli)
+Container image URI: registry.relizahub.com/library/rearm-cli.
 
 ## Download Rearm CLI
 
