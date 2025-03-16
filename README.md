@@ -51,7 +51,7 @@ This use case requests Version from ReARM for our component. Note that component
 Sample command for semver version schema:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -62,7 +62,7 @@ docker run --rm relizaio/rearm-cli    \
 Sample command with commit details for a git commit:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -77,7 +77,7 @@ docker run --rm relizaio/rearm-cli    \
 Sample command to obtain only version info and skip creating the release:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     getversion    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
@@ -112,17 +112,17 @@ This use case is commonly used in the CI workflow to stream Release metadata to 
 Sample command to send release details:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     addrelease    \
     -i component_or_organization_wide_rw_api_id    \
     -k component_or_organization_wide_rw_api_key    \
     -b master    \
     -v 20.02.3    \
-    --vcsuri github.com/relizaio/rearm-cli    \
+    --vcsuri github.com/registry.relizahub.com/library/rearm-cli    \
     --vcstype git    \
     --commit 7bfc5ce7b0da277d139f7993f90761223fa54442    \
     --vcstag 20.02.3    \
-    --odelid relizaio/rearm-cli    \
+    --odelid registry.relizahub.com/library/rearm-cli    \
     --odelbuildid 1    \
     --odelcimeta Github Actions    \
     --odeltype CONTAINER    \
@@ -176,7 +176,7 @@ This is particularly useful for monorepos to see if there was a change in sub-co
 Sample command:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     checkhash    \
     -i component_or_org_wide_api_id    \
     -k component_or_org_wide_api_key    \
@@ -198,7 +198,7 @@ This use case is when ReARM is queried either by CI or CD environment or by inte
 Sample command:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     getlatestrelease    \
     -i api_id    \
     -k api_key    \
@@ -227,7 +227,7 @@ Sample Command:
 ```bash
 docker run --rm \
     -v ~:/home/apprunner \
-    relizaio/rearm-cli \
+    registry.relizahub.com/library/rearm-cli \
     login \
     -i api_id \
     -k api_key \
@@ -247,7 +247,7 @@ This use case creates a new component for our organization. API key must be gene
 Sample command to create component:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     createcomponent    \
     -i org_api_id    \
     -k org_api_key    \
@@ -255,7 +255,7 @@ docker run --rm relizaio/rearm-cli    \
     --type component
     --versionschema semver
     --featurebranchversioning Branch.Micro
-    --vcsuri github.com/relizaio/rearm-cli
+    --vcsuri github.com/registry.relizahub.com/library/rearm-cli
     --includeapi
 ```
 
@@ -282,7 +282,7 @@ Sends a list of Live Git branches to ReARM. Non-live branches present on ReARM w
 Sample command:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     syncbranches \
     -i api_id \ 
     -k api_key    \
@@ -318,11 +318,11 @@ This use case adds outbound deliverables to a ReARM Release. Release must be in 
 Sample command:
 
 ```bash
-docker run --rm relizaio/rearm-cli    \
+docker run --rm registry.relizahub.com/library/rearm-cli    \
     addodeliverable \
     -i api_id \ 
     -k api_key    \
-    --odelid relizaio/rearm-cli    \
+    --odelid registry.relizahub.com/library/rearm-cli    \
     --odelbuildid 1    \
     --odelcimeta Github Actions    \
     --odeltype CONTAINER    \
