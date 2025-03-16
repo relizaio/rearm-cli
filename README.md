@@ -30,9 +30,9 @@ Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/25.02.4/re
 
 It is possible to set authentication data via explicit flags, login command (see below) or following environment variables:
 
-- APIKEYID - for API Key ID
-- APIKEY - for API Key itself
-- URI - for ReARM Uri
+- REARM_APIKEYID - for API Key ID
+- REARM_APIKEY - for API Key itself
+- REARM_URI - for ReARM Uri
 
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm-hub)

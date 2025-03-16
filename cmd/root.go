@@ -103,7 +103,7 @@ var vcsUuid string
 
 const (
 	defaultConfigFilename = ".rearm"
-	envPrefix             = ""
+	envPrefix             = "rearm"
 	configType            = "env"
 )
 
