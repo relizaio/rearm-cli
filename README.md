@@ -104,6 +104,7 @@ Flags stand for:
 - **--modifier** - flag to set version modifier (optional). This may be semver modifier or custom version schema metadata.
 - **--manual** - flag to indicate a manual release (optional). Sets lifecycle as 'DRAFT', otherwise 'PENDING' lifecycle is set.
 - **--onlyversion** - boolean flag to skip creation of the release (optional). Default is false.
+- **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional). Default is true. Supported values: true|false.
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
@@ -350,3 +351,4 @@ Flags stand for:
 - **--tagsarr** - Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon)
 - **--version** - Release version (either releaseid or component, branch, and version must be set)
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
+- **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
