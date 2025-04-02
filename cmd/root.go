@@ -86,7 +86,7 @@ var component string
 var componentName string
 var componentType string
 var lifecycle string
-var stripBom bool
+var stripBom string
 
 var supportedOsArr []string
 var supportedCpuArchArr []string
@@ -489,7 +489,7 @@ var addreleaseCmd = &cobra.Command{
 
 								}
 								artifactInput.FilePath = ""
-								artifactInput.StripBom = stripBom
+								artifactInput.StripBom = strings.ToUpper(stripBom)
 								artifactsObject[j] = artifactInput
 							}
 						}
@@ -531,7 +531,7 @@ var addreleaseCmd = &cobra.Command{
 								artifactInput.File = nil
 							}
 							artifactInput.FilePath = ""
-							artifactInput.StripBom = stripBom
+							artifactInput.StripBom = strings.ToUpper(stripBom)
 							artifactsObject[j] = artifactInput
 						}
 					}
@@ -612,7 +612,7 @@ var addreleaseCmd = &cobra.Command{
 							artifactInput.File = nil
 						}
 						artifactInput.FilePath = ""
-						artifactInput.StripBom = stripBom
+						artifactInput.StripBom = strings.ToUpper(stripBom)
 						artifactsObject[j] = artifactInput
 					}
 				}
@@ -646,7 +646,7 @@ var addreleaseCmd = &cobra.Command{
 							artifactInput.File = nil
 						}
 						artifactInput.FilePath = ""
-						artifactInput.StripBom = stripBom
+						artifactInput.StripBom = strings.ToUpper(stripBom)
 						artifactsObject[j] = artifactInput
 					}
 				}
@@ -938,7 +938,7 @@ var addODeliverableCmd = &cobra.Command{
 
 								}
 								artifactInput.FilePath = ""
-								artifactInput.StripBom = stripBom
+								artifactInput.StripBom = strings.ToUpper(stripBom)
 								artifactsObject[j] = artifactInput
 							}
 						}
@@ -1237,7 +1237,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&releaseArts, "releasearts", "", "Release Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
-	addreleaseCmd.PersistentFlags().BoolVar(&stripBom, "stripbom", true, "(Optional) Set --stripbom=false to disable striping bom for digest matching.")
+	addreleaseCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
 
 	addODeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add deliverable to (either releaseid or component, branch, and version must be set)")
 	addODeliverableCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
@@ -1259,7 +1259,7 @@ func init() {
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedOsArr, "osarr", []string{}, "Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
-	addODeliverableCmd.PersistentFlags().BoolVar(&stripBom, "stripbom", true, "(Optional) Set --stripbom=false to disable striping bom for digest matching.")
+	addODeliverableCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
 
 	// flags for createcomponent command
 	createComponentCmd.PersistentFlags().StringVar(&componentName, "name", "", "Name of component to create")

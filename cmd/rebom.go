@@ -60,7 +60,7 @@ type Artifact struct {
 	Tags              []TagInput    `json:"tags"`
 	File              []byte        `json:"file"`
 	FilePath          string        `json:"filePath,omitempty"`
-	StripBom          bool          `json:"stripBom,omitempty"`
+	StripBom          string        `json:"stripBom,omitempty"`
 }
 
 type BomIdentity struct {
