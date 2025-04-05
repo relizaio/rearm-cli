@@ -1,0 +1,2625 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:c76dad06-aa79-47f0-8e21-030e61f652e7",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-03-26T19:20:09Z",
+    "tools": {
+      "components": [
+        {
+          "group": "@cyclonedx",
+          "name": "cdxgen",
+          "version": "11.0.10",
+          "purl": "pkg:npm/%40cyclonedx/cdxgen@11.0.10",
+          "type": "application",
+          "bom-ref": "pkg:npm/@cyclonedx/cdxgen@11.0.10",
+          "publisher": "OWASP Foundation",
+          "authors": [
+            {
+              "name": "OWASP Foundation"
+            }
+          ]
+        }
+      ]
+    },
+    "authors": [
+      {
+        "name": "OWASP Foundation"
+      }
+    ],
+    "lifecycles": [
+      {
+        "phase": "pre-build"
+      },
+      {
+        "phase": "post-build"
+      }
+    ],
+    "component": {
+      "name": "Rebom Frontend",
+      "version": "1.4.1-feature-test11.1+2",
+      "type": "container",
+      "purl": "pkg:npm/reliza/rebom_frontend@1.4.1-feature-test11.1+2?belongsTo=DELIVERABLE&hash=sha256:c03135c5948ed88022d9a26ee3cfd79bad05390dc7b69a9444c1686c86b0c4a2",
+      "bom-ref": "pkg:npm/reliza/rebom_frontend@1.4.1-feature-test11.1+2?belongsTo=DELIVERABLE&hash=sha256:c03135c5948ed88022d9a26ee3cfd79bad05390dc7b69a9444c1686c86b0c4a2",
+      "group": "reliza",
+      "authors": [
+        {
+          "name": "Reliza Incorporated",
+          "email": "info@reliza.io"
+        }
+      ],
+      "supplier": {
+         "name": "Reliza Incorporated"
+      }
+    },
+    "properties": [
+      {
+        "name": "oci:image:Id",
+        "value": "sha256:2695587515e03d66b57f86502bcd78d98dbb7cada24ec6a48338c46dbbbcecf0"
+      },
+      {
+        "name": "oci:image:RepoTag",
+        "value": "registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend:1.4.1-feature-test11.1"
+      },
+      {
+        "name": "oci:image:RepoDigest",
+        "value": "registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend@sha256:c03135c5948ed88022d9a26ee3cfd79bad05390dc7b69a9444c1686c86b0c4a2"
+      },
+      {
+        "name": "oci:image:Created",
+        "value": "2025-03-26T19:19:17.25734571Z"
+      },
+      {
+        "name": "oci:image:Architecture",
+        "value": "amd64"
+      },
+      {
+        "name": "oci:image:Os",
+        "value": "linux"
+      },
+      {
+        "name": "oci:image:manifest:Config",
+        "value": "blobs/sha256/2695587515e03d66b57f86502bcd78d98dbb7cada24ec6a48338c46dbbbcecf0"
+      },
+      {
+        "name": "oci:image:manifest:Layers",
+        "value": "blobs/sha256/ce5a8cde9eeef09160653b9c3d14f0c1c0e2900033476a5f2a9fc950161c0eb2\\nblobs/sha256/a8903c9578e96e9b12e1c95bc063a17121501fd3d4eb86d93153b9e0030cb64f\\nblobs/sha256/fd5f65a144eff5b0b6d81873afab888eb3e542810ee99405c737a78f3f78a510\\nblobs/sha256/598e577f3a2384aa74182a192a710eabf7c61b0d8283f0f2737e40b9d4083683\\nblobs/sha256/59a5cb944b91cd9f63a76f3878813b00266e4fe720886dfb8c1127cc4fb876ea\\nblobs/sha256/9aa22afcf27f93024385cc52c6618f7ea2d01d871a9da2d98785acf54ca1f311\\nblobs/sha256/23625999797d3a120bc0d83b859e7d1ec8d9b6939103fe4bfa35bcda08bde20a\\nblobs/sha256/5a760029e979b26ccc3120770832af64f1a0f6c9f3735bafc98e512607485b63\\nblobs/sha256/c55fee41f227ff1b1b8c2e217593482e49dd52ffb85674c1f493728789af5139\\nblobs/sha256/6a52eb2806446a05a85b6de9d51d3101910c6d74d6a024804184406b6da24994\\nblobs/sha256/28c0477a43ed5546b3408042a9431be9cf05187eeeaa0fa2cc92e3071ded5021\\nblobs/sha256/09ab5395b7b1ce546fed591373a3e440ac9e486bd213a417238590085a19a5b6\\nblobs/sha256/2ef25351fc8092550f93c810380774ec9ae6f9403e58aeb83aad8fcd8f70284c\\nblobs/sha256/0146b5925e6868dbec4f8ed8b56955e7393a423a78e0919930da10ef19e7fe3f"
+      },
+      {
+        "name": "oci:image:componentTypes",
+        "value": "alpine\\nalpine-3.20\\nalpine-3.20.5\\napk"
+      },
+      {
+        "name": "cdx:bom:componentTypes",
+        "value": "apk"
+      },
+      {
+        "name": "cdx:bom:componentNamespaces",
+        "value": "alpine"
+      }
+    ]
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "alpine-baselayout-data",
+      "version": "3.6.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "ee68a6fb02f7e62304b428b0404a2fc1e2fc353d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/alpine-baselayout@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "alpine-baselayout",
+      "version": "3.6.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "ee68a6fb02f7e62304b428b0404a2fc1e2fc353d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/alpine-baselayout@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/alpine-keys@2.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "alpine-keys",
+      "version": "2.4-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "78ab5150a3919e474204e0f91972d1cf0a344f9d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/alpine-keys@2.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/aom-libs@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "aom-libs",
+      "version": "3.9.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "3771e8ed3754f0d2dca8038cba0065f07384dd00"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        },
+        {
+          "license": {
+            "name": "custom"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/aom-libs@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "devel"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/aom@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "aom",
+      "version": "3.9.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "3771e8ed3754f0d2dca8038cba0065f07384dd00"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        },
+        {
+          "license": {
+            "name": "custom"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/aom@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/apk-tools@2.14.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "apk-tools",
+      "version": "2.14.4-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "fdf8628c985a91660f2e8d740f19ac50b9372f98"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/apk-tools@2.14.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "brotli-libs",
+      "version": "1.1.0-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "bc58ba1128a8703ca7ab3d7097a07bf095d9ddcd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression",
+        "devel"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/brotli@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "brotli",
+      "version": "1.1.0-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "bc58ba1128a8703ca7ab3d7097a07bf095d9ddcd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/brotli@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "busybox-binsh",
+      "version": "1.36.1-r29",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "8758e1e06605e5818449aff862e105b80b6f34bf"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "shell"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/busybox@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "busybox",
+      "version": "1.36.1-r29",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "8758e1e06605e5818449aff862e105b80b6f34bf"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/busybox@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/c-ares@1.33.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "c-ares",
+      "version": "1.33.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "53a5a70bfac8242c69a0c0e46fbdf16648e4cfd7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/c-ares@1.33.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/ca-certificates-bundle@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "ca-certificates-bundle",
+      "version": "20241121-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "7767edd921498d4210d90c6b39083fe1a0d0ad42"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MPL-2.0"
+          }
+        },
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/ca-certificates-bundle@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/ca-certificates@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "ca-certificates",
+      "version": "20241121-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "7767edd921498d4210d90c6b39083fe1a0d0ad42"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MPL-2.0"
+          }
+        },
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/ca-certificates@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/curl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "curl",
+      "version": "8.11.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "df74f6afa1dbaef91c260f09645818a513574f1e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "curl"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/curl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/fontconfig@2.15.0-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "fontconfig",
+      "version": "2.15.0-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "0ec7ccdfc1546737fc98122561307ce5b5c1a806"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/fontconfig@2.15.0-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "freetype",
+      "version": "2.13.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "83a3db3e1fca4c980fe90fa64cd6c3907e012d9a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "FTL"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/geoip@1.6.12-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "geoip",
+      "version": "1.6.12-r5",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "71d95decab547595e851cd726e55f64b94147e92"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/geoip@1.6.12-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libavif@1.0.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libavif",
+      "version": "1.0.4-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "fcb69db3bc0568c1dbb892f6ffbb847cc7e7bf13"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libavif@1.0.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libbsd@0.12.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libbsd",
+      "version": "0.12.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "77cdd05ac1f7daa54b2331c822265cf6542c8f6f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libbsd@0.12.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libbz2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libbz2",
+      "version": "1.0.8-r6",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "49c9f66fbb0475a2f35d997ac2776b445294eb94"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "bzip2-1.0.6"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libbz2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/bzip2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "bzip2",
+      "version": "1.0.8-r6",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "49c9f66fbb0475a2f35d997ac2776b445294eb94"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "bzip2-1.0.6"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/bzip2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libcrypto3",
+      "version": "3.3.2-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "a63a2147f97d4fec0d5498d6f534c62e636ebeab"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/openssl@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "openssl",
+      "version": "3.3.2-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "a63a2147f97d4fec0d5498d6f534c62e636ebeab"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/openssl@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto",
+        "security"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libcurl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libcurl",
+      "version": "8.11.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "90619f93965309dee064e3b6b55c9cad69e528b0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "curl"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libcurl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libdav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libdav1d",
+      "version": "1.4.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "d9f2a6fe2b1d18f2ae141cdea106c1baa9a6aecc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libdav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/dav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "dav1d",
+      "version": "1.4.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "d9f2a6fe2b1d18f2ae141cdea106c1baa9a6aecc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/dav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libedit@20240517.3.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libedit",
+      "version": "20240517.3.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "6c7745fd21dc228d5ded646eb03fc4e8db123cbd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libedit@20240517.3.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libexpat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libexpat",
+      "version": "2.6.4-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e5b8659c70733fce156029c52aec4ac8d1ff24e3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libexpat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "xml"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/expat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "expat",
+      "version": "2.6.4-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e5b8659c70733fce156029c52aec4ac8d1ff24e3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/expat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "xml"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libgcrypt@1.10.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libgcrypt",
+      "version": "1.10.3-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "b726daa90083ec57a04c07a91920b796c0034dfc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libgcrypt@1.10.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto",
+        "security"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libgd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libgd",
+      "version": "2.3.3-r9",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "b29c8f2af2237475d9c226b474146a6e1f146809"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "GD"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libgd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/gd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "gd",
+      "version": "2.3.3-r9",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "b29c8f2af2237475d9c226b474146a6e1f146809"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "GD"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/gd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libgpg-error@1.49-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libgpg-error",
+      "version": "1.49-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "a8685e16ff86d7dd71fff193e93f78e130eed155"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        },
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libgpg-error@1.49-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libice",
+      "version": "1.1.1-r6",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "bb27bf01f225c2675d0f9ad65a45c2300acc9a66"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libidn2",
+      "version": "2.3.7-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "02629e610eec8b3f8fc422bec27b3b2359d5c962"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        },
+        {
+          "license": {
+            "name": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libintl@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libintl",
+      "version": "0.22.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e4653097ace0aed3ee1d0189be1155684458880d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libintl@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/gettext@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "gettext",
+      "version": "0.22.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e4653097ace0aed3ee1d0189be1155684458880d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/gettext@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libjpeg-turbo",
+      "version": "3.0.3-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "5f1a8793f92a74b7f44f82ddde2c7cb5bd0fa0f7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        },
+        {
+          "license": {
+            "name": "IJG"
+          }
+        },
+        {
+          "license": {
+            "name": "Zlib"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libmd@1.1.0-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libmd",
+      "version": "1.1.0-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "9f88c37987a5d25c3e536e0aaab3ecea413e4d94"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        },
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        },
+        {
+          "license": {
+            "name": "ISC"
+          }
+        },
+        {
+          "license": {
+            "name": "Beerware"
+          }
+        },
+        {
+          "license": {
+            "name": "Public"
+          }
+        },
+        {
+          "license": {
+            "name": "Domain"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libmd@1.1.0-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libncursesw@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libncursesw",
+      "version": "6.4_p20240420-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c5c15720ab5671029c35339e8ba4581cb8e43833"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libncursesw@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/ncurses@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "ncurses",
+      "version": "6.4_p20240420-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c5c15720ab5671029c35339e8ba4581cb8e43833"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/ncurses@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libpng",
+      "version": "1.6.44-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "3fc66dc77509d5afcd2aac36cb2f92108fdfcc23"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Libpng"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libpsl@0.21.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libpsl",
+      "version": "0.21.5-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "1f1e660c761dadb2614c0f573ea6ef2be8649206"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libpsl@0.21.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libsharpyuv",
+      "version": "1.3.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "3f9bcea1dc37f626a29db583fd7e02a369948b75"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libwebp",
+      "version": "1.3.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "3f9bcea1dc37f626a29db583fd7e02a369948b75"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libsm@1.2.4-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libsm",
+      "version": "1.2.4-r4",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "fae83ddd6ab44affde833e4617480f5c04cde38d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libsm@1.2.4-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libssl3",
+      "version": "3.3.2-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c8274ce837e3e2320e88ab891e4f5df0174ffe8a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libunistring",
+      "version": "1.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "1ff86ed40752102a6c84ece085ae89ac88c74c5a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        },
+        {
+          "license": {
+            "name": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libuuid@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libuuid",
+      "version": "2.40.1-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "6ee4dbc2dfb385234fa5bf4e18af81e9c681b2c9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libuuid@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/util-linux@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "util-linux",
+      "version": "2.40.1-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "6ee4dbc2dfb385234fa5bf4e18af81e9c681b2c9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/util-linux@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libx11",
+      "version": "1.8.9-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "4935fa1da119e5c6146e54fad76e88dfed7f5fc9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "gui"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxau@1.0.11-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxau",
+      "version": "1.0.11-r4",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "4f158b1dd7986a343cdaef16e3856a841085cc41"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxau@1.0.11-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxcb@1.16.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxcb",
+      "version": "1.16.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c65ded1867d1b8fb11c035be5eb6761566e370b6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxcb@1.16.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxdmcp@1.1.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxdmcp",
+      "version": "1.1.5-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "f7b05dd135c321816c0eda9274a2ac8bc7a8789d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxdmcp@1.1.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxext@1.3.6-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxext",
+      "version": "1.3.6-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "f777deb4f6fafd8b4e42f67be578f0ab52dadbdc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxext@1.3.6-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxml2",
+      "version": "2.12.7-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "1714eab30d06386943b39ab633fd21e9ae87231a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "xml"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxpm@3.5.17-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxpm",
+      "version": "3.5.17-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "2c1afecb82654e7c1ad2b5dc93d7b2d6a5cdc6df"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxpm@3.5.17-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxslt@1.1.39-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxslt",
+      "version": "1.1.39-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "b53fe2f15d2bd2a3b59572889b8357e965da005f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxslt@1.1.39-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/libxt@1.3.0-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "libxt",
+      "version": "1.3.0-r5",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "386eb2891c278a003c739566a6bb910fc512afc0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/libxt@1.3.0-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/musl-utils@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "musl-utils",
+      "version": "1.2.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e11671e426dc2d8189155906d007c39be1eb1367"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        },
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/musl-utils@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "runtime"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "musl",
+      "version": "1.2.5-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "e11671e426dc2d8189155906d007c39be1eb1367"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        },
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "runtime"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/ncurses-terminfo-base@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "ncurses-terminfo-base",
+      "version": "6.4_p20240420-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "853bc5794bbbaf9acc6fb2f599450f4224bc73dc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "X11"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/ncurses-terminfo-base@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nghttp2-libs@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nghttp2-libs",
+      "version": "1.62.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "2c38b5b57527b4b61a9e954543ade9367c9663f9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nghttp2-libs@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "devel",
+        "webserver"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nghttp2@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nghttp2",
+      "version": "1.62.1-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "2c38b5b57527b4b61a9e954543ade9367c9663f9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nghttp2@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "webserver"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nginx-module-geoip@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nginx-module-geoip",
+      "version": "1.27.3-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "07057389e0c6632a4678d431d433e695ab3c3c1d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "2-clause"
+          }
+        },
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "license"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nginx-module-geoip@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nginx-module-image-filter@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nginx-module-image-filter",
+      "version": "1.27.3-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "39378b31b422172917a7481ecd9d8b16501d81ba"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "2-clause"
+          }
+        },
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "license"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nginx-module-image-filter@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nginx-module-njs@1.27.3.0.8.7-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nginx-module-njs",
+      "version": "1.27.3.0.8.7-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "25d1783ccd35753f321c77c1d9592c2070c5b8d1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "2-clause"
+          }
+        },
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "license"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nginx-module-njs@1.27.3.0.8.7-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nginx-module-xslt@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nginx-module-xslt",
+      "version": "1.27.3-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "30718e246a6cd95728fbedc32ed5b8a171660e8a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "2-clause"
+          }
+        },
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "license"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nginx-module-xslt@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "nginx",
+      "version": "1.27.3-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "d0afa12b862ab0bcb586d955e7a786852a726541"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "2-clause"
+          }
+        },
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "license"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "pcre2",
+      "version": "10.43-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "447266b2ae4cb2b6ac25f42b07486a496dc71d25"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/scanelf@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "scanelf",
+      "version": "1.3.7-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c84b0b49111485cb08744822f9b34a9fa9524fcc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/scanelf@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/pax-utils@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "pax-utils",
+      "version": "1.3.7-r2",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "c84b0b49111485cb08744822f9b34a9fa9524fcc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/pax-utils@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/ssl_client@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "ssl_client",
+      "version": "1.36.1-r29",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "7e2867092a0edee7436f70e4430b6b7dde363094"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/ssl_client@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/tiff@4.6.0t-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "tiff",
+      "version": "4.6.0t-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "5f149676c775cf2a61cf437fb885bf7e287bbe3d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "libtiff"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/tiff@4.6.0t-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/tzdata@2024b-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "tzdata",
+      "version": "2024b-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "78fa61c4d1307cb88216bd8a6a45236f1d2ed6eb"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Public-Domain"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/tzdata@2024b-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/xz-libs@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "xz-libs",
+      "version": "5.6.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "d59b22ae174c5a75d84c1c558e25de93d9c792b0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        },
+        {
+          "license": {
+            "name": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "Public-Domain"
+          }
+        },
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/xz-libs@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "devel"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/xz@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "xz",
+      "version": "5.6.2-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "d59b22ae174c5a75d84c1c558e25de93d9c792b0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        },
+        {
+          "license": {
+            "name": "0BSD"
+          }
+        },
+        {
+          "license": {
+            "name": "Public-Domain"
+          }
+        },
+        {
+          "license": {
+            "name": "LGPL-2.1-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/xz@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine"
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "zlib",
+      "version": "1.3.1-r1",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "9ba6f253e2982e0e6e71cb4187e3d6b6c4bbae99"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Zlib"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "zstd-libs",
+      "version": "1.5.6-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "4d60614645192deddc80e6e568fe535b38c315c1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression",
+        "devel"
+      ]
+    },
+    {
+      "bom-ref": "pkg:apk/alpine/zstd@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "type": "library",
+      "name": "zstd",
+      "version": "1.5.6-r0",
+      "hashes": [
+        {
+          "alg": "SHA-1",
+          "content": "4d60614645192deddc80e6e568fe535b38c315c1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        },
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:apk/alpine/zstd@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "group": "alpine",
+      "tags": [
+        "compression"
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:npm/reliza/rebom_frontend@1.4.1-feature-test11.1+2?belongsTo=DELIVERABLE&hash=sha256:c03135c5948ed88022d9a26ee3cfd79bad05390dc7b69a9444c1686c86b0c4a2",
+      "dependsOn": [
+        "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/alpine-baselayout@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/alpine-keys@2.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/aom-libs@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/aom@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/apk-tools@2.14.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/brotli@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/busybox@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/bzip2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/c-ares@1.33.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ca-certificates-bundle@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ca-certificates@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/curl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/dav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/expat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/fontconfig@2.15.0-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/gd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/geoip@1.6.12-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/gettext@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libavif@1.0.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libbsd@0.12.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libbz2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcurl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libdav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libedit@20240517.3.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libexpat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libgcrypt@1.10.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libgd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libgpg-error@1.49-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libintl@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libmd@1.1.0-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libncursesw@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libpsl@0.21.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libsm@1.2.4-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libuuid@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxau@1.0.11-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxcb@1.16.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxdmcp@1.1.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxext@1.3.6-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxpm@3.5.17-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxslt@1.1.39-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxt@1.3.0-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl-utils@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ncurses-terminfo-base@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ncurses@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nghttp2-libs@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nghttp2@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx-module-geoip@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx-module-image-filter@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx-module-njs@1.27.3.0.8.7-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx-module-xslt@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/openssl@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/pax-utils@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/scanelf@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ssl_client@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/tiff@4.6.0t-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/tzdata@2024b-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/util-linux@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/xz-libs@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/xz@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zstd@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/alpine-baselayout@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/alpine-keys@2.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/aom-libs@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/apk-tools@2.14.4-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/ca-certificates-bundle@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/busybox@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/c-ares@1.33.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/ca-certificates-bundle@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/ca-certificates@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/curl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libcurl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/fontconfig@2.15.0-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libexpat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libbz2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/geoip@1.6.12-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libavif@1.0.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/aom-libs@3.9.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libdav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libbsd@0.12.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libmd@1.1.0-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libbz2@1.0.8-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libcurl@8.11.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/c-ares@1.33.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ca-certificates@20241121-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libpsl@0.21.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nghttp2-libs@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libdav1d@1.4.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libedit@20240517.3.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libncursesw@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libexpat@2.6.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libgcrypt@1.10.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libgpg-error@1.49-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libgd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/fontconfig@2.15.0-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/freetype@2.13.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libavif@1.0.4-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxpm@3.5.17-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/tiff@4.6.0t-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libgpg-error@1.49-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libintl@0.22.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libmd@1.1.0-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libncursesw@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/ncurses-terminfo-base@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libpng@1.6.44-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libpsl@0.21.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libidn2@2.3.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libsm@1.2.4-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libuuid@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libunistring@1.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libuuid@2.40.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libsharpyuv@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libxcb@1.16.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxau@1.0.11-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxcb@1.16.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libxau@1.0.11-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxdmcp@1.1.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxdmcp@1.1.5-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libbsd@0.12.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxext@1.3.6-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/xz-libs@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxpm@3.5.17-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxext@1.3.6-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxt@1.3.0-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxslt@1.1.39-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libgcrypt@1.10.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/libxt@1.3.0-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libice@1.1.1-r6?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libsm@1.2.4-r4?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libx11@1.8.9-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/musl-utils@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/scanelf@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/ncurses-terminfo-base@6.4_p20240420-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/nghttp2-libs@1.62.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/nginx-module-geoip@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/geoip@1.6.12-r5?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/nginx-module-image-filter@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libgd@2.3.3-r9?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/nginx-module-njs@1.27.3.0.8.7-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libedit@20240517.3.1-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/nginx-module-xslt@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxml2@2.12.7-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libxslt@1.1.39-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/nginx@1.27.3-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/busybox-binsh@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/pcre2@10.43-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/scanelf@1.3.7-r2?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/ssl_client@1.36.1-r29?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libcrypto3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libssl3@3.3.2-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/tiff@4.6.0t-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/libjpeg-turbo@3.0.3-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/libwebp@1.3.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+        "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/tzdata@2024b-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:apk/alpine/xz-libs@5.6.2-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/zlib@1.3.1-r1?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    },
+    {
+      "ref": "pkg:apk/alpine/zstd-libs@1.5.6-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
+      "dependsOn": [
+        "pkg:apk/alpine/musl@1.2.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20"
+      ]
+    }
+  ]
+}
