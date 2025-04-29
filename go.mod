@@ -14,12 +14,14 @@ require (
 )
 
 require (
+	github.com/CycloneDX/cyclonedx-go v0.9.2
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/matryer/is v1.4.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/package-url/packageurl-go v0.1.3
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
