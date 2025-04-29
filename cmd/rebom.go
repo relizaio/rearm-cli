@@ -148,7 +148,7 @@ func attachToRebomFunc() {
 	}
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "Reliza Go Client").
+		SetHeader("User-Agent", "ReARM CLI").
 		SetHeader("Accept-Encoding", "gzip, deflate").
 		SetHeader("Accept-Encoding", "gzip, deflate").
 		SetFile("file", infile).

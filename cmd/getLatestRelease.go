@@ -18,12 +18,12 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"encoding/base64"
-	"context"
 	"os"
+	"strings"
 
 	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
@@ -31,8 +31,8 @@ import (
 
 var (
 	approvalMatchOperator string
-	approvalEntries []string
-	approvalStates []string
+	approvalEntries       []string
+	approvalStates        []string
 )
 
 type ConditionOnReleaseInput struct {
@@ -41,8 +41,8 @@ type ConditionOnReleaseInput struct {
 }
 
 type ConditionGroupOnReleaseInput struct {
-	MatchOperator  string `json:"matchOperator"`
-	Conditions 	[]ConditionOnReleaseInput `json:"conditions"`
+	MatchOperator string                    `json:"matchOperator"`
+	Conditions    []ConditionOnReleaseInput `json:"conditions"`
 }
 
 var getLatestReleaseCmd = &cobra.Command{
@@ -54,7 +54,6 @@ var getLatestReleaseCmd = &cobra.Command{
 		getLatestReleaseFunc(debug, rearmUri, component, product, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
 	},
 }
-
 
 func getLatestReleaseFunc(debug string, rearmUri string, component string, product string, branch string,
 	tagKey string, tagVal string, apiKeyId string, apiKey string, lifecycle string) []byte {
@@ -111,7 +110,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	)
 	req.Var("GetLatestReleaseInput", body)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Reliza Go Client")
+	req.Header.Set("User-Agent", "ReARM CLI")
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 	if len(apiKeyId) > 0 && len(apiKey) > 0 {

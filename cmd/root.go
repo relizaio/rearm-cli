@@ -693,7 +693,7 @@ var addreleaseCmd = &cobra.Command{
 		}
 
 		resp, err := c.SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "Reliza Go Client").
+			SetHeader("User-Agent", "ReARM CLI").
 			SetHeader("Accept-Encoding", "gzip, deflate").
 			SetHeader("Apollo-Require-Preflight", "true").
 			SetMultipartFormData(operations).
@@ -702,13 +702,6 @@ var addreleaseCmd = &cobra.Command{
 			Post(rearmUri + "/graphql")
 
 		printResponse(err, resp)
-		// req := graphql.NewRequest(`
-		// 	mutation ($releaseInputProg: ReleaseInputProg!) {
-		// 		addReleaseProgrammatic(release:$releaseInputProg) {` + RELEASE_GQL_DATA + `}
-		// 	}`,
-		// )
-		// req.Var("releaseInputProg", body)
-		// fmt.Println(sendRequest(req, "addReleaseProgrammatic"))
 	},
 }
 
@@ -987,7 +980,7 @@ var addODeliverableCmd = &cobra.Command{
 		}
 
 		resp, err := c.SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "Reliza Go Client").
+			SetHeader("User-Agent", "ReARM CLI").
 			SetHeader("Accept-Encoding", "gzip, deflate").
 			SetHeader("Apollo-Require-Preflight", "true").
 			SetMultipartFormData(operations).
@@ -1318,7 +1311,7 @@ func sendRequestWithUri(req *graphql.Request, endpoint string, uri string) strin
 	// }
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Reliza Go Client")
+	req.Header.Set("User-Agent", "ReARM CLI")
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	if session != nil {
 		req.Header.Set("X-CSRF-Token", session.Token)
@@ -1436,7 +1429,7 @@ func getSession() (*RequestSession, error) {
 	var result map[string]string
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "Reliza Go Client").
+		SetHeader("User-Agent", "ReARM CLI").
 		SetHeader("Accept-Encoding", "gzip, deflate").
 		SetResult(&result).
 		Get(rearmUri + "/api/manual/v1/fetchCsrf")
