@@ -46,7 +46,7 @@ func init() {
 }
 
 func resolveBearSupplierFunc() {
-	fmt.Println(bearUri)
+	fmt.Println("Using BEAR at", bearUri)
 
 	bom, err := readBom()
 
@@ -56,14 +56,14 @@ func resolveBearSupplierFunc() {
 	}
 
 	components := bom.Components
-	fmt.Println(len(*components))
-	for _, comp := range *components {
+	for ind, comp := range *components {
 		if nil == comp.Supplier {
+			fmt.Println("Processing purl", comp.PackageURL)
 			supplier := bearGqlSupplierRoutine(comp.PackageURL)
-			comp.Supplier = &supplier
+			(*components)[ind].Supplier = &supplier
 		}
 	}
-
+	bom.Components = components
 	outErr := writeOutput(bom)
 	if outErr != nil {
 		fmt.Println(outErr)
@@ -94,10 +94,7 @@ func bearGqlSupplierRoutine(purl string) cdx.OrganizationalEntity {
 		}
 	`)
 	req.Var("purl", purl)
-	fmt.Println("adding bom...")
 	res := sendRequestWithUri(req, "resolveSupplier", bearUri+"/graphql")
-	fmt.Println(res)
-	// var bomJSON map[string]interface{}
 	var cdxContact cdx.OrganizationalEntity
 	parseError := json.Unmarshal([]byte(res), &cdxContact)
 	if parseError != nil {
