@@ -296,22 +296,6 @@ Flags stand for:
 - **--livebranches** - base64'd list of git branches, for local branches use `git branch --format=\"%(refname)\" | base64 -w 0` to obtain, for remote branches use `git branch -r --format=\"%(refname)\" | base64 -w 0`. Choose between local and remote branches based on your CI context.
 
 
-# Development of ReARM CLI
-
-## Adding dependencies to ReARM CLI
-
-Dependencies are handled using go modules and imports file is automatically generated. If importing a github repository use this command first:
-
-```bash
-go get github.com/xxxxxx/xxxxxx
-```
-
-You then should be able to add what you need as an import to your files. Once they've been imported call this command to generate the imports file:
-
-```bash
-go generate ./internal/imports
-```
-
 ## 8. Use Case: Add Outbound Deliverables to Release
 
 This use case adds outbound deliverables to a ReARM Release. Release must be in Pending or Draft lifecycle.
@@ -352,3 +336,55 @@ Flags stand for:
 - **--version** - Release version (either releaseid or component, branch, and version must be set)
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
+
+## 9. Use Case: CycloneDX xBOM Utilities
+Base Command: `bomutils`
+
+### 9.1 Fix incorrect OCI purl generated via cdxgen
+purl generated for an oci artifact via cdxgen contains incorrect purls; as per the [spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst#oci) `oci` purls must be registry agnostic by default.
+
+use this utility command to fix such purls in an SBOM.
+
+e.g. 
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    bomutils fixocipurl \
+    --ociimage image_with_SHA_DIGEST \ 
+    -f input-bom.json \
+    -o output-bom.json
+```
+
+Read from stdin and write to stdout
+
+
+```bash
+cat bom_samples/rebom-ui-oci.json | docker run --rm -i registry.relizahub.com/library/rearm-cli    \
+    bomutils fixocipurl \
+    --ociimage image_with_SHA_DIGEST
+```
+
+Flags stand for:
+- **--ociimage** - flag to specify oci image with digest
+- **--infile (-f)** - input cyclonedx sbom json file. (Optional - reades from stdin when not specified)
+- **--outfile (-o)** - output file path to write bom json. (Optional - writes to stdout when not specified)
+
+
+
+# Development of ReARM CLI
+
+## Adding dependencies to ReARM CLI
+
+Dependencies are handled using go modules and imports file is automatically generated. If importing a github repository use this command first:
+
+```bash
+go get github.com/xxxxxx/xxxxxx
+```
+
+You then should be able to add what you need as an import to your files. Once they've been imported call this command to generate the imports file:
+
+```bash
+go generate ./internal/imports
+```
