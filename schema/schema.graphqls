@@ -556,7 +556,6 @@ type Artifact {
 	buildId: String
 	buildUri: String
 	cicdMeta: String
-	digests: [String]
 	isInternal: ArtifactBelonging
 	type: ArtifactType
 	bomFormat: BomFormat
@@ -990,7 +989,6 @@ input ArtifactInput {
 	inventoryTypes: [InventoryType]
 	bomFormat: String
 	storedIn: String
-	digests: [String]
 	tags: [TagRecordInput]
 	status: String
 	version: String

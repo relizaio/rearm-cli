@@ -56,7 +56,6 @@ type Artifact struct {
 	Type              string        `json:"type"`
 	Identities        []BomIdentity `json:"identities"`
 	StoredIn          string        `json:"storedIn"`
-	Digests           []string      `json:"digests"`
 	Tags              []TagInput    `json:"tags"`
 	File              []byte        `json:"file"`
 	FilePath          string        `json:"filePath,omitempty"`

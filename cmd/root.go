@@ -166,7 +166,6 @@ const FULL_RELEASE_GQL_DATA = RELEASE_GQL_DATA + `
 		buildId
 		buildUri
 		cicdMeta
-		digests
 		isInternal
 		type
 		notes
