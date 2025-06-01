@@ -47,6 +47,220 @@ var (
 	odelPackage   []string
 )
 
+func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]map[string]interface{} {
+	outboundDeliverables := make([]map[string]interface{}, len(odelId))
+	softwareMetadatas := make([]map[string]interface{}, len(odelId))
+	for i, aid := range odelId {
+		outboundDeliverables[i] = map[string]interface{}{"displayIdentifier": aid}
+		softwareMetadatas[i] = map[string]interface{}{}
+	}
+
+	// now do some length validations and add elements
+	if len(odelBuildId) > 0 && len(odelBuildId) != len(odelId) {
+		fmt.Println("number of --odelBuildId flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelBuildId) > 0 {
+		for i, abid := range odelBuildId {
+			softwareMetadatas[i]["buildId"] = abid
+		}
+	}
+
+	if len(odelBuildUri) > 0 && len(odelBuildUri) != len(odelId) {
+		fmt.Println("number of --odelbuildUri flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelBuildUri) > 0 {
+		for i, aburi := range odelBuildUri {
+			softwareMetadatas[i]["buildUri"] = aburi
+		}
+	}
+
+	if len(odelCiMeta) > 0 && len(odelCiMeta) != len(odelId) {
+		fmt.Println("number of --odelcimeta flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelCiMeta) > 0 {
+		for i, acm := range odelCiMeta {
+			softwareMetadatas[i]["cicdMeta"] = acm
+		}
+	}
+
+	if len(odelDigests) > 0 && len(odelDigests) != len(odelId) {
+		fmt.Println("number of --odeldigests flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelDigests) > 0 {
+		for i, ad := range odelDigests {
+			adSpl := strings.Split(ad, ",")
+			softwareMetadatas[i]["digests"] = adSpl
+		}
+	}
+
+	if len(dateStart) > 0 && len(dateStart) != len(odelId) {
+		fmt.Println("number of --datestart flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(dateStart) > 0 {
+		for i, ds := range dateStart {
+			softwareMetadatas[i]["dateFrom"] = ds
+		}
+	}
+
+	if len(dateEnd) > 0 && len(dateEnd) != len(odelId) {
+		fmt.Println("number of --dateEnd flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(dateEnd) > 0 {
+		for i, de := range dateEnd {
+			softwareMetadatas[i]["dateTo"] = de
+		}
+	}
+
+	if len(odelPackage) > 0 && len(odelPackage) != len(odelId) {
+		fmt.Println("number of --odelpackage flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelPackage) > 0 {
+		for i, ap := range odelPackage {
+			softwareMetadatas[i]["packageType"] = strings.ToUpper(ap)
+		}
+	}
+
+	for i := range odelId {
+		outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
+	}
+
+	if len(odelType) > 0 && len(odelType) != len(odelId) {
+		fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelType) > 0 {
+		for i, at := range odelType {
+			outboundDeliverables[i]["type"] = at
+		}
+	}
+
+	if len(supportedOsArr) > 0 && len(supportedOsArr) != len(odelId) {
+		fmt.Println("number of --osarr flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(supportedOsArr) > 0 {
+		for i, ad := range supportedOsArr {
+			adSpl := strings.Split(ad, ",")
+			outboundDeliverables[i]["supportedOs"] = adSpl
+		}
+	}
+	if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(odelId) {
+		fmt.Println("number of --supportedcpuarcharr flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(supportedCpuArchArr) > 0 {
+		for i, ad := range supportedCpuArchArr {
+			adSpl := strings.Split(ad, ",")
+			outboundDeliverables[i]["supportedCpuArchitectures"] = adSpl
+		}
+	}
+
+	if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
+		fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelVersion) > 0 {
+		for i, av := range odelVersion {
+			outboundDeliverables[i]["version"] = av
+		}
+	}
+
+	if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
+		fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelPublisher) > 0 {
+		for i, ap := range odelPublisher {
+			outboundDeliverables[i]["publisher"] = ap
+		}
+	}
+
+	if len(odelGroup) > 0 && len(odelGroup) != len(odelId) {
+		fmt.Println("number of --odelgroup flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelGroup) > 0 {
+		for i, ag := range odelGroup {
+			outboundDeliverables[i]["group"] = ag
+		}
+	}
+
+	if len(tagsArr) > 0 && len(tagsArr) != len(odelId) {
+		fmt.Println("number of --tagsarr flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(tagsArr) > 0 {
+		for i, tags := range tagsArr {
+			tagPairs := strings.Split(tags, ",")
+			var tags []TagInput
+			for _, tagPair := range tagPairs {
+				keyValue := strings.Split(tagPair, ":")
+				if len(keyValue) != 2 {
+					fmt.Println("Each tag should have key and value")
+					os.Exit(2)
+				}
+				tags = append(tags, TagInput{
+					Key:   keyValue[0],
+					Value: keyValue[1],
+				})
+			}
+			outboundDeliverables[i]["tags"] = tags
+		}
+	}
+
+	if len(identities) > 0 && len(identities) != len(odelId) {
+		fmt.Println("number of --identities flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(identities) > 0 {
+		for i, delIdentities := range identities {
+			identityPairs := strings.Split(delIdentities, ",")
+			var bomIdentities []BomIdentity
+			for _, identityPair := range identityPairs {
+				keyValue := strings.Split(identityPair, ":")
+				if len(keyValue) != 2 {
+					fmt.Println("Each tag should have key and value")
+					os.Exit(2)
+				}
+				bomIdentities = append(bomIdentities, BomIdentity{
+					IdenityType: keyValue[0],
+					Identity:    keyValue[1],
+				})
+			}
+			outboundDeliverables[i]["identities"] = bomIdentities
+		}
+	}
+	if len(odelArtsJson) > 0 && len(odelArtsJson) != len(odelId) {
+		fmt.Println("number of --odelartsjson flags must be either zero or match number of --odelid flags")
+		os.Exit(2)
+	} else if len(odelArtsJson) > 0 {
+		for i, artifactsInputString := range odelArtsJson {
+			var artifactsInput []Artifact
+			err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
+			if err != nil {
+				fmt.Println("Error parsing Artifact Input: ", err)
+			} else {
+				artifactsObject := make([]Artifact, len(artifactsInput))
+				for j, artifactInput := range artifactsInput {
+					artifactsObject[j] = Artifact{}
+					if artifactInput.FilePath != "" {
+						fileBytes, err := os.ReadFile(artifactInput.FilePath)
+						if err != nil {
+							fmt.Println("Error reading file: ", err)
+						} else {
+							*filesCounter++
+							currentIndex := strconv.Itoa(*filesCounter)
+
+							(*locationMap)[currentIndex] = []string{"variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
+							(*filesMap)[currentIndex] = fileBytes
+							artifactInput.File = nil
+
+						}
+						artifactInput.FilePath = ""
+						artifactInput.StripBom = strings.ToUpper(stripBom)
+						artifactsObject[j] = artifactInput
+					}
+				}
+				// TODO: replace file path with actual file
+				outboundDeliverables[i]["artifacts"] = artifactsObject
+			}
+		}
+	}
+	return &outboundDeliverables
+}
+
 var addreleaseCmd = &cobra.Command{
 	Use:   "addrelease",
 	Short: "Creates release on ReARM",
@@ -71,217 +285,7 @@ var addreleaseCmd = &cobra.Command{
 			body["component"] = component
 		}
 		if len(odelId) > 0 {
-			outboundDeliverables := make([]map[string]interface{}, len(odelId))
-			softwareMetadatas := make([]map[string]interface{}, len(odelId))
-			for i, aid := range odelId {
-				outboundDeliverables[i] = map[string]interface{}{"displayIdentifier": aid}
-				softwareMetadatas[i] = map[string]interface{}{}
-			}
-
-			// now do some length validations and add elements
-			if len(odelBuildId) > 0 && len(odelBuildId) != len(odelId) {
-				fmt.Println("number of --odelBuildId flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelBuildId) > 0 {
-				for i, abid := range odelBuildId {
-					softwareMetadatas[i]["buildId"] = abid
-				}
-			}
-
-			if len(odelBuildUri) > 0 && len(odelBuildUri) != len(odelId) {
-				fmt.Println("number of --odelbuildUri flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelBuildUri) > 0 {
-				for i, aburi := range odelBuildUri {
-					softwareMetadatas[i]["buildUri"] = aburi
-				}
-			}
-
-			if len(odelCiMeta) > 0 && len(odelCiMeta) != len(odelId) {
-				fmt.Println("number of --odelcimeta flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelCiMeta) > 0 {
-				for i, acm := range odelCiMeta {
-					softwareMetadatas[i]["cicdMeta"] = acm
-				}
-			}
-
-			if len(odelDigests) > 0 && len(odelDigests) != len(odelId) {
-				fmt.Println("number of --odeldigests flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelDigests) > 0 {
-				for i, ad := range odelDigests {
-					adSpl := strings.Split(ad, ",")
-					softwareMetadatas[i]["digests"] = adSpl
-				}
-			}
-
-			if len(dateStart) > 0 && len(dateStart) != len(odelId) {
-				fmt.Println("number of --datestart flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(dateStart) > 0 {
-				for i, ds := range dateStart {
-					softwareMetadatas[i]["dateFrom"] = ds
-				}
-			}
-
-			if len(dateEnd) > 0 && len(dateEnd) != len(odelId) {
-				fmt.Println("number of --dateEnd flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(dateEnd) > 0 {
-				for i, de := range dateEnd {
-					softwareMetadatas[i]["dateTo"] = de
-				}
-			}
-
-			if len(odelPackage) > 0 && len(odelPackage) != len(odelId) {
-				fmt.Println("number of --odelpackage flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelPackage) > 0 {
-				for i, ap := range odelPackage {
-					softwareMetadatas[i]["packageType"] = strings.ToUpper(ap)
-				}
-			}
-
-			for i := range odelId {
-				outboundDeliverables[i]["softwareMetadata"] = softwareMetadatas[i]
-			}
-
-			if len(odelType) > 0 && len(odelType) != len(odelId) {
-				fmt.Println("number of --odeltype flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelType) > 0 {
-				for i, at := range odelType {
-					outboundDeliverables[i]["type"] = at
-				}
-			}
-
-			if len(supportedOsArr) > 0 && len(supportedOsArr) != len(odelId) {
-				fmt.Println("number of --osarr flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(supportedOsArr) > 0 {
-				for i, ad := range supportedOsArr {
-					adSpl := strings.Split(ad, ",")
-					outboundDeliverables[i]["supportedOs"] = adSpl
-				}
-			}
-			if len(supportedCpuArchArr) > 0 && len(supportedCpuArchArr) != len(odelId) {
-				fmt.Println("number of --supportedcpuarcharr flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(supportedCpuArchArr) > 0 {
-				for i, ad := range supportedCpuArchArr {
-					adSpl := strings.Split(ad, ",")
-					outboundDeliverables[i]["supportedCpuArchitectures"] = adSpl
-				}
-			}
-
-			if len(odelVersion) > 0 && len(odelVersion) != len(odelId) {
-				fmt.Println("number of --odelversion flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelVersion) > 0 {
-				for i, av := range odelVersion {
-					outboundDeliverables[i]["version"] = av
-				}
-			}
-
-			if len(odelPublisher) > 0 && len(odelPublisher) != len(odelId) {
-				fmt.Println("number of --odelpublisher flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelPublisher) > 0 {
-				for i, ap := range odelPublisher {
-					outboundDeliverables[i]["publisher"] = ap
-				}
-			}
-
-			if len(odelGroup) > 0 && len(odelGroup) != len(odelId) {
-				fmt.Println("number of --odelgroup flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelGroup) > 0 {
-				for i, ag := range odelGroup {
-					outboundDeliverables[i]["group"] = ag
-				}
-			}
-
-			if len(tagsArr) > 0 && len(tagsArr) != len(odelId) {
-				fmt.Println("number of --tagsarr flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(tagsArr) > 0 {
-				for i, tags := range tagsArr {
-					tagPairs := strings.Split(tags, ",")
-					var tags []TagInput
-					for _, tagPair := range tagPairs {
-						keyValue := strings.Split(tagPair, ":")
-						if len(keyValue) != 2 {
-							fmt.Println("Each tag should have key and value")
-							os.Exit(2)
-						}
-						tags = append(tags, TagInput{
-							Key:   keyValue[0],
-							Value: keyValue[1],
-						})
-					}
-					outboundDeliverables[i]["tags"] = tags
-				}
-			}
-
-			if len(identities) > 0 && len(identities) != len(odelId) {
-				fmt.Println("number of --identities flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(identities) > 0 {
-				for i, delIdentities := range identities {
-					identityPairs := strings.Split(delIdentities, ",")
-					var bomIdentities []BomIdentity
-					for _, identityPair := range identityPairs {
-						keyValue := strings.Split(identityPair, ":")
-						if len(keyValue) != 2 {
-							fmt.Println("Each tag should have key and value")
-							os.Exit(2)
-						}
-						bomIdentities = append(bomIdentities, BomIdentity{
-							IdenityType: keyValue[0],
-							Identity:    keyValue[1],
-						})
-					}
-					outboundDeliverables[i]["identities"] = bomIdentities
-				}
-			}
-			if len(odelArtsJson) > 0 && len(odelArtsJson) != len(odelId) {
-				fmt.Println("number of --odelartsjson flags must be either zero or match number of --odelid flags")
-				os.Exit(2)
-			} else if len(odelArtsJson) > 0 {
-				for i, artifactsInputString := range odelArtsJson {
-					var artifactsInput []Artifact
-					err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
-					if err != nil {
-						fmt.Println("Error parsing Artifact Input: ", err)
-					} else {
-						artifactsObject := make([]Artifact, len(artifactsInput))
-						for j, artifactInput := range artifactsInput {
-							artifactsObject[j] = Artifact{}
-							if artifactInput.FilePath != "" {
-								fileBytes, err := os.ReadFile(artifactInput.FilePath)
-								if err != nil {
-									fmt.Println("Error reading file: ", err)
-								} else {
-									filesCounter++
-									currentIndex := strconv.Itoa(filesCounter)
-
-									locationMap[currentIndex] = []string{"variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
-									filesMap[currentIndex] = fileBytes
-									artifactInput.File = nil
-
-								}
-								artifactInput.FilePath = ""
-								artifactInput.StripBom = strings.ToUpper(stripBom)
-								artifactsObject[j] = artifactInput
-							}
-						}
-						// TODO: replace file path with actual file
-						outboundDeliverables[i]["artifacts"] = artifactsObject
-					}
-				}
-			}
-			body["outboundDeliverables"] = outboundDeliverables
+			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
 		}
 
 		if commit != "" {
