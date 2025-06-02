@@ -261,6 +261,83 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 	return &outboundDeliverables
 }
 
+type Commit struct {
+	Commit        string     `json:"commit"`
+	CommitMessage string     `json:"commitMessage"`
+	CommitAuthor  string     `json:"commitAuthor,omitempty"`
+	CommitEmail   string     `json:"commitEmail,omitempty"`
+	DateActual    string     `json:"dateActual"`
+	Uri           string     `json:"uri"`
+	Type          string     `json:"type"` // vcs type
+	VcsTag        string     `json:"vcsTag,omitempty"`
+	Artifacts     []Artifact `json:"artifacts"`
+}
+
+func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *Commit {
+	var commitObj Commit
+	commitObj.Uri = vcsUri
+	commitObj.Type = vcsType
+	commitObj.Commit = commit
+	commitObj.CommitMessage = commitMessage
+	commitObj.VcsTag = vcsTag
+	commitObj.DateActual = dateActual
+	if sceArts != "" {
+		var sceArtifacts []Artifact
+		err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
+		if err != nil {
+			fmt.Println("Error parsing Artifact Input: ", err)
+		} else {
+			artifactsObject := make([]Artifact, len(sceArtifacts))
+			for j, artifactInput := range sceArtifacts {
+				if artifactInput.FilePath != "" {
+					fileBytes, err := os.ReadFile(artifactInput.FilePath)
+					artifactInput.FilePath = ""
+					if err != nil {
+						fmt.Println("Error reading file: ", err)
+					} else {
+						*filesCounter++
+						currentIndex := strconv.Itoa(*filesCounter)
+
+						(*locationMap)[currentIndex] = []string{"variables.releaseInputProg.sourceCodeEntry.artifacts." + strconv.Itoa(j) + ".file"}
+						(*filesMap)[currentIndex] = fileBytes
+						artifactInput.File = nil
+					}
+					artifactInput.FilePath = ""
+					artifactInput.StripBom = strings.ToUpper(stripBom)
+					artifactsObject[j] = artifactInput
+				}
+			}
+			commitObj.Artifacts = artifactsObject
+		}
+	}
+	return &commitObj
+}
+
+func buildCommitsInBody() *[]Commit {
+	plainCommits, err := base64.StdEncoding.DecodeString(commits)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	indCommits := strings.Split(string(plainCommits), "\n")
+	commitsInBody := make([]Commit, len(indCommits)-1)
+	for i := range indCommits {
+		if len(indCommits[i]) > 0 {
+			var singleCommitEl Commit
+			commitParts := strings.Split(indCommits[i], "|||")
+			singleCommitEl.Commit = commitParts[0]
+			singleCommitEl.DateActual = commitParts[1]
+			singleCommitEl.CommitMessage = commitParts[2]
+			if len(commitParts) > 3 {
+				singleCommitEl.CommitAuthor = commitParts[3]
+				singleCommitEl.CommitEmail = commitParts[4]
+			}
+			commitsInBody[i] = singleCommitEl
+		}
+	}
+	return &commitsInBody
+}
+
 var addreleaseCmd = &cobra.Command{
 	Use:   "addrelease",
 	Short: "Creates release on ReARM",
@@ -289,92 +366,28 @@ var addreleaseCmd = &cobra.Command{
 		}
 
 		if commit != "" {
-			commitMap := map[string]interface{}{"uri": vcsUri, "type": vcsType, "commit": commit, "commitMessage": commitMessage}
-			if vcsTag != "" {
-				commitMap["vcsTag"] = vcsTag
-			}
-			if dateActual != "" {
-				commitMap["dateActual"] = dateActual
-			}
-			if sceArts != "" {
-				var sceArtifacts []Artifact
-				err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
-				if err != nil {
-					fmt.Println("Error parsing Artifact Input: ", err)
-				} else {
-					artifactsObject := make([]Artifact, len(sceArtifacts))
-					for j, artifactInput := range sceArtifacts {
-						if artifactInput.FilePath != "" {
-							fileBytes, err := os.ReadFile(artifactInput.FilePath)
-							artifactInput.FilePath = ""
-							if err != nil {
-								fmt.Println("Error reading file: ", err)
-							} else {
-								filesCounter++
-								currentIndex := strconv.Itoa(filesCounter)
-
-								locationMap[currentIndex] = []string{"variables.releaseInputProg.sourceCodeEntry.artifacts." + strconv.Itoa(j) + ".file"}
-								filesMap[currentIndex] = fileBytes
-								artifactInput.File = nil
-							}
-							artifactInput.FilePath = ""
-							artifactInput.StripBom = strings.ToUpper(stripBom)
-							artifactsObject[j] = artifactInput
-						}
-					}
-					// TODO: replace file path with actual file
-					commitMap["artifacts"] = artifactsObject
-				}
-
-			}
-			body["sourceCodeEntry"] = commitMap
+			body["sourceCodeEntry"] = *buildCommitMap(&filesCounter, &locationMap, &filesMap)
 		}
 
 		if len(commits) > 0 {
 			// fmt.Println(commits)
-			plainCommits, err := base64.StdEncoding.DecodeString(commits)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-			indCommits := strings.Split(string(plainCommits), "\n")
-			commitsInBody := make([]map[string]interface{}, len(indCommits)-1)
-			for i := range indCommits {
-				if len(indCommits[i]) > 0 {
-					singleCommitEl := map[string]interface{}{}
-					commitParts := strings.Split(indCommits[i], "|||")
-					singleCommitEl["commit"] = commitParts[0]
-					singleCommitEl["dateActual"] = commitParts[1]
-					singleCommitEl["commitMessage"] = commitParts[2]
-					if len(commitParts) > 3 {
-						singleCommitEl["commitAuthor"] = commitParts[3]
-						singleCommitEl["commitEmail"] = commitParts[4]
-					}
-					commitsInBody[i] = singleCommitEl
-
-					// if commit is not present but we are here, use first line as commit
-					if len(commit) < 1 && i == 0 {
-						var commitMap map[string]interface{}
-						if len(commitParts) > 3 {
-							commitMap = map[string]interface{}{"commit": commitParts[0], "dateActual": commitParts[1], "commitMessage": commitParts[2], "commitAuthor": commitParts[3], "commitEmail": commitParts[4]}
-						} else {
-							commitMap = map[string]interface{}{"commit": commitParts[0], "dateActual": commitParts[1], "commitMessage": commitParts[2]}
-						}
-						if vcsTag != "" {
-							commitMap["vcsTag"] = vcsTag
-						}
-						if vcsUri != "" {
-							commitMap["uri"] = vcsUri
-						}
-						if vcsType != "" {
-							commitMap["type"] = vcsType
-						}
-
-						body["sourceCodeEntry"] = commitMap
-					}
+			bodyCommits := *buildCommitsInBody()
+			body["commits"] = bodyCommits
+			// if commit is not present but we are here, use first line as commit
+			if len(commit) < 1 && len(bodyCommits) > 0 {
+				mainCommitFromBody := bodyCommits[0]
+				if vcsTag != "" {
+					mainCommitFromBody.VcsTag = vcsTag
 				}
+				if vcsUri != "" {
+					mainCommitFromBody.Uri = vcsUri
+				}
+				if vcsType != "" {
+					mainCommitFromBody.Type = vcsType
+				}
+
+				body["sourceCodeEntry"] = mainCommitFromBody
 			}
-			body["commits"] = commitsInBody
 		}
 		if releaseArts != "" {
 			var releaseArtifacts []Artifact
