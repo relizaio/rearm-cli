@@ -275,6 +275,7 @@ type Commit struct {
 
 func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *Commit {
 	var commitObj Commit
+	// TODO commit author and email is missing from here
 	commitObj.Uri = vcsUri
 	commitObj.Type = vcsType
 	commitObj.Commit = commit
@@ -338,6 +339,68 @@ func buildCommitsInBody() *[]Commit {
 	return &commitsInBody
 }
 
+func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
+	var releaseArtifacts []Artifact
+	err := json.Unmarshal([]byte(releaseArts), &releaseArtifacts)
+	if err != nil {
+		fmt.Println("Error parsing Release Artifact Input: ", err)
+		os.Exit(1)
+	} else {
+		artifactsObject := make([]Artifact, len(releaseArtifacts))
+		for j, artifactInput := range releaseArtifacts {
+			if artifactInput.FilePath != "" {
+				fileBytes, err := os.ReadFile(artifactInput.FilePath)
+				if err != nil {
+					fmt.Println("Error reading file: ", err)
+				} else {
+					artifactInput.File = fileBytes
+
+					filesCounter++
+					currentIndex := strconv.Itoa(filesCounter)
+
+					locationMap[currentIndex] = []string{"variables.releaseInputProg.artifacts." + strconv.Itoa(j) + ".file"}
+					filesMap[currentIndex] = fileBytes
+					artifactInput.File = nil
+				}
+				artifactInput.FilePath = ""
+				artifactInput.StripBom = strings.ToUpper(stripBom)
+				artifactsObject[j] = artifactInput
+			}
+		}
+		// TODO: replace file path with actual file
+		return &releaseArtifacts
+	}
+}
+
+func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
+	var sceArtifacts []Artifact
+	err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
+	if err != nil {
+		fmt.Println("Error parsing SCE Artifact Input: ", err)
+		os.Exit(1)
+	} else {
+		artifactsObject := make([]Artifact, len(sceArtifacts))
+		for j, artifactInput := range sceArtifacts {
+			if artifactInput.FilePath != "" {
+				fileBytes, err := os.ReadFile(artifactInput.FilePath)
+				if err != nil {
+					fmt.Println("Error reading file: ", err)
+				} else {
+					filesCounter++
+					currentIndex := strconv.Itoa(filesCounter)
+					locationMap[currentIndex] = []string{"variables.releaseInputProg.sceArts." + strconv.Itoa(j) + ".file"}
+					filesMap[currentIndex] = fileBytes
+					artifactInput.File = nil
+				}
+				artifactInput.FilePath = ""
+				artifactInput.StripBom = strings.ToUpper(stripBom)
+				artifactsObject[j] = artifactInput
+			}
+		}
+	}
+	return &sceArtifacts
+}
+
 var addreleaseCmd = &cobra.Command{
 	Use:   "addrelease",
 	Short: "Creates release on ReARM",
@@ -390,36 +453,7 @@ var addreleaseCmd = &cobra.Command{
 			}
 		}
 		if releaseArts != "" {
-			var releaseArtifacts []Artifact
-			err := json.Unmarshal([]byte(releaseArts), &releaseArtifacts)
-			if err != nil {
-				fmt.Println("Error parsing Artifact Input: ", err)
-			} else {
-				artifactsObject := make([]Artifact, len(releaseArtifacts))
-				for j, artifactInput := range releaseArtifacts {
-					if artifactInput.FilePath != "" {
-						fileBytes, err := os.ReadFile(artifactInput.FilePath)
-						if err != nil {
-							fmt.Println("Error reading file: ", err)
-						} else {
-							artifactInput.File = fileBytes
-
-							filesCounter++
-							currentIndex := strconv.Itoa(filesCounter)
-
-							locationMap[currentIndex] = []string{"variables.releaseInputProg.artifacts." + strconv.Itoa(j) + ".file"}
-							filesMap[currentIndex] = fileBytes
-							artifactInput.File = nil
-						}
-						artifactInput.FilePath = ""
-						artifactInput.StripBom = strings.ToUpper(stripBom)
-						artifactsObject[j] = artifactInput
-					}
-				}
-				// TODO: replace file path with actual file
-				body["artifacts"] = artifactsObject
-			}
-
+			body["artifacts"] = *buildReleaseArts(&filesCounter, &locationMap, &filesMap)
 		}
 
 		if fsBomPath != "" {
@@ -427,35 +461,9 @@ var addreleaseCmd = &cobra.Command{
 		}
 
 		if sceArts != "" {
-			var sceArtifacts []Artifact
-			err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
-			if err != nil {
-				fmt.Println("Error parsing Artifact Input: ", err)
-			} else {
-				artifactsObject := make([]Artifact, len(sceArtifacts))
-				for j, artifactInput := range sceArtifacts {
-					if artifactInput.FilePath != "" {
-						fileBytes, err := os.ReadFile(artifactInput.FilePath)
-						if err != nil {
-							fmt.Println("Error reading file: ", err)
-						} else {
-							filesCounter++
-							currentIndex := strconv.Itoa(filesCounter)
-							locationMap[currentIndex] = []string{"variables.releaseInputProg.sceArts." + strconv.Itoa(j) + ".file"}
-							filesMap[currentIndex] = fileBytes
-							artifactInput.File = nil
-						}
-						artifactInput.FilePath = ""
-						artifactInput.StripBom = strings.ToUpper(stripBom)
-						artifactsObject[j] = artifactInput
-					}
-				}
-				body["sceArts"] = artifactsObject
-			}
-
+			body["sceArts"] = *buildSceArts(&filesCounter, &locationMap, &filesMap)
 		}
 
-		// 		fmt.Println(body)
 		jsonBody, _ := json.Marshal(body)
 		if debug == "true" {
 			fmt.Println(string(jsonBody))
