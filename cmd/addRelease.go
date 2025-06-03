@@ -231,6 +231,7 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 			err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
 			if err != nil {
 				fmt.Println("Error parsing Artifact Input: ", err)
+				os.Exit(1)
 			} else {
 				artifactsObject := make([]Artifact, len(artifactsInput))
 				for j, artifactInput := range artifactsInput {
@@ -287,6 +288,7 @@ func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMa
 		err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
 		if err != nil {
 			fmt.Println("Error parsing Artifact Input: ", err)
+			os.Exit(1)
 		} else {
 			artifactsObject := make([]Artifact, len(sceArtifacts))
 			for j, artifactInput := range sceArtifacts {
