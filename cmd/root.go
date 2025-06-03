@@ -464,6 +464,7 @@ var addODeliverableCmd = &cobra.Command{
 								fileBytes, err := os.ReadFile(artifactInput.FilePath)
 								if err != nil {
 									fmt.Println("Error reading file: ", err)
+									os.Exit(1)
 								} else {
 									filesCounter++
 									currentIndex := strconv.Itoa(filesCounter)

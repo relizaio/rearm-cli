@@ -240,6 +240,7 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 						fileBytes, err := os.ReadFile(artifactInput.FilePath)
 						if err != nil {
 							fmt.Println("Error reading file: ", err)
+							os.Exit(1)
 						} else {
 							*filesCounter++
 							currentIndex := strconv.Itoa(*filesCounter)
@@ -297,6 +298,7 @@ func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMa
 					artifactInput.FilePath = ""
 					if err != nil {
 						fmt.Println("Error reading file: ", err)
+						os.Exit(1)
 					} else {
 						*filesCounter++
 						currentIndex := strconv.Itoa(*filesCounter)
@@ -354,6 +356,7 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 				fileBytes, err := os.ReadFile(artifactInput.FilePath)
 				if err != nil {
 					fmt.Println("Error reading file: ", err)
+					os.Exit(1)
 				} else {
 					artifactInput.File = fileBytes
 
@@ -387,6 +390,7 @@ func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap 
 				fileBytes, err := os.ReadFile(artifactInput.FilePath)
 				if err != nil {
 					fmt.Println("Error reading file: ", err)
+					os.Exit(1)
 				} else {
 					*filesCounter++
 					currentIndex := strconv.Itoa(*filesCounter)
