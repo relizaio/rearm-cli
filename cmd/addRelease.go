@@ -355,11 +355,11 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 				} else {
 					artifactInput.File = fileBytes
 
-					filesCounter++
-					currentIndex := strconv.Itoa(filesCounter)
+					*filesCounter++
+					currentIndex := strconv.Itoa(*filesCounter)
 
-					locationMap[currentIndex] = []string{"variables.releaseInputProg.artifacts." + strconv.Itoa(j) + ".file"}
-					filesMap[currentIndex] = fileBytes
+					(*locationMap)[currentIndex] = []string{"variables.releaseInputProg.artifacts." + strconv.Itoa(j) + ".file"}
+					(*filesMap)[currentIndex] = fileBytes
 					artifactInput.File = nil
 				}
 				artifactInput.FilePath = ""
@@ -367,9 +367,9 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 				artifactsObject[j] = artifactInput
 			}
 		}
-		// TODO: replace file path with actual file
-		return &releaseArtifacts
 	}
+	// TODO: replace file path with actual file
+	return &releaseArtifacts
 }
 
 func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
@@ -386,10 +386,10 @@ func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap 
 				if err != nil {
 					fmt.Println("Error reading file: ", err)
 				} else {
-					filesCounter++
-					currentIndex := strconv.Itoa(filesCounter)
-					locationMap[currentIndex] = []string{"variables.releaseInputProg.sceArts." + strconv.Itoa(j) + ".file"}
-					filesMap[currentIndex] = fileBytes
+					*filesCounter++
+					currentIndex := strconv.Itoa(*filesCounter)
+					(*locationMap)[currentIndex] = []string{"variables.releaseInputProg.sceArts." + strconv.Itoa(j) + ".file"}
+					(*filesMap)[currentIndex] = fileBytes
 					artifactInput.File = nil
 				}
 				artifactInput.FilePath = ""
