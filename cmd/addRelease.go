@@ -233,30 +233,9 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 				fmt.Println("Error parsing Artifact Input: ", err)
 				os.Exit(1)
 			} else {
-				artifactsObject := make([]Artifact, len(artifactsInput))
-				for j, artifactInput := range artifactsInput {
-					artifactsObject[j] = Artifact{}
-					if artifactInput.FilePath != "" {
-						fileBytes, err := os.ReadFile(artifactInput.FilePath)
-						if err != nil {
-							fmt.Println("Error reading file: ", err)
-							os.Exit(1)
-						} else {
-							*filesCounter++
-							currentIndex := strconv.Itoa(*filesCounter)
-
-							(*locationMap)[currentIndex] = []string{"variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
-							(*filesMap)[currentIndex] = fileBytes
-							artifactInput.File = nil
-
-						}
-						artifactInput.FilePath = ""
-						artifactInput.StripBom = strings.ToUpper(stripBom)
-						artifactsObject[j] = artifactInput
-					}
-				}
+				indexPrefix := "variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts."
 				// TODO: replace file path with actual file
-				outboundDeliverables[i]["artifacts"] = artifactsObject
+				outboundDeliverables[i]["artifacts"] = *processArtifactInput(&artifactsInput, indexPrefix, filesCounter, locationMap, filesMap)
 			}
 		}
 	}
@@ -273,6 +252,33 @@ type Commit struct {
 	Type          string     `json:"type"` // vcs type
 	VcsTag        string     `json:"vcsTag,omitempty"`
 	Artifacts     []Artifact `json:"artifacts"`
+}
+
+func processArtifactInput(artifactsInput *[]Artifact, indexPrefix string, filesCounter *int,
+	locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
+	artifactsObject := make([]Artifact, len(*artifactsInput))
+	for j, artifactInput := range *artifactsInput {
+		artifactsObject[j] = Artifact{}
+		if artifactInput.FilePath != "" {
+			fileBytes, err := os.ReadFile(artifactInput.FilePath)
+			if err != nil {
+				fmt.Println("Error reading file: ", err)
+				os.Exit(1)
+			} else {
+				*filesCounter++
+				currentIndex := strconv.Itoa(*filesCounter)
+
+				(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(j) + ".file"}
+				(*filesMap)[currentIndex] = fileBytes
+				artifactInput.File = nil
+
+			}
+			artifactInput.FilePath = ""
+			artifactInput.StripBom = strings.ToUpper(stripBom)
+			artifactsObject[j] = artifactInput
+		}
+	}
+	return &artifactsObject
 }
 
 func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *Commit {
