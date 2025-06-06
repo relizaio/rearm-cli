@@ -234,7 +234,7 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 				os.Exit(1)
 			} else {
 				indexPrefix := "variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts."
-				outboundDeliverables[i]["artifacts"] = *processArtifactInput(&artifactsInput, indexPrefix, filesCounter, locationMap, filesMap)
+				outboundDeliverables[i]["artifacts"] = *processArtifactsInput(&artifactsInput, indexPrefix, filesCounter, locationMap, filesMap)
 			}
 		}
 	}
@@ -253,32 +253,41 @@ type Commit struct {
 	Artifacts     []Artifact `json:"artifacts"`
 }
 
-func processArtifactInput(artifactsInput *[]Artifact, indexPrefix string, filesCounter *int,
+func processArtifactsInput(artifactsInput *[]Artifact, indexPrefix string, filesCounter *int,
 	locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
 	// TODO: replace file path with actual file
 	artifactsObject := make([]Artifact, len(*artifactsInput))
 	for j, artifactInput := range *artifactsInput {
-		artifactsObject[j] = Artifact{}
-		if artifactInput.FilePath != "" {
-			fileBytes, err := os.ReadFile(artifactInput.FilePath)
-			if err != nil {
-				fmt.Println("Error reading file: ", err)
-				os.Exit(1)
-			} else {
-				*filesCounter++
-				currentIndex := strconv.Itoa(*filesCounter)
-
-				(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(j) + ".file"}
-				(*filesMap)[currentIndex] = fileBytes
-				artifactInput.File = nil
-
-			}
-			artifactInput.FilePath = ""
-			artifactInput.StripBom = strings.ToUpper(stripBom)
-			artifactsObject[j] = artifactInput
-		}
+		artifactsObject[j] = *processSingleArtifactInput(&artifactInput, indexPrefix, j, filesCounter, locationMap, filesMap)
 	}
 	return &artifactsObject
+}
+
+func processSingleArtifactInput(artInput *Artifact, indexPrefix string, fileJCounter int, filesCounter *int,
+	locationMap *map[string][]string, filesMap *map[string]interface{}) *Artifact {
+	// TODO: replace file path with actual file
+	if len((*artInput).Artifacts) > 0 {
+		updIndex := indexPrefix + "0.artifacts."
+		(*artInput).Artifacts = *processArtifactsInput(&(*artInput).Artifacts, updIndex, filesCounter, locationMap, filesMap)
+	}
+	if (*artInput).FilePath != "" {
+		fileBytes, err := os.ReadFile(artInput.FilePath)
+		if err != nil {
+			fmt.Println("Error reading file: ", err)
+			os.Exit(1)
+		} else {
+			*filesCounter++
+			currentIndex := strconv.Itoa(*filesCounter)
+
+			(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(fileJCounter) + ".file"}
+			(*filesMap)[currentIndex] = fileBytes
+			artInput.File = nil
+
+		}
+		(*artInput).FilePath = ""
+		(*artInput).StripBom = strings.ToUpper(stripBom)
+	}
+	return artInput
 }
 
 func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *Commit {
@@ -298,7 +307,7 @@ func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMa
 			os.Exit(1)
 		} else {
 			indexPrefix := "variables.releaseInputProg.sourceCodeEntry.artifacts."
-			artifactsObject := *processArtifactInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
+			artifactsObject := *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 			commitObj.Artifacts = artifactsObject
 		}
 	}
@@ -339,7 +348,7 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 		os.Exit(1)
 	} else {
 		indexPrefix := "variables.releaseInputProg.artifacts."
-		artifactsObject = *processArtifactInput(&releaseArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
+		artifactsObject = *processArtifactsInput(&releaseArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 	}
 	// TODO: replace file path with actual file
 	return &artifactsObject
@@ -354,7 +363,7 @@ func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap 
 		os.Exit(1)
 	} else {
 		indexPrefix := "variables.releaseInputProg.sceArts."
-		artifactsObject = *processArtifactInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
+		artifactsObject = *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 	}
 	return &artifactsObject
 }
@@ -422,8 +431,8 @@ var addreleaseCmd = &cobra.Command{
 			body["sceArts"] = *buildSceArts(&filesCounter, &locationMap, &filesMap)
 		}
 
-		jsonBody, _ := json.Marshal(body)
 		if debug == "true" {
+			jsonBody, _ := json.Marshal(body)
 			fmt.Println(string(jsonBody))
 		}
 
