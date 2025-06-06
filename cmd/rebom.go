@@ -52,7 +52,7 @@ type Artifact struct {
 	Version           string        `json:"version"`
 	DownloadLinks     []Link        `json:"downloadLinks"`
 	InventoryTypes    []string      `json:"inventoryTypes"`
-	BomFormat         string        `json:"bomFormat"`
+	BomFormat         string        `json:"bomFormat,omitempty"`
 	Type              string        `json:"type"`
 	Identities        []BomIdentity `json:"identities"`
 	StoredIn          string        `json:"storedIn"`
@@ -60,6 +60,7 @@ type Artifact struct {
 	File              []byte        `json:"file"`
 	FilePath          string        `json:"filePath,omitempty"`
 	StripBom          string        `json:"stripBom,omitempty"`
+	Artifacts         []Artifact    `json:"artifacts,omitempty"`
 }
 
 type BomIdentity struct {
