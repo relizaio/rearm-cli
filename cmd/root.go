@@ -102,6 +102,23 @@ type ErrorBody struct {
 	Path      string
 }
 
+type GraphQLResponse struct {
+	Data   json.RawMessage `json:"data"`
+	Errors []GraphQLError  `json:"errors"`
+}
+
+type GraphQLError struct {
+	Message    string                 `json:"message"`
+	Locations  []GraphQLErrorLocation `json:"locations,omitempty"`
+	Path       []interface{}          `json:"path,omitempty"`
+	Extensions map[string]interface{} `json:"extensions,omitempty"`
+}
+
+type GraphQLErrorLocation struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+}
+
 const RELEASE_GQL_DATA = `
 	uuid
 	createdType
@@ -532,7 +549,7 @@ var addODeliverableCmd = &cobra.Command{
 			SetBasicAuth(apiKeyId, apiKey).
 			Post(rearmUri + "/graphql")
 
-		printResponse(err, resp)
+		handleResponse(err, resp)
 	},
 }
 
@@ -840,7 +857,7 @@ func sendRequestWithUri(req *graphql.Request, endpoint string, uri string) strin
 	return string(jsonResponse)
 }
 
-func printResponse(err error, resp *resty.Response) {
+func handleResponse(err error, resp *resty.Response) {
 	if debug == "true" {
 		// Explore response object
 		fmt.Println("Response Info:")
@@ -868,6 +885,23 @@ func printResponse(err error, resp *resty.Response) {
 		fmt.Println("Status     :", resp.Status())
 		fmt.Println("Time       :", resp.Time())
 		fmt.Println("Received At:", resp.ReceivedAt())
+		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Println("Error      :", err)
+		os.Exit(1)
+	}
+	var gqlResp GraphQLResponse
+	gqlErr := json.Unmarshal(resp.Body(), &gqlResp)
+	if gqlErr != nil {
+		fmt.Println("failed to unmarshal response: %v", gqlErr)
+		os.Exit(1)
+	}
+	if len(gqlResp.Errors) > 0 {
+		fmt.Println("GraphQL returned errors:")
+		for _, e := range gqlResp.Errors {
+			fmt.Printf("- %s\n", e.Message)
+		}
 		os.Exit(1)
 	}
 }

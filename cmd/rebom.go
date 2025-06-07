@@ -156,7 +156,7 @@ func attachToRebomFunc() {
 		SetBasicAuth(apiKeyId, apiKey).
 		Post(rearmUri + "/api/programmatic/v1/sbom/upload")
 
-	printResponse(err, resp)
+	handleResponse(err, resp)
 }
 
 func ReadBomJsonFromFile(filePath string) map[string]interface{} {

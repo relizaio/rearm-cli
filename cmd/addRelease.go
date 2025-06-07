@@ -476,7 +476,7 @@ var addreleaseCmd = &cobra.Command{
 			SetBasicAuth(apiKeyId, apiKey).
 			Post(rearmUri + "/graphql")
 
-		printResponse(err, resp)
+		handleResponse(err, resp)
 	},
 }
 
