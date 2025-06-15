@@ -35,7 +35,7 @@ It is possible to set authentication data via explicit flags, login command (see
 - REARM_URI - for ReARM Uri
 
 # Table of Contents - Use Cases
-1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm-hub)
+1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm)
 3. [Check If Artifact Hash Already Present In Some Release](#3-use-case-check-if-artifact-hash-already-present-in-some-release)
 4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
