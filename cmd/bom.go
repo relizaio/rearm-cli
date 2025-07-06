@@ -37,11 +37,11 @@ var (
 func init() {
 	bomUtils.PersistentFlags().StringVarP(&infile, "infile", "f", "", "Input file path with bom json")
 	bomUtils.PersistentFlags().StringVarP(&outfile, "outfile", "o", "", "Output file path to write bom json")
-	fixOciPurlCmd.PersistentFlags().StringVar(&ociImage, "ociimage", "", "oci image with digest")
-	fixOciPurlCmd.PersistentFlags().StringVar(&newpurl, "newpurl", "", "new purl, will attempt to autogenerate if missing")
+	fixPurlCmd.PersistentFlags().StringVar(&ociImage, "ociimage", "", "oci image with digest")
+	fixPurlCmd.PersistentFlags().StringVar(&newpurl, "newpurl", "", "new purl, will attempt to autogenerate if missing")
 
 	rootCmd.AddCommand(bomUtils)
-	bomUtils.AddCommand(fixOciPurlCmd)
+	bomUtils.AddCommand(fixPurlCmd)
 }
 
 func readJSON() ([]byte, error) {
@@ -109,12 +109,12 @@ var bomUtils = &cobra.Command{
 	Short: "Set of commands to interact with xBOMS",
 	Long:  `Set of commands to interact with xBOMS`,
 }
-var fixOciPurlCmd = &cobra.Command{
-	Use:   "fixocipurl",
-	Short: "Fix OCI Purl",
-	Long:  `Fix Purl for a given OCI image on an input cyclonedx BOM`,
+var fixPurlCmd = &cobra.Command{
+	Use:   "fixpurl",
+	Short: "Fix Purl",
+	Long:  `Fix Purl for the main component on CycloneDX BOM`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fixOciPurlsFunc()
+		fixPurlFunc()
 	},
 }
 
@@ -122,7 +122,7 @@ func readPurlFromBom(bom *cdx.BOM) string {
 	return bom.Metadata.Component.PackageURL
 }
 
-func fixOciPurlsFunc() {
+func fixPurlFunc() {
 	data, err := readJSON()
 
 	if err != nil {

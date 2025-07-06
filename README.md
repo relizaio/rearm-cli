@@ -354,7 +354,7 @@ Sample command:
 
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli    \
-    bomutils fixocipurl \
+    bomutils fixpurl \
     --ociimage image_with_SHA_DIGEST \ 
     -f input-bom.json \
     -o output-bom.json
@@ -365,7 +365,7 @@ Read from stdin and write to stdout
 
 ```bash
 cat bom_samples/rebom-ui-oci.json | docker run --rm -i registry.relizahub.com/library/rearm-cli    \
-    bomutils fixocipurl \
+    bomutils fixpurl \
     --ociimage image_with_SHA_DIGEST
 ```
 
