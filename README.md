@@ -373,7 +373,7 @@ Flags stand for:
 - **--ociimage** - flag to specify oci image with digest
 - **--infile (-f)** - input cyclonedx sbom json file. (Optional - reades from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json. (Optional - writes to stdout when not specified)
-- **--newpurl (-n)** - new purl to be set, will attempt to autogenerate if missing (but will autogenerate for oci only)
+- **--newpurl** - new purl to be set, will attempt to autogenerate if missing (but will autogenerate for oci only)
 
 
 ### 9.2 BOM Supplier Enrichment with BEAR
