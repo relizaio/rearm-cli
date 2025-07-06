@@ -28,10 +28,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	ociImage string
+	outfile  string
+	newpurl  string
+)
+
 func init() {
 	bomUtils.PersistentFlags().StringVarP(&infile, "infile", "f", "", "Input file path with bom json")
 	bomUtils.PersistentFlags().StringVarP(&outfile, "outfile", "o", "", "Output file path to write bom json")
 	fixOciPurlCmd.PersistentFlags().StringVar(&ociImage, "ociimage", "", "oci image with digest")
+	fixOciPurlCmd.PersistentFlags().StringVar(&newpurl, "newpurl", "", "new purl, will attempt to autogenerate if missing")
 
 	rootCmd.AddCommand(bomUtils)
 	bomUtils.AddCommand(fixOciPurlCmd)
@@ -57,21 +64,26 @@ func readJSON() ([]byte, error) {
 	return data, nil
 }
 
-func readBom() (*cdx.BOM, error) {
+func readBom() *cdx.BOM {
 
 	jsonData, err := readJSON()
 	if err != nil {
-		return nil, err
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	return readBomFromBytes(jsonData)
 }
 
-func readBomFromBytes(data []byte) (*cdx.BOM, error) {
+func readBomFromBytes(data []byte) *cdx.BOM {
 	bom := new(cdx.BOM)
 	decoder := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON)
 	err := decoder.Decode(bom)
-	return bom, err
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	return bom
 }
 
 func writeOutput(bom *cdx.BOM) error {
@@ -92,11 +104,6 @@ func writeOutput(bom *cdx.BOM) error {
 	return os.WriteFile(outfile, buf.Bytes(), 0644)
 }
 
-var (
-	ociImage string
-	outfile  string
-)
-
 var bomUtils = &cobra.Command{
 	Use:   "bomutils",
 	Short: "Set of commands to interact with xBOMS",
@@ -104,11 +111,15 @@ var bomUtils = &cobra.Command{
 }
 var fixOciPurlCmd = &cobra.Command{
 	Use:   "fixocipurl",
-	Short: "Fix oci purl",
-	Long:  `Fix purl for a given OCI image on an input cyclonedx BOM`,
+	Short: "Fix OCI Purl",
+	Long:  `Fix Purl for a given OCI image on an input cyclonedx BOM`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fixOciPurlsFunc()
 	},
+}
+
+func readPurlFromBom(bom *cdx.BOM) string {
+	return bom.Metadata.Component.PackageURL
 }
 
 func fixOciPurlsFunc() {
@@ -119,15 +130,27 @@ func fixOciPurlsFunc() {
 		os.Exit(1)
 	}
 
-	oldPurl, newPurl := preparePurlsForGivenOCIImage(ociImage)
+	bom := readBomFromBytes(data)
+	oldPurl := readPurlFromBom(bom)
+
+	var newPurl string
+
+	if len(newpurl) > 0 {
+		// validate new purl
+		_, err := packageurl.FromString(newpurl)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		newPurl = newpurl
+	} else {
+		newPurl = preparePurlsForGivenOCIImage(oldPurl, ociImage)
+	}
 
 	replaceddata := replaceStringInJSONBytes(data, oldPurl, newPurl)
 
-	bom, err := readBomFromBytes(replaceddata)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	bom = readBomFromBytes(replaceddata)
 
 	err = writeOutput(bom)
 	if err != nil {
@@ -138,7 +161,7 @@ func fixOciPurlsFunc() {
 func replaceStringInJSONBytes(data []byte, old string, new string) []byte {
 	return bytes.ReplaceAll(data, []byte(old), []byte(new))
 }
-func preparePurlsForGivenOCIImage(givenOciImage string) (oldPurl, newPurlString string) {
+func preparePurlsForGivenOCIImage(oldPurl string, givenOciImage string) (newPurlString string) {
 	oldPurl = "pkg:oci/" + givenOciImage
 	instance, err := packageurl.FromString(oldPurl)
 	if err != nil {
@@ -147,5 +170,5 @@ func preparePurlsForGivenOCIImage(givenOciImage string) (oldPurl, newPurlString 
 
 	newPurl := packageurl.NewPackageURL("oci", "", instance.Name, instance.Version, packageurl.Qualifiers{{Key: "repository_url", Value: instance.Namespace}}, "")
 	newPurlString = newPurl.String()
-	return oldPurl, newPurlString
+	return newPurlString
 }

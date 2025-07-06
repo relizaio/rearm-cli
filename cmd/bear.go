@@ -48,12 +48,7 @@ func init() {
 func resolveBearSupplierFunc() {
 	fmt.Println("Using BEAR at", bearUri)
 
-	bom, err := readBom()
-
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	bom := readBom()
 
 	components := bom.Components
 	for ind, comp := range *components {
