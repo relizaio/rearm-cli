@@ -159,6 +159,7 @@ Flags stand for:
 - **odelbuilduri** - flag to denote output deliverable build uri (optional). This flag is optional and is used to denote the uri for where the build takes place.
 - **odelcimeta** - flag to denote output deliverable CI metadata (optional). This flag is optional and like odelbuildid may be used to indicate build system metadata in free form.
 - **odeltype** - flag to denote output deliverable type (optional). Types are based on [CycloneDX 1.6 spec](https://github.com/CycloneDX/specification/blob/master/schema/bom-1.6.schema.json) - refer to lines 836-850 in the spec. Supported values (case-insensitive): Application, Framework, Library, Container, Platform, Operatine-system, Device, Device-driver, Firmware, File, Machine-learning-model, Data, Cryptographic-asset.
+- **--odelidentifiers** - Deliverable Identifiers (i.e. PURL) IdentifierType-Value Pairs (multiple allowed, separate several IdentifierType-Value pairs for one Deliverable with commas, and seprate IdentifierType-Value in a pair with colon, e.g. --odelidentifiers "PURL:somepurl,TEI:sometei")
 - **datestart** - flag to denote output deliverable build start date and time, must conform to ISO strict date (in bash, use *date -Iseconds*, if used there must be one datestart flag entry per deliverable, optional).
 - **dateend** - flag to denote output deliverable build end date and time, must conform to ISO strict date (in bash, use *date -Iseconds*, if used there must be one datestart flag entry per deliverable, optional).
 - **odelpublisher** - flag to denote output deliverable publisher (if used there must be one publisher flag entry per deliverable, optional).
@@ -323,7 +324,7 @@ Flags stand for:
 - **--cpuarr** - Array of CPU architectures supported by this Deliverable (optional, multiple allowed)
 - **--dateend** - Deliverable Build End date and time (optional, multiple allowed)
 - **--datestart** - Deliverable Build Start date and time (optional, multiple allowed)
-- **--identities** - Deliverable Identity (i.e. PURL) IdenityType-Idenity Pairs (multiple allowed, separate several IdenityType-Idenity pairs for one Deliverable with commas, and seprate IdenityType-Idenity in a pair with colon)
+- **--identifiers** - Deliverable Identifiers (i.e. PURL) IdentifierType-Value Pairs (multiple allowed, separate several IdentifierType-Value pairs for one Deliverable with commas, and seprate IdentifierType-Value in a pair with colon, e.g. --identifiers "PURL:somepurl,TEI:sometei")
 - **--odelartsjson** -Deliverable Artifacts json array (optional, multiple allowed, use a json array for each deliverable, similar to add release use case)
 - **--odelbuildid** - Deliverable Build ID (optional, multiple allowed)
 - **--odelbuilduri** - Deliverable Build URI (multiple allowed)

@@ -47,6 +47,11 @@ var (
 	odelPackage   []string
 )
 
+type Identifier struct {
+	IdType  string `json:"idType"`
+	IdValue string `json:"idValue"`
+}
+
 func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]map[string]interface{} {
 	outboundDeliverables := make([]map[string]interface{}, len(odelId))
 	softwareMetadatas := make([]map[string]interface{}, len(odelId))
@@ -201,25 +206,25 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 		}
 	}
 
-	if len(identities) > 0 && len(identities) != len(odelId) {
-		fmt.Println("number of --identities flags must be either zero or match number of --odelid flags")
+	if len(identifiers) > 0 && len(identifiers) != len(odelId) {
+		fmt.Println("number of --identifiers flags must be either zero or match number of --odelid flags")
 		os.Exit(2)
-	} else if len(identities) > 0 {
-		for i, delIdentities := range identities {
-			identityPairs := strings.Split(delIdentities, ",")
-			var bomIdentities []BomIdentity
+	} else if len(identifiers) > 0 {
+		for i, delIdentifiers := range identifiers {
+			identityPairs := strings.Split(delIdentifiers, ",")
+			var identifiers []Identifier
 			for _, identityPair := range identityPairs {
-				keyValue := strings.Split(identityPair, ":")
+				keyValue := strings.SplitN(identityPair, ":", 2)
 				if len(keyValue) != 2 {
 					fmt.Println("Each tag should have key and value")
 					os.Exit(2)
 				}
-				bomIdentities = append(bomIdentities, BomIdentity{
-					IdenityType: keyValue[0],
-					Identity:    keyValue[1],
+				identifiers = append(identifiers, Identifier{
+					IdType:  keyValue[0],
+					IdValue: keyValue[1],
 				})
 			}
-			outboundDeliverables[i]["identities"] = bomIdentities
+			outboundDeliverables[i]["identifiers"] = identifiers
 		}
 	}
 	if len(odelArtsJson) > 0 && len(odelArtsJson) != len(odelId) {
@@ -501,7 +506,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelType, "odeltype", []string{}, "Deliverable Type (multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelDigests, "odeldigests", []string{}, "Deliverable Digests (multiple allowed, separate several digests for one Deliverable with commas)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&tagsArr, "tagsarr", []string{}, "Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon)")
-	addreleaseCmd.PersistentFlags().StringArrayVar(&identities, "identities", []string{}, "Deliverable Identity IdenityType-Idenity Pairs (multiple allowed, separate several IdenityType-Idenity pairs for one Deliverable with commas, and seprate IdenityType-Idenity in a pair with colon)")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&identifiers, "odelidentifiers", []string{}, "Deliverable Identifiers IdentifierType-IdentifierValue Pairs (multiple allowed, separate several IdentityType-Identity pairs for one Deliverable with commas, and seprate IdentityType-Identity in a pair with colon)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&dateStart, "datestart", []string{}, "Deliverable Build Start date and time (optional, multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&dateEnd, "dateend", []string{}, "Deliverable Build End date and time (optional, multiple allowed)")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelVersion, "odelversion", []string{}, "Deliverable version, if different from release (multiple allowed)")

@@ -48,24 +48,18 @@ type TagInput struct {
 }
 
 type Artifact struct {
-	DisplayIdentifier string        `json:"displayIdentifier"`
-	Version           string        `json:"version"`
-	DownloadLinks     []Link        `json:"downloadLinks"`
-	InventoryTypes    []string      `json:"inventoryTypes"`
-	BomFormat         string        `json:"bomFormat,omitempty"`
-	Type              string        `json:"type"`
-	Identities        []BomIdentity `json:"identities"`
-	StoredIn          string        `json:"storedIn"`
-	Tags              []TagInput    `json:"tags"`
-	File              []byte        `json:"file"`
-	FilePath          string        `json:"filePath,omitempty"`
-	StripBom          string        `json:"stripBom,omitempty"`
-	Artifacts         []Artifact    `json:"artifacts,omitempty"`
-}
-
-type BomIdentity struct {
-	Identity    string `json:"identity"`
-	IdenityType string `json:"idenityType"`
+	DisplayIdentifier string     `json:"displayIdentifier"`
+	Version           string     `json:"version"`
+	DownloadLinks     []Link     `json:"downloadLinks"`
+	InventoryTypes    []string   `json:"inventoryTypes"`
+	BomFormat         string     `json:"bomFormat,omitempty"`
+	Type              string     `json:"type"`
+	StoredIn          string     `json:"storedIn"`
+	Tags              []TagInput `json:"tags"`
+	File              []byte     `json:"file"`
+	FilePath          string     `json:"filePath,omitempty"`
+	StripBom          string     `json:"stripBom,omitempty"`
+	Artifacts         []Artifact `json:"artifacts,omitempty"`
 }
 type Link struct {
 	Uri     string `json:"uri"`
