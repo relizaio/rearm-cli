@@ -735,6 +735,22 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
+var releasecompletionfinalizerCmd = &cobra.Command{
+	Use:   "releasefinalizer",
+	Short: "this command calls finalizers indicating completion of CI process for a release.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if releaseId == "" {
+			fmt.Println("Error: --releaseid is required")
+			os.Exit(1)
+		}
+
+		req := graphql.NewRequest(`mutation releasecompletionfinalizerProgrammatic($release: ID!) { releasecompletionfinalizerProgrammatic(release: $release) }`)
+		req.Var("release", releaseId)
+
+		fmt.Println(sendRequest(req, "releasecompletionfinalizerProgrammatic"))
+	},
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -779,6 +795,9 @@ func init() {
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
 
+	releasecompletionfinalizerCmd.Flags().StringVar(&releaseId, "releaseid", "", "UUID of release to finalize (required)")
+	releasecompletionfinalizerCmd.MarkFlagRequired("releaseid")
+
 	// flags for createcomponent command
 	createComponentCmd.PersistentFlags().StringVar(&componentName, "name", "", "Name of component to create")
 	createComponentCmd.MarkPersistentFlagRequired("name")
@@ -821,6 +840,7 @@ func init() {
 	rootCmd.AddCommand(checkReleaseByHashCmd)
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
+	rootCmd.AddCommand(releasecompletionfinalizerCmd)
 }
 
 func sendRequest(req *graphql.Request, endpoint string) string {
