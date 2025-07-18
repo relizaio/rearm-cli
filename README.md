@@ -43,9 +43,11 @@ It is possible to set authentication data via explicit flags, login command (see
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm-hub)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
+
 9. [CycloneDX xBOM Utilities](#9-use-case-cyclonedx-xbom-utilities)
     1. [Fix incorrect OCI purl generated via cdxgen](#91-fix-incorrect-oci-purl-generated-via-cdxgen)
     2. [BOM supplier enrichment with BEAR](#92-bom-supplier-enrichment-with-bear)
+10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -394,6 +396,29 @@ Flags stand for:
 - **--bearUri** - URI of BEAR service to use, default to https://beardemo.rearmhq.com (currently, publicly available, data currently available under Apache 2.0 license)
 - **--infile (-f)** - input cyclonedx sbom json file. (Optional - reades from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json. (Optional - writes to stdout when not specified)
+
+### 10. Use Case: Finalize Release After CI Completion
+
+The `releasefinalizer` command is used to run a release finalizer, which can be executed after submitting a release or after adding a new deliverable to a release. This command signals the completion of the CI process for a release in ReARM, ensuring all post-release or post-deliverable actions are triggered.
+
+Typical workflow:
+
+Submit a release or add a new deliverable to a release
+Run the release finalizer to complete the CI process
+
+Sample command (Docker):
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    releasefinalizer \
+    -i <component_or_org_wide_api_id> \
+    -k <component_or_org_wide_api_key> \
+    --releaseid <release_uuid>
+```
+
+Flags stand for :
+- **--releaseid** - UUID of the release to finalize (required)
+
+This command can be integrated into CI/CD workflows to signal the end of the release process, ensuring that all finalization hooks and actions are called in ReARM.
 
 # Development of ReARM CLI
 
