@@ -295,7 +295,7 @@ func processSingleArtifactInput(artInput *Artifact, indexPrefix string, fileJCou
 	return artInput
 }
 
-func buildCommitMap() *Commit {
+func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *Commit {
 	var commitObj Commit
 	// TODO commit author and email is missing from here
 	commitObj.Uri = vcsUri
@@ -304,6 +304,18 @@ func buildCommitMap() *Commit {
 	commitObj.CommitMessage = commitMessage
 	commitObj.VcsTag = vcsTag
 	commitObj.DateActual = dateActual
+	if sceArts != "" {
+		var sceArtifacts []Artifact
+		err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
+		if err != nil {
+			fmt.Println("Error parsing Artifact Input: ", err)
+			os.Exit(1)
+		} else {
+			indexPrefix := "variables.releaseInputProg.sourceCodeEntry.artifacts."
+			artifactsObject := *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
+			commitObj.Artifacts = artifactsObject
+		}
+	}
 	return &commitObj
 }
 
@@ -388,53 +400,29 @@ var addreleaseCmd = &cobra.Command{
 			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
 		}
 
-		// Create variable to hold future value for body["sourceCodeEntry"]
-		var sourceCodeEntry *Commit
-
 		if commit != "" {
-			sourceCodeEntry = buildCommitMap()
+			body["sourceCodeEntry"] = *buildCommitMap(&filesCounter, &locationMap, &filesMap)
 		}
 
 		if len(commits) > 0 {
 			// fmt.Println(commits)
 			bodyCommits := *buildCommitsInBody()
-
-			// Apply VCS properties to all commits in bodyCommits
-			for i := range bodyCommits {
+			body["commits"] = bodyCommits
+			// if commit is not present but we are here, use first line as commit
+			if len(commit) < 1 && len(bodyCommits) > 0 {
+				mainCommitFromBody := bodyCommits[0]
 				if vcsTag != "" {
-					bodyCommits[i].VcsTag = vcsTag
+					mainCommitFromBody.VcsTag = vcsTag
 				}
 				if vcsUri != "" {
-					bodyCommits[i].Uri = vcsUri
+					mainCommitFromBody.Uri = vcsUri
 				}
 				if vcsType != "" {
-					bodyCommits[i].Type = vcsType
+					mainCommitFromBody.Type = vcsType
 				}
-			}
 
-			body["commits"] = bodyCommits
-			// if commit is not set and there are bodyCommits, use first body commit
-			// or if commit is set but matches the first bodyCommit hash
-			if (len(commit) < 1 && len(bodyCommits) > 0) || (len(commit) > 0 && len(bodyCommits) > 0 && commit == bodyCommits[0].Commit) {
-				sourceCodeEntry = &bodyCommits[0]
+				body["sourceCodeEntry"] = mainCommitFromBody
 			}
-		}
-
-		// Set body["sourceCodeEntry"] to the variable value if it was populated
-		if sourceCodeEntry != nil {
-			if sceArts != "" {
-				var sceArtifacts []Artifact
-				err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
-				if err != nil {
-					fmt.Println("Error parsing Artifact Input: ", err)
-					os.Exit(1)
-				} else {
-					indexPrefix := "variables.releaseInputProg.sourceCodeEntry.artifacts."
-					artifactsObject := *processArtifactsInput(&sceArtifacts, indexPrefix, &filesCounter, &locationMap, &filesMap)
-					sourceCodeEntry.Artifacts = artifactsObject
-				}
-			}
-			body["sourceCodeEntry"] = sourceCodeEntry
 		}
 		if releaseArts != "" {
 			body["artifacts"] = *buildReleaseArts(&filesCounter, &locationMap, &filesMap)
