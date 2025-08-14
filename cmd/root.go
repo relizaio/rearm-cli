@@ -914,7 +914,7 @@ func handleResponse(err error, resp *resty.Response) {
 	var gqlResp GraphQLResponse
 	gqlErr := json.Unmarshal(resp.Body(), &gqlResp)
 	if gqlErr != nil {
-		fmt.Println("failed to unmarshal response: %v", gqlErr)
+		fmt.Printf("failed to unmarshal response: %v\n", gqlErr)
 		os.Exit(1)
 	}
 	if len(gqlResp.Errors) > 0 {
