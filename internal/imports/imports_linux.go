@@ -4,6 +4,7 @@ package imports
 import (
 	_ "bytes"
 	_ "context"
+	_ "crypto/rand"
 	_ "encoding/base64"
 	_ "encoding/json"
 	_ "fmt"
