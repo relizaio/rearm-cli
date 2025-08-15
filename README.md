@@ -400,6 +400,46 @@ Flags stand for:
 - **--infile (-f)** - input cyclonedx sbom json file. (Optional - reades from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json. (Optional - writes to stdout when not specified)
 
+### 9.3 Merge Multiple BOMs
+
+The `merge-boms` command allows you to merge multiple CycloneDX BOMs into a single consolidated BOM. This is useful when you have multiple BOMs from different components or services that need to be combined into a unified view.
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    bomutils merge-boms \
+    --input-files bom1.json,bom2.json,bom3.json \
+    --name "merged-application" \
+    --version "1.0.0" \
+    --group "com.example" \
+    --structure FLAT \
+    --outfile merged-bom.json
+```
+
+Sample command with hierarchical structure:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    bomutils merge-boms \
+    --input-files frontend-bom.json,backend-bom.json \
+    --name "full-stack-app" \
+    --version "2.1.0" \
+    --structure HIERARCHICAL \
+    --root-component-merge-mode PRESERVE_UNDER_NEW_ROOT \
+    --purl "pkg:generic/full-stack-app@2.1.0"
+```
+
+Flags stand for:
+- **--input-files** - Comma-separated list of input BOM file paths to merge (required)
+- **--name** - Name for the new root component of the merged BOM (optional)
+- **--version** - Version for the new root component of the merged BOM (optional)
+- **--group** - Group for the new root component of the merged BOM (optional)
+- **--structure** - Structure of the merged BOM: FLAT or HIERARCHICAL (default: FLAT)
+- **--root-component-merge-mode** - How to handle root components: PRESERVE_UNDER_NEW_ROOT or FLATTEN_UNDER_NEW_ROOT (default: PRESERVE_UNDER_NEW_ROOT)
+- **--purl** - Set bom-ref and purl for the root merged component (optional)
+- **--outfile** - Output file path to write merged BOM (optional - writes to stdout when not specified)
+
 ### 10. Use Case: Finalize Release After CI Completion
 
 The `releasefinalizer` command is used to run a release finalizer, which can be executed after submitting a release or after adding a new deliverable to a release. This command signals the completion of the CI process for a release in ReARM, ensuring all post-release or post-deliverable actions are triggered.
