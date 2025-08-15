@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.24.5-alpine3.22@sha256:daae04ebad0c21149979cd8e9db38f565ecefd8547cf4a591240dc1972cf1399 as build-stage
+FROM --platform=$BUILDPLATFORM golang:1.25.0-alpine3.22@sha256:77dd832edf2752dafd030693bef196abb24dcba3a2bc3d7a6227a7a1dae73169 AS build-stage
 WORKDIR /build
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
@@ -10,7 +10,7 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o ./ ./...
 
-FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1 as release-stage
+FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1 AS release-stage
 ARG CI_ENV=noci
 ARG GIT_COMMIT=git_commit_undefined
 ARG GIT_BRANCH=git_branch_undefined
@@ -24,9 +24,9 @@ USER apprunner
 RUN echo "version=$VERSION" > /app/version && echo "commit=$GIT_COMMIT" >> /app/version && echo "branch=$GIT_BRANCH" >> /app/version
 RUN mkdir /app/localdata
 
-LABEL org.opencontainers.image.revision $GIT_COMMIT
-LABEL git_branch $GIT_BRANCH
-LABEL ci_environment $CI_ENV
-LABEL org.opencontainers.image.version $VERSION
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+LABEL git_branch=$GIT_BRANCH
+LABEL ci_environment=$CI_ENV
+LABEL org.opencontainers.image.version=$VERSION
 
 ENTRYPOINT ["/app/app"]
