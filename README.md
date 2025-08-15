@@ -43,10 +43,10 @@ It is possible to set authentication data via explicit flags, login command (see
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm-hub)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
-
 9. [CycloneDX xBOM Utilities](#9-use-case-cyclonedx-xbom-utilities)
     1. [Fix incorrect OCI purl generated via cdxgen](#91-fix-incorrect-oci-purl-generated-via-cdxgen)
     2. [BOM supplier enrichment with BEAR](#92-bom-supplier-enrichment-with-bear)
+    3. [Merge Multiple BOMs](#93-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
 
 ## 1. Use Case: Get Version Assignment From ReARM
@@ -403,6 +403,8 @@ Flags stand for:
 ### 9.3 Merge Multiple BOMs
 
 The `merge-boms` command allows you to merge multiple CycloneDX BOMs into a single consolidated BOM. This is useful when you have multiple BOMs from different components or services that need to be combined into a unified view.
+
+Currently only works with CycloneDX 1.6.
 
 Sample command:
 
