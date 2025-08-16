@@ -54,7 +54,15 @@ func mergeDependenciesPreserve(roots []*cdx.Component, allDependencies []*cdx.De
 	}
 	for _, dep := range allDependencies {
 		if dep != nil {
-			mergedDependencies = append(mergedDependencies, *dep)
+			// Ensure Dependencies field is not nil to prevent JSON validation issues
+			if dep.Dependencies == nil {
+				emptyDeps := []string{}
+				depCopy := *dep
+				depCopy.Dependencies = &emptyDeps
+				mergedDependencies = append(mergedDependencies, depCopy)
+			} else {
+				mergedDependencies = append(mergedDependencies, *dep)
+			}
 		}
 	}
 	return mergedDependencies
@@ -70,7 +78,7 @@ func mergeDependenciesFlatten(roots []*cdx.Component, allDependencies []*cdx.Dep
 	}
 	var flattenedDependsOn []string
 	for _, root := range roots {
-		if root != nil && depMap[root.BOMRef] != nil {
+		if root != nil && depMap[root.BOMRef] != nil && depMap[root.BOMRef].Dependencies != nil {
 			flattenedDependsOn = append(flattenedDependsOn, (*depMap[root.BOMRef].Dependencies)...)
 		}
 	}
@@ -89,7 +97,15 @@ func mergeDependenciesFlatten(roots []*cdx.Component, allDependencies []*cdx.Dep
 			}
 		}
 		if !isRoot && dep != nil {
-			mergedDependencies = append(mergedDependencies, *dep)
+			// Ensure Dependencies field is not nil to prevent JSON validation issues
+			if dep.Dependencies == nil {
+				emptyDeps := []string{}
+				depCopy := *dep
+				depCopy.Dependencies = &emptyDeps
+				mergedDependencies = append(mergedDependencies, depCopy)
+			} else {
+				mergedDependencies = append(mergedDependencies, *dep)
+			}
 		}
 	}
 	return mergedDependencies
