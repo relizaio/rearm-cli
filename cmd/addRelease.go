@@ -235,7 +235,7 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 			var artifactsInput []Artifact
 			err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
 			if err != nil {
-				fmt.Println("Error parsing Artifact Input: ", err)
+				fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 				os.Exit(1)
 			} else {
 				indexPrefix := "variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts."
@@ -308,7 +308,7 @@ func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMa
 		var sceArtifacts []Artifact
 		err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
 		if err != nil {
-			fmt.Println("Error parsing Artifact Input: ", err)
+			fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 			os.Exit(1)
 		} else {
 			indexPrefix := "variables.releaseInputProg.sourceCodeEntry.artifacts."

@@ -472,7 +472,7 @@ var addODeliverableCmd = &cobra.Command{
 					var artifactsInput []Artifact
 					err := json.Unmarshal([]byte(artifactsInputString), &artifactsInput)
 					if err != nil {
-						fmt.Println("Error parsing Artifact Input: ", err)
+						fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 					} else {
 						artifactsObject := make([]Artifact, len(artifactsInput))
 						for j, artifactInput := range artifactsInput {
