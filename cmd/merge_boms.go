@@ -90,12 +90,13 @@ var mergeBomsCmd = &cobra.Command{
 		)
 
 		// 3.2 Components: FLAT or HIERARCHICAL
-		if MergeStructure == "FLAT" {
-			flatComponents := mergeFlatComponents(componentMap)
-			mergedBOM.Components = &flatComponents
-		} else {
+		if MergeStructure == "HIERARCHICAL" {
 			hierComponents := mergeHierarchicalComponents(roots, boms)
 			mergedBOM.Components = &hierComponents
+		} else {
+			// Default to FLAT when MergeStructure is empty or "FLAT"
+			flatComponents := mergeFlatComponents(componentMap)
+			mergedBOM.Components = &flatComponents
 		}
 
 		// 3.3 Dependencies: merge according to root component merge mode
