@@ -148,9 +148,20 @@ func fixPurlFunc() {
 		newPurl = preparePurlsForGivenOCIImage(oldPurl, ociImage)
 	}
 
-	replaceddata := replaceStringInJSONBytes(data, oldPurl, newPurl)
-
-	bom = readBomFromBytes(replaceddata)
+	// If old PURL is empty, add the PURL field directly to the BOM structure
+	if oldPurl == "" {
+		bom.Metadata.Component.PackageURL = newPurl
+		if debug == "true" {
+			fmt.Printf("Added new PURL to main component: %s\n", newPurl)
+		}
+	} else {
+		// Replace existing PURL in the JSON data
+		replaceddata := replaceStringInJSONBytes(data, oldPurl, newPurl)
+		bom = readBomFromBytes(replaceddata)
+		if debug == "true" {
+			fmt.Printf("Replaced PURL: %s -> %s\n", oldPurl, newPurl)
+		}
+	}
 
 	err = writeOutput(bom)
 	if err != nil {
