@@ -1,0 +1,119 @@
+{
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "r-sbom 0.0.1-21",
+  "documentNamespace": "https://reliza.io/r-sbom/0.0.1-21/Ine8z4owgEqR1zvIlmFq1w",
+  "creationInfo": {
+    "created": "2025-09-17T18:52:10Z",
+    "creators": [
+      "Organization: Reliza",
+      "Tool: Microsoft.SBOMTool-4.1.2"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-RootPackage"
+  ],
+  "packages": [
+    {
+      "name": "r-sbom",
+      "SPDXID": "SPDXRef-RootPackage",
+      "downloadLocation": "NOASSERTION",
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "086fc7fc0465a182cc79b5c4ccbfdd332e16c07d"
+      },
+      "filesAnalyzed": true,
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoFromFiles": ["NOASSERTION"],
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "versionInfo": "0.0.1-21"
+    },
+    {
+      "name": "zlib",
+      "SPDXID": "SPDXRef-Package-55A3781D81411A9600560D01C258C9B2CEE8F718F2D3FBEBDED03FD035A18F3A",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Zlib",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "versionInfo": "1.3.1-r2",
+      "supplier": "Organization: Natanael Copa <ncopa@alpinelinux.org>"
+    },
+    {
+      "name": "icu-libs",
+      "SPDXID": "SPDXRef-Package-6954D447D358E40C3B9CC83A3E4C7C36B76AA8F256B35B0FA4170271B48E06E9",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ICU",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "versionInfo": "74.2-r0",
+      "supplier": "Organization: Natanael Copa <ncopa@alpinelinux.org>"
+    }
+  ],
+  "files": [
+    {
+      "fileName": "./README.md",
+      "SPDXID": "SPDXRef-File--README.md-1EEBB6B534251A293594A8DA7146877D0E471583",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1a81dd0e1b1e361c36a2df7b1d1a68f87e12b08c23c8db989674f79da4c4a15c"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "1eebb6b534251a293594a8da7146877d0e471583"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": ["NOASSERTION"],
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": "./LICENSE.md",
+      "SPDXID": "SPDXRef-File--LICENSE.md-B369C3326C7FC9506CA6AA5A8924994CF56FAD5E",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "34457d6dcbe91461c2dd584e94b1ac27d95abd76994d7e8f842b433cafcacc58"
+        },
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "b369c3326c7fc9506ca6aa5a8924994cf56fad5e"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": ["NOASSERTION"],
+      "copyrightText": "NOASSERTION"
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-RootPackage",
+      "spdxElementId": "SPDXRef-DOCUMENT"
+    },
+    {
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-55A3781D81411A9600560D01C258C9B2CEE8F718F2D3FBEBDED03FD035A18F3A",
+      "spdxElementId": "SPDXRef-RootPackage"
+    },
+    {
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-6954D447D358E40C3B9CC83A3E4C7C36B76AA8F256B35B0FA4170271B48E06E9",
+      "spdxElementId": "SPDXRef-RootPackage"
+    },
+    {
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-File--README.md-1EEBB6B534251A293594A8DA7146877D0E471583",
+      "spdxElementId": "SPDXRef-RootPackage"
+    },
+    {
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-File--LICENSE.md-B369C3326C7FC9506CA6AA5A8924994CF56FAD5E",
+      "spdxElementId": "SPDXRef-RootPackage"
+    }
+  ],
+  "externalDocumentRefs": []
+}

@@ -400,7 +400,26 @@ Flags stand for:
 - **--infile (-f)** - input cyclonedx sbom json file. (Optional - reades from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json. (Optional - writes to stdout when not specified)
 
-### 9.3 Merge Multiple BOMs
+### 9.3 Convert SPDX to CycloneDX
+
+The `convert-spdx` command converts SPDX 2.2/2.3 JSON BOMs to CycloneDX 1.6 JSON format with high fidelity preservation of metadata, licenses, PURLs, and dependencies.
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    bomutils convert-spdx \
+    --infile input-spdx.json \
+    --outfile output-cyclonedx.json \
+    --validate
+```
+
+Flags stand for:
+- **--infile** - Input SPDX JSON file path (required)
+- **--outfile** - Output CycloneDX JSON file path (required)  
+- **--validate** - Validate the generated CycloneDX BOM (optional)
+
+### 9.4 Merge Multiple BOMs
 
 The `merge-boms` command allows you to merge multiple CycloneDX BOMs into a single consolidated BOM. This is useful when you have multiple BOMs from different components or services that need to be combined into a unified view.
 

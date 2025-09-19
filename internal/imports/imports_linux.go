@@ -13,6 +13,8 @@ import (
 	_ "github.com/machinebox/graphql"
 	_ "github.com/mitchellh/go-homedir"
 	_ "github.com/package-url/packageurl-go"
+	_ "github.com/spdx/tools-golang/spdx/v2/common"
+	_ "github.com/spdx/tools-golang/spdx/v2/v2_3"
 	_ "github.com/spf13/cobra"
 	_ "github.com/spf13/pflag"
 	_ "github.com/spf13/viper"
@@ -21,6 +23,7 @@ import (
 	_ "net/http"
 	_ "os"
 	_ "path/filepath"
+	_ "regexp"
 	_ "strconv"
 	_ "strings"
 )
