@@ -87,18 +87,18 @@ func parseLicenseExpression(licenseStr string) cdx.Licenses {
 	if licenseStr == "" || licenseStr == "NOASSERTION" {
 		return nil
 	}
-	
+
 	// For simple license IDs like "MIT", "Apache-2.0", create license objects
 	// For complex expressions, use expression field
 	if isSimpleLicenseId(licenseStr) {
 		return cdx.Licenses{{
 			License: &cdx.License{
-				ID: licenseStr,
+				ID:              licenseStr,
 				Acknowledgement: cdx.LicenseAcknowledgementDeclared,
 			},
 		}}
 	}
-	
+
 	// Keep complex license expressions as expressions
 	return cdx.Licenses{{Expression: licenseStr}}
 }
@@ -106,76 +106,15 @@ func parseLicenseExpression(licenseStr string) cdx.Licenses {
 // Helper function to check if a license string is a simple SPDX license ID
 func isSimpleLicenseId(license string) bool {
 	// First check if it's a complex expression
-	if strings.Contains(license, " AND ") || 
-	   strings.Contains(license, " OR ") || 
-	   strings.Contains(license, " WITH ") ||
-	   strings.Contains(license, "(") ||
-	   strings.Contains(license, ")") {
+	if strings.Contains(license, " AND ") ||
+		strings.Contains(license, " OR ") ||
+		strings.Contains(license, " WITH ") ||
+		strings.Contains(license, "(") ||
+		strings.Contains(license, ")") {
 		return false
 	}
-	
-	// Then check if it's a valid SPDX license identifier
-	return isValidSPDXLicenseId(license)
-}
-
-// Check if a license ID is a valid SPDX license identifier
-func isValidSPDXLicenseId(license string) bool {
-	// Common valid SPDX license identifiers
-	validLicenses := map[string]bool{
-		"MIT": true,
-		"Apache-2.0": true,
-		"GPL-2.0": true,
-		"GPL-2.0-only": true,
-		"GPL-2.0-or-later": true,
-		"GPL-3.0": true,
-		"GPL-3.0-only": true,
-		"GPL-3.0-or-later": true,
-		"LGPL-2.1": true,
-		"LGPL-2.1-only": true,
-		"LGPL-2.1-or-later": true,
-		"LGPL-3.0": true,
-		"LGPL-3.0-only": true,
-		"LGPL-3.0-or-later": true,
-		"BSD-2-Clause": true,
-		"BSD-3-Clause": true,
-		"ISC": true,
-		"MPL-2.0": true,
-		"CC0-1.0": true,
-		"Unlicense": true,
-		"Zlib": true,
-		"ICU": true,
-		"WTFPL": true,
-		"0BSD": true,
-		"AFL-3.0": true,
-		"AGPL-3.0": true,
-		"AGPL-3.0-only": true,
-		"AGPL-3.0-or-later": true,
-		"Apache-1.1": true,
-		"Artistic-2.0": true,
-		"BlueOak-1.0.0": true,
-		"BSL-1.0": true,
-		"CECILL-2.1": true,
-		"EPL-1.0": true,
-		"EPL-2.0": true,
-		"EUPL-1.1": true,
-		"EUPL-1.2": true,
-		"GPL-2.0+": true,
-		"GPL-3.0+": true,
-		"LGPL-2.1+": true,
-		"LGPL-3.0+": true,
-		"MS-PL": true,
-		"MS-RL": true,
-		"NCSA": true,
-		"OFL-1.1": true,
-		"OSL-3.0": true,
-		"PostgreSQL": true,
-		"UPL-1.0": true,
-		"Vim": true,
-		"X11": true,
-		"Xnet": true,
-	}
-	
-	return validLicenses[license]
+	// Here we assume that it's already a valid SPDX license identifier
+	return true
 }
 
 func convertChecksums(checksums []common.Checksum) []cdx.Hash {
@@ -194,7 +133,7 @@ func convertChecksums(checksums []common.Checksum) []cdx.Hash {
 		default:
 			continue // Skip unknown algorithms
 		}
-		
+
 		hashes = append(hashes, cdx.Hash{
 			Algorithm: alg,
 			Value:     checksum.Value,
@@ -205,13 +144,13 @@ func convertChecksums(checksums []common.Checksum) []cdx.Hash {
 
 func buildProperties(pkg *v2_3.Package) []cdx.Property {
 	var properties []cdx.Property
-	
+
 	// Core SPDX properties
 	addProperty(&properties, "spdx:package:"+string(pkg.PackageSPDXIdentifier), pkg.PackageName)
 	addProperty(&properties, "spdx:spdxid", string(pkg.PackageSPDXIdentifier))
 	addProperty(&properties, "spdx:license-concluded", pkg.PackageLicenseConcluded)
 	addProperty(&properties, "spdx:download-location", pkg.PackageDownloadLocation)
-	
+
 	// Enhanced properties from official library
 	addPropertyIfNotEmpty(&properties, "spdx:license-declared", pkg.PackageLicenseDeclared)
 	addPropertyIfNotEmpty(&properties, "spdx:homepage", pkg.PackageHomePage)
@@ -225,17 +164,17 @@ func buildProperties(pkg *v2_3.Package) []cdx.Property {
 	addPropertyIfNotEmpty(&properties, "spdx:package-file-name", pkg.PackageFileName)
 	addPropertyIfNotEmpty(&properties, "spdx:license-comments", pkg.PackageLicenseComments)
 	addPropertyIfNotEmpty(&properties, "spdx:package-comment", pkg.PackageComment)
-	
+
 	// Package verification code
 	if pkg.PackageVerificationCode != nil {
 		addProperty(&properties, "spdx:package-verification-code", pkg.PackageVerificationCode.Value)
 	}
-	
+
 	// Attribution texts
 	for i, attribution := range pkg.PackageAttributionTexts {
 		addProperty(&properties, fmt.Sprintf("spdx:attribution-text-%d", i+1), attribution)
 	}
-	
+
 	return properties
 }
 
@@ -274,13 +213,13 @@ func extractAuthor(pkg *v2_3.Package) string {
 			return author
 		}
 	}
-	
+
 	// Fallback to supplier - handle SPDX library structure
 	if pkg.PackageSupplier != nil && pkg.PackageSupplier.Supplier != "" && pkg.PackageSupplier.Supplier != "NOASSERTION" {
 		// The SPDX library separates type and name, so we need to extract just the name
 		return extractNameFromSupplierString(pkg.PackageSupplier.Supplier)
 	}
-	
+
 	return ""
 }
 
@@ -289,7 +228,7 @@ func parsePersonOrOrganization(input string) string {
 	if input == "" || input == "NOASSERTION" {
 		return ""
 	}
-	
+
 	// Handle "Person: Name (email)" format
 	if strings.HasPrefix(input, "Person: ") {
 		name := strings.TrimPrefix(input, "Person: ")
@@ -299,7 +238,7 @@ func parsePersonOrOrganization(input string) string {
 		}
 		return strings.TrimSpace(name)
 	}
-	
+
 	// Handle "Organization: Name" format
 	if strings.HasPrefix(input, "Organization: ") {
 		name := strings.TrimPrefix(input, "Organization: ")
@@ -309,7 +248,7 @@ func parsePersonOrOrganization(input string) string {
 		}
 		return strings.TrimSpace(name)
 	}
-	
+
 	return ""
 }
 
@@ -318,40 +257,40 @@ func extractNameFromSupplierString(supplier string) string {
 	if supplier == "" || supplier == "NOASSERTION" {
 		return ""
 	}
-	
+
 	// Remove email part if present
 	name := supplier
 	if idx := strings.Index(name, " <"); idx != -1 {
 		name = name[:idx]
 	}
-	
+
 	return strings.TrimSpace(name)
 }
 
 // Extract external references from SPDX package
 func extractExternalReferences(pkg *v2_3.Package) []cdx.ExternalReference {
 	var extRefs []cdx.ExternalReference
-	
+
 	// Add download location if available
-	if pkg.PackageDownloadLocation != "" && 
-	   pkg.PackageDownloadLocation != "NOASSERTION" && 
-	   pkg.PackageDownloadLocation != "NONE" {
+	if pkg.PackageDownloadLocation != "" &&
+		pkg.PackageDownloadLocation != "NOASSERTION" &&
+		pkg.PackageDownloadLocation != "NONE" {
 		extRefs = append(extRefs, cdx.ExternalReference{
 			Type: cdx.ERTypeDistribution,
 			URL:  pkg.PackageDownloadLocation,
 		})
 	}
-	
+
 	// Add homepage if available
-	if pkg.PackageHomePage != "" && 
-	   pkg.PackageHomePage != "NOASSERTION" && 
-	   pkg.PackageHomePage != "NONE" {
+	if pkg.PackageHomePage != "" &&
+		pkg.PackageHomePage != "NOASSERTION" &&
+		pkg.PackageHomePage != "NONE" {
 		extRefs = append(extRefs, cdx.ExternalReference{
 			Type: cdx.ERTypeWebsite,
 			URL:  pkg.PackageHomePage,
 		})
 	}
-	
+
 	return extRefs
 }
 
@@ -360,7 +299,7 @@ func extractGroupFromPURL(purlString string) string {
 	if purlString == "" {
 		return ""
 	}
-	
+
 	// Parse the PURL to extract namespace
 	if strings.HasPrefix(purlString, "pkg:") {
 		// Find the namespace part in PURL format: pkg:type/namespace/name@version
@@ -379,10 +318,9 @@ func extractGroupFromPURL(purlString string) string {
 			return namespace
 		}
 	}
-	
+
 	return ""
 }
-
 
 // UUID generation
 func generateUUID() string {
@@ -403,12 +341,12 @@ func validateBOM(filename string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read BOM file: %w", err)
 	}
-	
+
 	var bom cdx.BOM
 	if err := json.Unmarshal(data, &bom); err != nil {
 		return fmt.Errorf("invalid CycloneDX JSON: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -425,13 +363,13 @@ func contains(slice []string, item string) bool {
 func removeDuplicates(slice []string) []string {
 	keys := make(map[string]bool)
 	var result []string
-	
+
 	for _, item := range slice {
 		if !keys[item] {
 			keys[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }
