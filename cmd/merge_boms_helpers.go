@@ -40,7 +40,7 @@ func mergeHierarchicalComponents(roots []*cdx.Component, boms []*cdx.BOM) []cdx.
 
 // mergeDependenciesPreserve creates dependencies for PRESERVE_UNDER_NEW_ROOT mode
 func mergeDependenciesPreserve(roots []*cdx.Component, allDependencies []*cdx.Dependency, mergedRootRef string) []cdx.Dependency {
-	var rootRefs []string
+	rootRefs := []string{}
 	for _, root := range roots {
 		if root != nil && root.BOMRef != "" {
 			rootRefs = append(rootRefs, root.BOMRef)
@@ -76,7 +76,7 @@ func mergeDependenciesFlatten(roots []*cdx.Component, allDependencies []*cdx.Dep
 			depMap[dep.Ref] = dep
 		}
 	}
-	var flattenedDependsOn []string
+	flattenedDependsOn := []string{}
 	for _, root := range roots {
 		if root != nil && depMap[root.BOMRef] != nil && depMap[root.BOMRef].Dependencies != nil {
 			flattenedDependsOn = append(flattenedDependsOn, (*depMap[root.BOMRef].Dependencies)...)
