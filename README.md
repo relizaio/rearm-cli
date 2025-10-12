@@ -49,6 +49,7 @@ It is possible to set authentication data via explicit flags, login command (see
     3. [Merge Multiple BOMs](#93-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
 11. [Transparency Exchange API (TEA) Discovery](#11-use-case-transparency-exchange-api-tea-discovery)
+12. [Complete TEA Flow - Product and Component Details](#12-use-case-complete-tea-flow---product-and-component-details)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -557,6 +558,69 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     tea discovery \
     -d true \
     --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
+```
+
+## 12. Use Case: Complete TEA Flow - Product and Component Details
+
+The `tea full_tea_flow` command performs a complete TEA discovery and data retrieval flow. It discovers a product release from a TEI and retrieves comprehensive information about the product and all its components, including artifacts and their formats.
+
+**The flow:**
+1. Performs TEI discovery to get the product release UUID
+2. Retrieves product release details (product name and version)
+3. For each component in the product:
+   - If the component has a pinned release, uses that release
+   - If the component only has a UUID (no pinned release), fetches the latest available release and displays a notification
+   - Retrieves component release details (component name and version)
+   - Lists all artifacts in the latest collection with their formats, including:
+     - Artifact type
+     - Format description
+     - MIME type
+     - Download URL
+     - Signature URL (if available)
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea full_tea_flow \
+    --tei "urn:tei:uuid:demo.rearmhq.com:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
+```
+
+Sample command with debug output:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea full_tea_flow \
+    -d true \
+    --tei "urn:tei:uuid:demo.rearmhq.com:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
+```
+
+**Flags:**
+- **--tei** - Transparency Exchange Identifier to resolve (required)
+- **-d** - Enable debug mode to see detailed API calls and processing steps (optional)
+
+**Sample Output:**
+
+```
+=== Product Information ===
+Product Name: Example Product
+Version: 1.2.3
+
+Note: Component 'example-component' does not have a pinned release. Selecting latest available release.
+
+--- Component: example-component ---
+Version: 2.0.1
+
+  Artifact Type: BOM
+    - Description: CycloneDX SBOM in JSON format
+      Media Type: application/vnd.cyclonedx+json
+      URL: https://example.com/artifacts/sbom.json
+      Signature URL: https://example.com/artifacts/sbom.json.sig
+
+  Artifact Type: OTHER
+    - Description: SIGNATURE Raw Artifact as Uploaded to ReARM
+      Media Type: text/plain; charset=utf-8
+      URL: https://registry.example.com/image:2.0.1
 ```
 
 # Development of ReARM CLI

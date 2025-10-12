@@ -93,11 +93,80 @@ type TEADiscoveryResponse struct {
 	Versions           []string `json:"versions"`
 }
 
+// TEA API response structures
+type TEAProductRelease struct {
+	UUID        string          `json:"uuid"`
+	ProductName string          `json:"productName"`
+	Version     string          `json:"version"`
+	Components  []TEAComponentRef `json:"components"`
+}
+
+type TEAComponentRef struct {
+	UUID    string  `json:"uuid"`
+	Release *string `json:"release,omitempty"`
+}
+
+type TEAComponent struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type TEAComponentRelease struct {
+	Release          TEAReleaseInfo `json:"release"`
+	LatestCollection *TEACollection `json:"latestCollection,omitempty"`
+}
+
+type TEAReleaseInfo struct {
+	UUID          string `json:"uuid"`
+	ComponentName string `json:"componentName"`
+	Version       string `json:"version"`
+}
+
+type TEARelease struct {
+	UUID string `json:"uuid"`
+}
+
+type TEACollection struct {
+	Artifacts []TEAArtifact `json:"artifacts"`
+}
+
+type TEAArtifact struct {
+	Type    string          `json:"type"`
+	Formats []TEAArtifactFormat `json:"formats"`
+}
+
+type TEAArtifactFormat struct {
+	Description  string `json:"description,omitempty"`
+	MimeType     string `json:"mimeType"`
+	URL          string `json:"url"`
+	SignatureURL string `json:"signatureUrl,omitempty"`
+}
+
+// fullTeaFlowCmd represents the full_tea_flow command
+var fullTeaFlowCmd = &cobra.Command{
+	Use:   "full_tea_flow",
+	Short: "Perform complete TEA discovery and data retrieval flow",
+	Long: `Discovers a product release from TEI and retrieves complete product information including:
+- Product name and version
+- Component releases with their versions
+- Artifacts and their formats for each component`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := executeFullTeaFlow(tei); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
 func init() {
 	discoveryCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
 	discoveryCmd.MarkFlagRequired("tei")
 
+	fullTeaFlowCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
+	fullTeaFlowCmd.MarkFlagRequired("tei")
+
 	teaCmd.AddCommand(discoveryCmd)
+	teaCmd.AddCommand(fullTeaFlowCmd)
 }
 
 // resolveTEI resolves a TEI to a product release UUID following the TEA discovery flow
@@ -153,32 +222,44 @@ func resolveTEI(tei string) (string, error) {
 
 // extractDomainFromTEI extracts the domain name from a TEI
 // TEI format: urn:tei:<type>:<domain-name>:<unique-identifier>
+// Note: domain-name can include port (e.g., localhost:3000)
 func extractDomainFromTEI(tei string) (string, error) {
 	// Validate TEI format
 	if !strings.HasPrefix(tei, "urn:tei:") {
 		return "", fmt.Errorf("TEI must start with 'urn:tei:'")
 	}
 
+	// Remove the "urn:tei:" prefix
+	remainder := strings.TrimPrefix(tei, "urn:tei:")
+
 	// Split by colons
-	parts := strings.Split(tei, ":")
-	if len(parts) < 4 {
-		return "", fmt.Errorf("TEI must have at least 4 parts separated by colons")
+	parts := strings.Split(remainder, ":")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<unique-identifier>")
 	}
 
-	// parts[0] = "urn"
-	// parts[1] = "tei"
-	// parts[2] = type (e.g., "uuid", "purl", "hash")
-	// parts[3] = domain-name
+	// parts[0] = type (e.g., "uuid", "purl", "hash")
+	// parts[1] = domain-name (without port)
+	// parts[2] = either port number OR start of unique-identifier
+	// parts[3+] = rest of unique-identifier
 
-	domainName := parts[3]
+	domainName := parts[1]
+
+	// Check if parts[2] is a port number (1-5 digits)
+	portRegex := regexp.MustCompile(`^[0-9]{1,5}$`)
+	if len(parts) >= 4 && portRegex.MatchString(parts[2]) {
+		// parts[2] is a port, include it in domain name
+		domainName = parts[1] + ":" + parts[2]
+	}
 
 	// Validate domain name format
 	if domainName == "" {
 		return "", fmt.Errorf("domain name cannot be empty")
 	}
 
-	// Basic domain validation
-	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
+	// Basic domain validation (with optional port)
+	// Matches: domain.com, localhost, domain.com:8080, localhost:3000
+	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*(:[0-9]{1,5})?$`)
 	if !domainRegex.MatchString(domainName) {
 		return "", fmt.Errorf("invalid domain name format")
 	}
@@ -327,4 +408,190 @@ func callDiscoveryAPI(endpoint *TEAWellKnownEndpoint, tei string) (*TEADiscovery
 	}
 
 	return &discoveryResp, nil
+}
+
+// executeFullTeaFlow performs the complete TEA discovery and data retrieval flow
+func executeFullTeaFlow(tei string) error {
+	// Step 1: Perform discovery
+	if debug == "true" {
+		fmt.Println("Step 1: Performing TEI discovery...")
+	}
+
+	productReleaseUuid, err := resolveTEI(tei)
+	if err != nil {
+		return fmt.Errorf("discovery failed: %w", err)
+	}
+
+	if debug == "true" {
+		fmt.Printf("Discovered product release UUID: %s\n", productReleaseUuid)
+	}
+
+	// Extract domain and endpoint info for subsequent API calls
+	domainName, err := extractDomainFromTEI(tei)
+	if err != nil {
+		return fmt.Errorf("failed to extract domain: %w", err)
+	}
+
+	wellKnownResp, err := queryWellKnown(domainName)
+	if err != nil {
+		return fmt.Errorf("failed to query well-known endpoint: %w", err)
+	}
+
+	endpoint := selectBestEndpoint(wellKnownResp.Endpoints)
+	if endpoint == nil {
+		return fmt.Errorf("no suitable endpoint found")
+	}
+
+	version := endpoint.Versions[0]
+	baseURL := fmt.Sprintf("%s/v%s", endpoint.URL, version)
+
+	// Step 2: Get product release details
+	if debug == "true" {
+		fmt.Println("\nStep 2: Fetching product release details...")
+	}
+
+	productRelease, err := getProductRelease(baseURL, productReleaseUuid)
+	if err != nil {
+		return fmt.Errorf("failed to get product release: %w", err)
+	}
+
+	// Print product information
+	fmt.Printf("\n=== Product Information ===\n")
+	fmt.Printf("Product Name: %s\n", productRelease.ProductName)
+	fmt.Printf("Version: %s\n", productRelease.Version)
+	fmt.Printf("\n")
+
+	// Step 3: Process each component
+	for i, compRef := range productRelease.Components {
+		if debug == "true" {
+			fmt.Printf("\nStep 3.%d: Processing component %s...\n", i+1, compRef.UUID)
+		}
+
+		var releaseUUID string
+		var componentName string
+
+		if compRef.Release != nil {
+			// Component has a pinned release
+			releaseUUID = *compRef.Release
+		} else {
+			// Component does not have a pinned release, get the latest
+			component, err := getComponent(baseURL, compRef.UUID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to get component %s: %v\n", compRef.UUID, err)
+				continue
+			}
+			componentName = component.Name
+
+			releases, err := getComponentReleases(baseURL, compRef.UUID)
+			if err != nil || len(releases) == 0 {
+				fmt.Fprintf(os.Stderr, "Warning: No releases found for component %s\n", componentName)
+				continue
+			}
+
+			releaseUUID = releases[0].UUID
+			fmt.Printf("Note: Component '%s' does not have a pinned release. Selecting latest available release.\n", componentName)
+		}
+
+		// Get component release details
+		componentRelease, err := getComponentRelease(baseURL, releaseUUID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to get component release %s: %v\n", releaseUUID, err)
+			continue
+		}
+
+		// Print component information
+		fmt.Printf("\n--- Component: %s ---\n", componentRelease.Release.ComponentName)
+		fmt.Printf("Version: %s\n", componentRelease.Release.Version)
+
+		// Process artifacts in latest collection
+		if componentRelease.LatestCollection != nil {
+			for _, artifact := range componentRelease.LatestCollection.Artifacts {
+				fmt.Printf("\n  Artifact Type: %s\n", artifact.Type)
+				for _, format := range artifact.Formats {
+					fmt.Printf("    - Description: %s\n", format.Description)
+					fmt.Printf("      Media Type: %s\n", format.MimeType)
+					fmt.Printf("      URL: %s\n", format.URL)
+					if format.SignatureURL != "" {
+						fmt.Printf("      Signature URL: %s\n", format.SignatureURL)
+					}
+				}
+			}
+		} else {
+			fmt.Printf("  No collection available for this component release.\n")
+		}
+	}
+
+	return nil
+}
+
+// getProductRelease retrieves product release details from TEA API
+func getProductRelease(baseURL, uuid string) (*TEAProductRelease, error) {
+	url := fmt.Sprintf("%s/productRelease/%s", baseURL, uuid)
+	var productRelease TEAProductRelease
+	if err := makeTeaAPICall(url, &productRelease); err != nil {
+		return nil, err
+	}
+	return &productRelease, nil
+}
+
+// getComponent retrieves component details from TEA API
+func getComponent(baseURL, uuid string) (*TEAComponent, error) {
+	url := fmt.Sprintf("%s/component/%s", baseURL, uuid)
+	var component TEAComponent
+	if err := makeTeaAPICall(url, &component); err != nil {
+		return nil, err
+	}
+	return &component, nil
+}
+
+// getComponentReleases retrieves component releases from TEA API
+func getComponentReleases(baseURL, componentUUID string) ([]TEARelease, error) {
+	url := fmt.Sprintf("%s/component/%s/releases", baseURL, componentUUID)
+	var releases []TEARelease
+	if err := makeTeaAPICall(url, &releases); err != nil {
+		return nil, err
+	}
+	return releases, nil
+}
+
+// getComponentRelease retrieves component release details from TEA API
+func getComponentRelease(baseURL, uuid string) (*TEAComponentRelease, error) {
+	url := fmt.Sprintf("%s/componentRelease/%s", baseURL, uuid)
+	var componentRelease TEAComponentRelease
+	if err := makeTeaAPICall(url, &componentRelease); err != nil {
+		return nil, err
+	}
+	return &componentRelease, nil
+}
+
+// makeTeaAPICall makes a generic HTTP GET call to TEA API and decodes JSON response
+func makeTeaAPICall(url string, result interface{}) error {
+	if debug == "true" {
+		fmt.Printf("API Call: %s\n", url)
+	}
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP request returned status %d", resp.StatusCode)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		return fmt.Errorf("failed to decode JSON response: %w", err)
+	}
+
+	return nil
 }
