@@ -77,7 +77,7 @@ Example TEI formats:
 type TEAWellKnownEndpoint struct {
 	URL      string   `json:"url"`
 	Versions []string `json:"versions"`
-	Priority float64  `json:"priority"`
+	Priority *float64 `json:"priority,omitempty"` // Pointer to distinguish between 0 and unset
 }
 
 // TEAWellKnownResponse represents the structure of the .well-known/tea response
@@ -259,9 +259,9 @@ func selectBestEndpoint(endpoints []TEAWellKnownEndpoint) *TEAWellKnownEndpoint 
 		}
 
 		// If priority is not set, default to 1.0
-		priority := endpoint.Priority
-		if priority == 0 {
-			priority = 1.0
+		priority := 1.0
+		if endpoint.Priority != nil {
+			priority = *endpoint.Priority
 		}
 
 		if priority > highestPriority {
