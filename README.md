@@ -48,6 +48,7 @@ It is possible to set authentication data via explicit flags, login command (see
     2. [BOM supplier enrichment with BEAR](#92-bom-supplier-enrichment-with-bear)
     3. [Merge Multiple BOMs](#93-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
+11. [Transparency Exchange API (TEA) Discovery](#11-use-case-transparency-exchange-api-tea-discovery)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -483,6 +484,80 @@ Flags stand for :
 - **--releaseid** - UUID of the release to finalize (required)
 
 This command can be integrated into CI/CD workflows to signal the end of the release process, ensuring that all finalization hooks and actions are called in ReARM.
+
+## 11. Use Case: Transparency Exchange API (TEA) Discovery
+
+The `tea discovery` command resolves a Transparency Exchange Identifier (TEI) to a product release UUID by following the TEA discovery flow as defined in the [CycloneDX TEA specification](https://github.com/CycloneDX/transparency-exchange-api).
+
+The discovery process:
+1. Parses the TEI to extract the domain name
+2. Resolves DNS records for the domain (A, AAAA, CNAME)
+3. Queries the `.well-known/tea` endpoint to discover available TEA servers
+4. Calls the discovery API endpoint with the TEI
+5. Returns the product release UUID
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea discovery \
+    --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
+```
+
+Sample command with PURL-based TEI:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea discovery \
+    --tei "urn:tei:purl:cyclonedx.org:pkg:pypi/cyclonedx-python-lib@8.4.0"
+```
+
+Sample command with hash-based TEI:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea discovery \
+    --tei "urn:tei:hash:cyclonedx.org:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9"
+```
+
+**TEI Format:**
+
+TEI (Transparency Exchange Identifier) follows the format:
+```
+urn:tei:<type>:<domain-name>:<unique-identifier>
+```
+
+Supported types:
+- **uuid** - Where the unique identifier is a UUID
+- **purl** - Where the unique identifier is a Package URL in canonical form
+- **hash** - Where the unique identifier is a hash (SHA256, SHA384, or SHA512)
+- **swid** - Where the unique identifier is a SWID
+
+**Flags:**
+- **--tei** - Transparency Exchange Identifier to resolve (required)
+
+**Output:**
+
+On success, the command outputs the product release UUID:
+```
+d4d9f54a-abcf-11ee-ac79-1a52914d44b
+```
+
+On failure, an error message is displayed:
+```
+Error: Failed to retrieve product release UUID: <error details>
+```
+
+**Debug Mode:**
+
+Use the `-d true` flag to enable debug output showing the discovery process:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    tea discovery \
+    -d true \
+    --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
+```
 
 # Development of ReARM CLI
 

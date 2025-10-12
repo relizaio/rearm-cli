@@ -841,6 +841,7 @@ func init() {
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
 	rootCmd.AddCommand(releasecompletionfinalizerCmd)
+	rootCmd.AddCommand(teaCmd)
 }
 
 func sendRequest(req *graphql.Request, endpoint string) string {
