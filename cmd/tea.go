@@ -18,6 +18,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -235,8 +236,216 @@ func resolveTEI(tei string) (string, error) {
 		return (*discoveryResp)[0].ProductReleaseUuid, nil
 	}
 
-	// Multiple elements - for now, return an error (will be handled in future)
-	return "", fmt.Errorf("multiple discovery results found (%d results) - this case is not yet implemented", len(*discoveryResp))
+	// Multiple elements - need to disambiguate by asking user about component versions
+	if debug == "true" {
+		fmt.Printf("Multiple discovery results found (%d results), disambiguating...\n", len(*discoveryResp))
+	}
+
+	// Get the first server from the first discovery result to use for API calls
+	if len((*discoveryResp)[0].Servers) == 0 {
+		return "", fmt.Errorf("no servers found in discovery response")
+	}
+	firstServer := (*discoveryResp)[0].Servers[0]
+	baseURL := fmt.Sprintf("%s/v%s", firstServer.RootURL, firstServer.Versions[0])
+
+	productReleaseUuid, err := disambiguateProductRelease(*discoveryResp, baseURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to disambiguate product release: %w", err)
+	}
+
+	return productReleaseUuid, nil
+}
+
+// disambiguateProductRelease disambiguates between multiple product releases by asking user about component versions
+func disambiguateProductRelease(discoveryResults []TEADiscoveryInfo, baseURL string) (string, error) {
+	fmt.Printf("\nMultiple discovery results found (%d results).\n", len(discoveryResults))
+	fmt.Println("To help determine the proper result, please answer questions about your component versions.")
+
+	// Step 1: Fetch all product releases
+	productReleases := make([]*TEAProductRelease, len(discoveryResults))
+	for i, result := range discoveryResults {
+		pr, err := getProductRelease(baseURL, result.ProductReleaseUuid)
+		if err != nil {
+			return "", fmt.Errorf("failed to get product release %s: %w", result.ProductReleaseUuid, err)
+		}
+		productReleases[i] = pr
+		if debug == "true" {
+			fmt.Printf("Loaded product release: %s (version: %s)\n", pr.ProductName, pr.Version)
+		}
+	}
+
+	// Step 2: Analyze components to find differences
+	type ComponentReleaseInfo struct {
+		ComponentUUID string
+		ComponentName string
+		ReleaseUUID   string
+		Version       string
+	}
+
+	// Map of component UUID -> set of release UUIDs across all product releases
+	componentReleaseMap := make(map[string]map[string]bool)
+
+	// Build the map
+	for _, pr := range productReleases {
+		for _, compRef := range pr.Components {
+			if componentReleaseMap[compRef.UUID] == nil {
+				componentReleaseMap[compRef.UUID] = make(map[string]bool)
+			}
+			if compRef.Release != nil {
+				componentReleaseMap[compRef.UUID][*compRef.Release] = true
+			}
+		}
+	}
+
+	// Step 3: Find components with different releases (discriminating components)
+	discriminatingComponents := []string{}
+	for componentUUID, releases := range componentReleaseMap {
+		if len(releases) > 1 {
+			discriminatingComponents = append(discriminatingComponents, componentUUID)
+		}
+	}
+
+	if len(discriminatingComponents) == 0 {
+		return "", fmt.Errorf("unable to disambiguate: all product releases have identical component versions")
+	}
+
+	if debug == "true" {
+		fmt.Printf("Found %d discriminating components\n", len(discriminatingComponents))
+	}
+
+	// Step 4: Ask user about component versions to narrow down
+	candidateReleases := make(map[string]bool)
+	for _, pr := range productReleases {
+		candidateReleases[pr.UUID] = true
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for _, componentUUID := range discriminatingComponents {
+		if len(candidateReleases) == 1 {
+			// We've uniquely identified the product release
+			break
+		}
+
+		// Get component name and collect release versions
+		var componentName string
+		releaseVersions := make(map[string]string)            // releaseUUID -> version
+		releaseCache := make(map[string]*TEAComponentRelease) // cache to avoid duplicate API calls
+
+		for _, pr := range productReleases {
+			if !candidateReleases[pr.UUID] {
+				continue
+			}
+			for _, compRef := range pr.Components {
+				if compRef.UUID == componentUUID && compRef.Release != nil {
+					// Check cache first
+					compRelease, cached := releaseCache[*compRef.Release]
+					if !cached {
+						// Get component release info
+						var err error
+						compRelease, err = getComponentRelease(baseURL, *compRef.Release)
+						if err == nil {
+							releaseCache[*compRef.Release] = compRelease
+						}
+					}
+
+					if compRelease != nil {
+						if componentName == "" {
+							componentName = compRelease.Release.ComponentName
+						}
+						releaseVersions[*compRef.Release] = compRelease.Release.Version
+					}
+				}
+			}
+		}
+
+		if componentName == "" {
+			componentName = componentUUID // fallback to UUID
+		}
+
+		// Collect unique versions for this component across candidates
+		uniqueVersions := make(map[string]bool)
+		for _, version := range releaseVersions {
+			uniqueVersions[version] = true
+		}
+
+		if len(uniqueVersions) <= 1 {
+			// This component doesn't help discriminate among remaining candidates
+			continue
+		}
+
+		// Ask user
+		fmt.Printf("Which release of component '%s' are you currently using?\n", componentName)
+		versionList := []string{}
+		for version := range uniqueVersions {
+			versionList = append(versionList, version)
+		}
+		for i, version := range versionList {
+			fmt.Printf("  %d) %s\n", i+1, version)
+		}
+		fmt.Print("Enter your choice (number): ")
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("failed to read user input: %w", err)
+		}
+		input = strings.TrimSpace(input)
+
+		var selectedVersion string
+		var choiceNum int
+		_, err = fmt.Sscanf(input, "%d", &choiceNum)
+		if err == nil && choiceNum >= 1 && choiceNum <= len(versionList) {
+			selectedVersion = versionList[choiceNum-1]
+		} else {
+			// Try direct version match
+			selectedVersion = input
+		}
+
+		if debug == "true" {
+			fmt.Printf("User selected version: %s\n", selectedVersion)
+		}
+
+		// Filter candidate releases based on user's answer
+		newCandidates := make(map[string]bool)
+		for prUUID := range candidateReleases {
+			var pr *TEAProductRelease
+			for _, p := range productReleases {
+				if p.UUID == prUUID {
+					pr = p
+					break
+				}
+			}
+			if pr == nil {
+				continue
+			}
+
+			// Check if this product release has the selected version
+			for _, compRef := range pr.Components {
+				if compRef.UUID == componentUUID && compRef.Release != nil {
+					if version, exists := releaseVersions[*compRef.Release]; exists && version == selectedVersion {
+						newCandidates[prUUID] = true
+						break
+					}
+				}
+			}
+		}
+
+		candidateReleases = newCandidates
+
+		if len(candidateReleases) == 0 {
+			return "", fmt.Errorf("no product releases match the provided component versions")
+		}
+	}
+
+	// Return the uniquely identified product release
+	if len(candidateReleases) == 1 {
+		for uuid := range candidateReleases {
+			fmt.Printf("\nProduct release uniquely identified: %s\n\n", uuid)
+			return uuid, nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to uniquely identify product release after asking about all discriminating components")
 }
 
 // extractDomainFromTEI extracts the domain name with port from a TEI
