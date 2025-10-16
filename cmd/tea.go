@@ -87,18 +87,27 @@ type TEAWellKnownResponse struct {
 	Endpoints     []TEAWellKnownEndpoint `json:"endpoints"`
 }
 
-// TEADiscoveryResponse represents the structure of the discovery API response
-type TEADiscoveryResponse struct {
-	ProductReleaseUuid string   `json:"productReleaseUuid"`
-	RootURL            string   `json:"rootUrl"`
-	Versions           []string `json:"versions"`
+// TEADiscoveryResponse represents the structure of the discovery API response (array of discovery info)
+type TEADiscoveryResponse []TEADiscoveryInfo
+
+// TEADiscoveryInfo represents a single discovery result
+type TEADiscoveryInfo struct {
+	ProductReleaseUuid string          `json:"productReleaseUuid"`
+	Servers            []TEAServerInfo `json:"servers"`
+}
+
+// TEAServerInfo represents TEA server information
+type TEAServerInfo struct {
+	RootURL  string   `json:"rootUrl"`
+	Versions []string `json:"versions"`
+	Priority *float64 `json:"priority,omitempty"`
 }
 
 // TEA API response structures
 type TEAProductRelease struct {
-	UUID        string          `json:"uuid"`
-	ProductName string          `json:"productName"`
-	Version     string          `json:"version"`
+	UUID        string            `json:"uuid"`
+	ProductName string            `json:"productName"`
+	Version     string            `json:"version"`
 	Components  []TEAComponentRef `json:"components"`
 }
 
@@ -132,7 +141,7 @@ type TEACollection struct {
 }
 
 type TEAArtifact struct {
-	Type    string          `json:"type"`
+	Type    string              `json:"type"`
 	Formats []TEAArtifactFormat `json:"formats"`
 }
 
@@ -220,7 +229,14 @@ func resolveTEI(tei string) (string, error) {
 		return "", fmt.Errorf("discovery API call failed: %w", err)
 	}
 
-	return discoveryResp.ProductReleaseUuid, nil
+	// Handle the array response
+	if len(*discoveryResp) == 1 {
+		// Single element - extract and return the productReleaseUuid
+		return (*discoveryResp)[0].ProductReleaseUuid, nil
+	}
+
+	// Multiple elements - for now, return an error (will be handled in future)
+	return "", fmt.Errorf("multiple discovery results found (%d results) - this case is not yet implemented", len(*discoveryResp))
 }
 
 // extractDomainFromTEI extracts the domain name with port from a TEI
@@ -251,9 +267,9 @@ func extractDomainFromTEI(tei string) (string, error) {
 	domainPort := parts[2]
 
 	// Validate TEI type
-	validTypes := map[string]bool{"uuid": true, "purl": true, "hash": true, "swid": true}
+	validTypes := map[string]bool{"uuid": true, "purl": true, "hash": true, "swid": true, "asin": true, "gs1": true}
 	if !validTypes[teiType] {
-		return "", fmt.Errorf("invalid TEI type: %s (must be uuid, purl, hash, or swid)", teiType)
+		return "", fmt.Errorf("invalid TEI type: %s (must be uuid, purl, hash, swid, asin, or gs1)", teiType)
 	}
 
 	// Validate port number (1-5 digits)
@@ -431,8 +447,8 @@ func callDiscoveryAPI(endpoint *TEAWellKnownEndpoint, tei string) (*TEADiscovery
 		return nil, fmt.Errorf("failed to decode JSON response: %w", err)
 	}
 
-	if discoveryResp.ProductReleaseUuid == "" {
-		return nil, fmt.Errorf("product release UUID not found in response")
+	if len(discoveryResp) == 0 {
+		return nil, fmt.Errorf("no discovery results found in response")
 	}
 
 	return &discoveryResp, nil
