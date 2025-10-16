@@ -502,40 +502,46 @@ Sample command:
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea discovery \
-    --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
+    --tei "urn:tei:uuid:products.example.com:443:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
 ```
 
-Sample command with PURL-based TEI:
+Sample command with different domain and port:
 
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea discovery \
-    --tei "urn:tei:purl:cyclonedx.org:pkg:pypi/cyclonedx-python-lib@8.4.0"
+    --tei "urn:tei:purl:cyclonedx.org:443:pkg:pypi/cyclonedx-python-lib@8.4.0"
 ```
 
-Sample command with hash-based TEI:
+Sample command with HTTP (non-HTTPS) connection (note that this is not compliant with TEA standard, should be used for local testing only):
 
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea discovery \
-    --tei "urn:tei:hash:cyclonedx.org:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9"
+    --tei "urn:tei:hash:localhost:3000:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9" \
+    --usehttp true
 ```
 
 **TEI Format:**
 
 TEI (Transparency Exchange Identifier) follows the format:
 ```
-urn:tei:<type>:<domain-name>:<unique-identifier>
+urn:tei:<type>:<domain-name>:<domain-port>:<unique-identifier>
 ```
 
-Supported types:
-- **uuid** - Where the unique identifier is a UUID
-- **purl** - Where the unique identifier is a Package URL in canonical form
-- **hash** - Where the unique identifier is a hash (SHA256, SHA384, or SHA512)
-- **swid** - Where the unique identifier is a SWID
+Where:
+- **type** - The type of unique identifier (uuid, purl, hash, or swid)
+- **domain-name** - The domain hosting the TEA endpoint (e.g., products.example.com, localhost)
+- **domain-port** - The port number for the TEA endpoint (e.g., 443 for HTTPS, 3000 for local development)
+- **unique-identifier** - The identifier value, format depends on type:
+  - **uuid** - A UUID (e.g., d4d9f54a-abcf-11ee-ac79-1a52914d44b)
+  - **purl** - Package URL in canonical form (e.g., pkg:pypi/cyclonedx-python-lib@8.4.0)
+  - **hash** - Hash with algorithm prefix (e.g., SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9)
+  - **swid** - Software Identification Tag
 
 **Flags:**
 - **--tei** - Transparency Exchange Identifier to resolve (required)
+- **--usehttp** - Use HTTP instead of HTTPS for connections (default: false)
 
 **Output:**
 
@@ -557,7 +563,7 @@ Use the `-d true` flag to enable debug output showing the discovery process:
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea discovery \
     -d true \
-    --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
+    --tei "urn:tei:uuid:products.example.com:443:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
 ```
 
 ## 12. Use Case: Complete TEA Flow - Product and Component Details
@@ -583,7 +589,7 @@ Sample command:
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea full_tea_flow \
-    --tei "urn:tei:uuid:demo.rearmhq.com:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
+    --tei "urn:tei:uuid:demo.rearmhq.com:443:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
 ```
 
 Sample command with debug output:
@@ -592,11 +598,12 @@ Sample command with debug output:
 docker run --rm registry.relizahub.com/library/rearm-cli \
     tea full_tea_flow \
     -d true \
-    --tei "urn:tei:uuid:demo.rearmhq.com:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
+    --tei "urn:tei:uuid:demo.rearmhq.com:443:62c5cdb4-b462-4cda-9b07-37b7b1c61c65"
 ```
 
 **Flags:**
 - **--tei** - Transparency Exchange Identifier to resolve (required)
+- **--usehttp** - Use HTTP instead of HTTPS for connections (default: false)
 - **-d** - Enable debug mode to see detailed API calls and processing steps (optional)
 
 **Sample Output:**

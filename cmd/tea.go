@@ -40,6 +40,7 @@ var teaCmd = &cobra.Command{
 }
 
 var tei string
+var useHttp bool
 
 // discoveryCmd represents the discovery command
 var discoveryCmd = &cobra.Command{
@@ -55,9 +56,9 @@ The command follows the TEA discovery flow:
 5. Return the product release UUID
 
 Example TEI formats:
-  urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b
-  urn:tei:purl:cyclonedx.org:pkg:pypi/cyclonedx-python-lib@8.4.0
-  urn:tei:hash:cyclonedx.org:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9`,
+  urn:tei:uuid:products.example.com:443:d4d9f54a-abcf-11ee-ac79-1a52914d44b
+  urn:tei:purl:cyclonedx.org:443:pkg:pypi/cyclonedx-python-lib@8.4.0
+  urn:tei:hash:localhost:3000:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Resolving TEI:", tei)
@@ -161,9 +162,11 @@ var fullTeaFlowCmd = &cobra.Command{
 func init() {
 	discoveryCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
 	discoveryCmd.MarkFlagRequired("tei")
+	discoveryCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
 
 	fullTeaFlowCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
 	fullTeaFlowCmd.MarkFlagRequired("tei")
+	fullTeaFlowCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
 
 	teaCmd.AddCommand(discoveryCmd)
 	teaCmd.AddCommand(fullTeaFlowCmd)
@@ -220,9 +223,9 @@ func resolveTEI(tei string) (string, error) {
 	return discoveryResp.ProductReleaseUuid, nil
 }
 
-// extractDomainFromTEI extracts the domain name from a TEI
-// TEI format: urn:tei:<type>:<domain-name>:<unique-identifier>
-// Note: domain-name can include port (e.g., localhost:3000)
+// extractDomainFromTEI extracts the domain name with port from a TEI
+// TEI format: urn:tei:<type>:<domain-name>:<domain-port>:<unique-identifier>
+// Supported types: uuid, purl, hash, swid
 func extractDomainFromTEI(tei string) (string, error) {
 	// Validate TEI format
 	if !strings.HasPrefix(tei, "urn:tei:") {
@@ -234,22 +237,29 @@ func extractDomainFromTEI(tei string) (string, error) {
 
 	// Split by colons
 	parts := strings.Split(remainder, ":")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<unique-identifier>")
+	if len(parts) < 4 {
+		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<domain-port>:<unique-identifier>")
 	}
 
-	// parts[0] = type (e.g., "uuid", "purl", "hash")
-	// parts[1] = domain-name (without port)
-	// parts[2] = either port number OR start of unique-identifier
-	// parts[3+] = rest of unique-identifier
+	// parts[0] = type (uuid, purl, hash, swid)
+	// parts[1] = domain-name
+	// parts[2] = domain-port
+	// parts[3+] = unique-identifier (which may contain colons)
 
+	teiType := parts[0]
 	domainName := parts[1]
+	domainPort := parts[2]
 
-	// Check if parts[2] is a port number (1-5 digits)
+	// Validate TEI type
+	validTypes := map[string]bool{"uuid": true, "purl": true, "hash": true, "swid": true}
+	if !validTypes[teiType] {
+		return "", fmt.Errorf("invalid TEI type: %s (must be uuid, purl, hash, or swid)", teiType)
+	}
+
+	// Validate port number (1-5 digits)
 	portRegex := regexp.MustCompile(`^[0-9]{1,5}$`)
-	if len(parts) >= 4 && portRegex.MatchString(parts[2]) {
-		// parts[2] is a port, include it in domain name
-		domainName = parts[1] + ":" + parts[2]
+	if !portRegex.MatchString(domainPort) {
+		return "", fmt.Errorf("invalid port number: %s", domainPort)
 	}
 
 	// Validate domain name format
@@ -257,48 +267,73 @@ func extractDomainFromTEI(tei string) (string, error) {
 		return "", fmt.Errorf("domain name cannot be empty")
 	}
 
-	// Basic domain validation (with optional port)
-	// Matches: domain.com, localhost, domain.com:8080, localhost:3000
-	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*(:[0-9]{1,5})?$`)
+	// Basic domain validation
+	// Matches: domain.com, localhost, etc.
+	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
 	if !domainRegex.MatchString(domainName) {
 		return "", fmt.Errorf("invalid domain name format")
 	}
 
-	return domainName, nil
+	// Combine domain and port
+	domainWithPort := domainName + ":" + domainPort
+
+	return domainWithPort, nil
 }
 
 // resolveDNS resolves DNS records for a domain (A, AAAA, CNAME)
 func resolveDNS(domainName string) ([]string, error) {
+	// Extract just the hostname part (without port) for DNS lookup
+	hostname := domainName
+	if strings.Contains(domainName, ":") {
+		parts := strings.Split(domainName, ":")
+		hostname = parts[0]
+	}
+
 	// Use net.LookupHost which handles A, AAAA, and CNAME records
-	hosts, err := net.LookupHost(domainName)
+	hosts, err := net.LookupHost(hostname)
 	if err != nil {
-		return nil, fmt.Errorf("DNS lookup failed for %s: %w", domainName, err)
+		return nil, fmt.Errorf("DNS lookup failed for %s: %w", hostname, err)
 	}
 
 	if len(hosts) == 0 {
-		return nil, fmt.Errorf("no DNS records found for %s", domainName)
+		return nil, fmt.Errorf("no DNS records found for %s", hostname)
 	}
 
 	return hosts, nil
 }
 
+// createHTTPClient creates an HTTP client with appropriate TLS configuration
+func createHTTPClient() *http.Client {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Only configure TLS if using HTTPS
+	if !useHttp {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		}
+	}
+
+	return client
+}
+
 // queryWellKnown queries the .well-known/tea endpoint
 func queryWellKnown(domainName string) (*TEAWellKnownResponse, error) {
-	wellKnownURL := fmt.Sprintf("https://%s/.well-known/tea", domainName)
+	protocol := "https"
+	if useHttp {
+		protocol = "http"
+	}
+	wellKnownURL := fmt.Sprintf("%s://%s/.well-known/tea", protocol, domainName)
 
 	if debug == "true" {
 		fmt.Println("Querying well-known endpoint:", wellKnownURL)
 	}
 
-	// Create HTTP client with TLS verification
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
-		},
-	}
+	// Create HTTP client
+	client := createHTTPClient()
 
 	resp, err := client.Get(wellKnownURL)
 	if err != nil {
@@ -375,14 +410,7 @@ func callDiscoveryAPI(endpoint *TEAWellKnownEndpoint, tei string) (*TEADiscovery
 	}
 
 	// Create HTTP client
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
-		},
-	}
+	client := createHTTPClient()
 
 	resp, err := client.Get(discoveryURL)
 	if err != nil {
@@ -570,14 +598,7 @@ func makeTeaAPICall(url string, result interface{}) error {
 		fmt.Printf("API Call: %s\n", url)
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
-		},
-	}
+	client := createHTTPClient()
 
 	resp, err := client.Get(url)
 	if err != nil {
