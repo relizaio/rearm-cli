@@ -42,6 +42,7 @@ var teaCmd = &cobra.Command{
 
 var tei string
 var useHttp bool
+var usePort int
 
 // discoveryCmd represents the discovery command
 var discoveryCmd = &cobra.Command{
@@ -57,9 +58,9 @@ The command follows the TEA discovery flow:
 5. Return the product release UUID
 
 Example TEI formats:
-  urn:tei:uuid:products.example.com:443:d4d9f54a-abcf-11ee-ac79-1a52914d44b
-  urn:tei:purl:cyclonedx.org:443:pkg:pypi/cyclonedx-python-lib@8.4.0
-  urn:tei:hash:localhost:3000:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9`,
+  urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b
+  urn:tei:purl:cyclonedx.org:pkg:pypi/cyclonedx-python-lib@8.4.0
+  urn:tei:hash:localhost:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Resolving TEI:", tei)
@@ -173,10 +174,12 @@ func init() {
 	discoveryCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
 	discoveryCmd.MarkFlagRequired("tei")
 	discoveryCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
+	discoveryCmd.Flags().IntVar(&usePort, "useport", 443, "Port to use for resolving well-known resource (default: 443)")
 
 	fullTeaFlowCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
 	fullTeaFlowCmd.MarkFlagRequired("tei")
 	fullTeaFlowCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
+	fullTeaFlowCmd.Flags().IntVar(&usePort, "useport", 443, "Port to use for resolving well-known resource (default: 443)")
 
 	teaCmd.AddCommand(discoveryCmd)
 	teaCmd.AddCommand(fullTeaFlowCmd)
@@ -448,8 +451,8 @@ func disambiguateProductRelease(discoveryResults []TEADiscoveryInfo, baseURL str
 	return "", fmt.Errorf("unable to uniquely identify product release after asking about all discriminating components")
 }
 
-// extractDomainFromTEI extracts the domain name with port from a TEI
-// TEI format: urn:tei:<type>:<domain-name>:<domain-port>:<unique-identifier>
+// extractDomainFromTEI extracts the domain name from a TEI
+// TEI format: urn:tei:<type>:<domain-name>:<unique-identifier>
 // Supported types: uuid, purl, hash, swid
 func extractDomainFromTEI(tei string) (string, error) {
 	// Validate TEI format
@@ -462,29 +465,21 @@ func extractDomainFromTEI(tei string) (string, error) {
 
 	// Split by colons
 	parts := strings.Split(remainder, ":")
-	if len(parts) < 4 {
-		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<domain-port>:<unique-identifier>")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<unique-identifier>")
 	}
 
 	// parts[0] = type (uuid, purl, hash, swid)
 	// parts[1] = domain-name
-	// parts[2] = domain-port
-	// parts[3+] = unique-identifier (which may contain colons)
+	// parts[2+] = unique-identifier (which may contain colons)
 
 	teiType := parts[0]
 	domainName := parts[1]
-	domainPort := parts[2]
 
 	// Validate TEI type
 	validTypes := map[string]bool{"uuid": true, "purl": true, "hash": true, "swid": true, "asin": true, "gs1": true}
 	if !validTypes[teiType] {
 		return "", fmt.Errorf("invalid TEI type: %s (must be uuid, purl, hash, swid, asin, or gs1)", teiType)
-	}
-
-	// Validate port number (1-5 digits)
-	portRegex := regexp.MustCompile(`^[0-9]{1,5}$`)
-	if !portRegex.MatchString(domainPort) {
-		return "", fmt.Errorf("invalid port number: %s", domainPort)
 	}
 
 	// Validate domain name format
@@ -499,29 +494,19 @@ func extractDomainFromTEI(tei string) (string, error) {
 		return "", fmt.Errorf("invalid domain name format")
 	}
 
-	// Combine domain and port
-	domainWithPort := domainName + ":" + domainPort
-
-	return domainWithPort, nil
+	return domainName, nil
 }
 
 // resolveDNS resolves DNS records for a domain (A, AAAA, CNAME)
 func resolveDNS(domainName string) ([]string, error) {
-	// Extract just the hostname part (without port) for DNS lookup
-	hostname := domainName
-	if strings.Contains(domainName, ":") {
-		parts := strings.Split(domainName, ":")
-		hostname = parts[0]
-	}
-
 	// Use net.LookupHost which handles A, AAAA, and CNAME records
-	hosts, err := net.LookupHost(hostname)
+	hosts, err := net.LookupHost(domainName)
 	if err != nil {
-		return nil, fmt.Errorf("DNS lookup failed for %s: %w", hostname, err)
+		return nil, fmt.Errorf("DNS lookup failed for %s: %w", domainName, err)
 	}
 
 	if len(hosts) == 0 {
-		return nil, fmt.Errorf("no DNS records found for %s", hostname)
+		return nil, fmt.Errorf("no DNS records found for %s", domainName)
 	}
 
 	return hosts, nil
@@ -551,7 +536,9 @@ func queryWellKnown(domainName string) (*TEAWellKnownResponse, error) {
 	if useHttp {
 		protocol = "http"
 	}
-	wellKnownURL := fmt.Sprintf("%s://%s/.well-known/tea", protocol, domainName)
+	// Use usePort parameter for well-known resource resolution
+	domainWithPort := fmt.Sprintf("%s:%d", domainName, usePort)
+	wellKnownURL := fmt.Sprintf("%s://%s/.well-known/tea", protocol, domainWithPort)
 
 	if debug == "true" {
 		fmt.Println("Querying well-known endpoint:", wellKnownURL)
