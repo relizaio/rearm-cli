@@ -50,8 +50,8 @@ It is possible to set authentication data via explicit flags, login command (see
     4. [Merge Multiple BOMs](#94-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
 11. [Transparency Exchange API (TEA) Commands](#11-use-case-transparency-exchange-api-tea-commands)
-    1. [Transparency Exchange API (TEA) Discovery](#111-use-case-transparency-exchange-api-tea-discovery)
-    2. [Complete TEA Flow - Product and Component Details](#112-use-case-complete-tea-flow---product-and-component-details)
+    1. [Transparency Exchange API (TEA) Discovery](#111-transparency-exchange-api-tea-discovery)
+    2. [Complete TEA Flow - Product and Component Details](#112-complete-tea-flow---product-and-component-details)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -572,7 +572,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
 ```
 
-## 11.2 Use Case: Complete TEA Flow - Product and Component Details
+## 11.2 Complete TEA Flow - Product and Component Details
 
 The `tea full_tea_flow` command performs a complete TEA discovery and data retrieval flow. It discovers a product release from a TEI and retrieves comprehensive information about the product and all its components, including artifacts and their formats.
 
