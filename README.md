@@ -49,8 +49,9 @@ It is possible to set authentication data via explicit flags, login command (see
     3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
     4. [Merge Multiple BOMs](#94-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
-11. [Transparency Exchange API (TEA) Discovery](#11-use-case-transparency-exchange-api-tea-discovery)
-12. [Complete TEA Flow - Product and Component Details](#12-use-case-complete-tea-flow---product-and-component-details)
+11. [Transparency Exchange API (TEA) Commands](#11-use-case-transparency-exchange-api-tea-commands)
+    1. [Transparency Exchange API (TEA) Discovery](#111-use-case-transparency-exchange-api-tea-discovery)
+    2. [Complete TEA Flow - Product and Component Details](#112-use-case-complete-tea-flow---product-and-component-details)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -487,7 +488,10 @@ Flags stand for :
 
 This command can be integrated into CI/CD workflows to signal the end of the release process, ensuring that all finalization hooks and actions are called in ReARM.
 
-## 11. Use Case: Transparency Exchange API (TEA) Discovery
+## 11. Use Case: Transparency Exchange API (TEA) Commands
+Base Command: `tea`
+
+### 11.1 Transparency Exchange API (TEA) Discovery
 
 The `tea discovery` command resolves a Transparency Exchange Identifier (TEI) to a product release UUID by following the TEA discovery flow as defined in the [CycloneDX TEA specification](https://github.com/CycloneDX/transparency-exchange-api).
 
@@ -568,7 +572,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     --tei "urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b"
 ```
 
-## 12. Use Case: Complete TEA Flow - Product and Component Details
+## 11.2 Use Case: Complete TEA Flow - Product and Component Details
 
 The `tea full_tea_flow` command performs a complete TEA discovery and data retrieval flow. It discovers a product release from a TEI and retrieves comprehensive information about the product and all its components, including artifacts and their formats.
 
