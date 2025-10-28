@@ -63,6 +63,18 @@ var artifactSignatureUrl string
 var artifactDescription string
 var artifactHashes []string
 
+// Product release flags
+var productReleaseProduct string
+var productReleaseVersion string
+var productReleaseUuid string
+var productReleaseCreatedDate string
+var productReleaseReleaseDate string
+var productReleasePrerelease bool
+var productReleaseTeis []string
+var productReleasePurls []string
+var productReleaseComponents []string
+var productReleaseComponentReleases []string
+
 // Product represents the structure of product.yaml
 type Product struct {
 	UUID        string   `yaml:"uuid"`
@@ -92,6 +104,23 @@ type ComponentRelease struct {
 	PreRelease    bool               `yaml:"preRelease"`
 	Identifiers   []OolongIdentifier `yaml:"identifiers"`
 	Distributions []string           `yaml:"distributions"`
+}
+
+// ProductReleaseComponent represents a component reference in product release.yaml
+type ProductReleaseComponent struct {
+	UUID    string `yaml:"uuid"`
+	Release string `yaml:"release"`
+}
+
+// ProductRelease represents the structure of product release.yaml
+type ProductRelease struct {
+	UUID        string                     `yaml:"uuid"`
+	Version     string                     `yaml:"version"`
+	CreatedDate string                     `yaml:"createdDate"`
+	ReleaseDate string                     `yaml:"releaseDate"`
+	PreRelease  bool                       `yaml:"preRelease"`
+	Identifiers []OolongIdentifier         `yaml:"identifiers"`
+	Components  []ProductReleaseComponent  `yaml:"components"`
 }
 
 // UpdateReason represents the update reason in collection.yaml
@@ -508,6 +537,163 @@ The artifact file is named with its UUID.`,
 	},
 }
 
+// add_product_releaseCmd represents the add_product_release command
+var add_product_releaseCmd = &cobra.Command{
+	Use:   "add_product_release",
+	Short: "Add a product release to the content directory",
+	Long: `Creates a product release with release.yaml and an initial collection.
+The product can be specified by name or UUID.
+Optionally, components can be linked to the release by providing paired component and component_release flags.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if productReleaseProduct == "" {
+			fmt.Fprintf(os.Stderr, "Error: product is required\n")
+			os.Exit(1)
+		}
+		if productReleaseVersion == "" {
+			fmt.Fprintf(os.Stderr, "Error: version is required\n")
+			os.Exit(1)
+		}
+
+		// Validate component and component_release flags match
+		if len(productReleaseComponents) != len(productReleaseComponentReleases) {
+			fmt.Fprintf(os.Stderr, "Error: number of --component flags (%d) must match number of --component_release flags (%d)\n", len(productReleaseComponents), len(productReleaseComponentReleases))
+			os.Exit(1)
+		}
+
+		// Find product by name or UUID
+		productDir, productData, err := findProduct(contentDir, productReleaseProduct)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create release directory
+		releaseDir := filepath.Join(productDir, "releases", productReleaseVersion)
+
+		// Check if release already exists
+		if _, err := os.Stat(releaseDir); err == nil {
+			fmt.Fprintf(os.Stderr, "Error: release version '%s' already exists for product '%s'\n", productReleaseVersion, productData.Name)
+			os.Exit(1)
+		}
+
+		if err := os.MkdirAll(releaseDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create release directory %s: %v\n", releaseDir, err)
+			os.Exit(1)
+		}
+
+		// Generate UUID if not provided
+		var relUuid string
+		if productReleaseUuid != "" {
+			relUuid = productReleaseUuid
+		} else {
+			relUuid = uuid.New().String()
+		}
+
+		// Set timestamps if not provided
+		currentTime := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		createdDate := productReleaseCreatedDate
+		if createdDate == "" {
+			createdDate = currentTime
+		}
+		relDate := productReleaseReleaseDate
+		if relDate == "" {
+			relDate = currentTime
+		}
+
+		// Build identifiers list
+		identifiers := []OolongIdentifier{}
+		for _, tei := range productReleaseTeis {
+			identifiers = append(identifiers, OolongIdentifier{
+				IdType:  "TEI",
+				IdValue: tei,
+			})
+		}
+		for _, purl := range productReleasePurls {
+			identifiers = append(identifiers, OolongIdentifier{
+				IdType:  "PURL",
+				IdValue: purl,
+			})
+		}
+
+		// Process component references
+		components := []ProductReleaseComponent{}
+		for i := 0; i < len(productReleaseComponents); i++ {
+			componentIdentifier := productReleaseComponents[i]
+			componentReleaseIdentifier := productReleaseComponentReleases[i]
+
+			// Find component
+			componentDir, componentData, err := findComponent(contentDir, componentIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding component '%s': %v\n", componentIdentifier, err)
+				os.Exit(1)
+			}
+
+			// Find component release
+			componentReleaseUuid, err := findComponentRelease(componentDir, componentReleaseIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding component release '%s' for component '%s': %v\n", componentReleaseIdentifier, componentData.Name, err)
+				os.Exit(1)
+			}
+
+			components = append(components, ProductReleaseComponent{
+				UUID:    componentData.UUID,
+				Release: componentReleaseUuid,
+			})
+		}
+
+		// Create product release structure
+		release := ProductRelease{
+			UUID:        relUuid,
+			Version:     productReleaseVersion,
+			CreatedDate: createdDate,
+			ReleaseDate: relDate,
+			PreRelease:  productReleasePrerelease,
+			Identifiers: identifiers,
+			Components:  components,
+		}
+
+		// Write release.yaml
+		releaseYamlPath := filepath.Join(releaseDir, "release.yaml")
+		if err := writeYAML(releaseYamlPath, release); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to write release.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create collections directory
+		collectionsDir := filepath.Join(releaseDir, "collections")
+		if err := os.MkdirAll(collectionsDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create collections directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create initial collection
+		collection := Collection{
+			Version: 1,
+			Date:    currentTime,
+			UpdateReason: UpdateReason{
+				Type:    "INITIAL_RELEASE",
+				Comment: "",
+			},
+			Artifacts: []string{},
+		}
+
+		collectionYamlPath := filepath.Join(collectionsDir, "1.yaml")
+		if err := writeYAML(collectionYamlPath, collection); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to write collection: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Successfully created product release: %s\n", productReleaseVersion)
+		fmt.Printf("  Product: %s\n", productData.Name)
+		fmt.Printf("  Directory: %s\n", releaseDir)
+		fmt.Printf("  UUID: %s\n", relUuid)
+		if len(components) > 0 {
+			fmt.Printf("  Linked components: %d\n", len(components))
+		}
+		fmt.Printf("  Created initial collection: collections/1.yaml\n")
+	},
+}
+
 func init() {
 	// Add flags to oolong command
 	oolongCmd.PersistentFlags().StringVar(&contentDir, "contentdir", "", "Content directory path")
@@ -535,6 +721,20 @@ func init() {
 	add_component_releaseCmd.MarkFlagRequired("component")
 	add_component_releaseCmd.MarkFlagRequired("version")
 
+	// Add flags to add_product_release command
+	add_product_releaseCmd.Flags().StringVar(&productReleaseProduct, "product", "", "Product name or UUID (required)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseVersion, "version", "", "Release version (required)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseUuid, "uuid", "", "Release UUID (optional, will be generated if not provided)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseCreatedDate, "createddate", "", "Created date in RFC3339 format (optional, defaults to current time)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseReleaseDate, "releasedate", "", "Release date in RFC3339 format (optional, defaults to current time)")
+	add_product_releaseCmd.Flags().BoolVar(&productReleasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --component_release)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponentReleases, "component_release", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
+	add_product_releaseCmd.MarkFlagRequired("product")
+	add_product_releaseCmd.MarkFlagRequired("version")
+
 	// Add flags to add_artifact command
 	add_artifactCmd.Flags().StringVar(&artifactUuid, "uuid", "", "Artifact UUID (optional, will be generated if not provided)")
 	add_artifactCmd.Flags().StringVar(&artifactName, "name", "", "Artifact name (required)")
@@ -553,7 +753,14 @@ func init() {
 	oolongCmd.AddCommand(add_productCmd)
 	oolongCmd.AddCommand(add_componentCmd)
 	oolongCmd.AddCommand(add_component_releaseCmd)
+	oolongCmd.AddCommand(add_product_releaseCmd)
 	oolongCmd.AddCommand(add_artifactCmd)
+}
+
+// isUUID checks if a string matches the UUID format
+func isUUID(s string) bool {
+	uuidPattern := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	return uuidPattern.MatchString(s)
 }
 
 // toSnakeCase converts a string to lowercase snake_case
@@ -612,7 +819,7 @@ func findComponent(contentDir, identifier string) (string, *Component, error) {
 	}
 
 	// Check if identifier is a UUID (contains hyphens in UUID format)
-	isUUID := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(identifier)
+	isUUIDFormat := isUUID(identifier)
 
 	// Search through all component directories
 	for _, entry := range entries {
@@ -639,7 +846,7 @@ func findComponent(contentDir, identifier string) (string, *Component, error) {
 		}
 
 		// Match by UUID or name
-		if isUUID {
+		if isUUIDFormat {
 			if component.UUID == identifier {
 				return filepath.Join(componentsDir, entry.Name()), &component, nil
 			}
@@ -650,8 +857,130 @@ func findComponent(contentDir, identifier string) (string, *Component, error) {
 		}
 	}
 
-	if isUUID {
+	if isUUIDFormat {
 		return "", nil, fmt.Errorf("component with UUID '%s' not found", identifier)
 	}
 	return "", nil, fmt.Errorf("component with name '%s' not found", identifier)
+}
+
+// findProduct searches for a product by name or UUID in the content directory
+// Returns the product directory path and the product data
+func findProduct(contentDir, identifier string) (string, *Product, error) {
+	productsDir := filepath.Join(contentDir, "products")
+
+	// Check if products directory exists
+	if _, err := os.Stat(productsDir); os.IsNotExist(err) {
+		return "", nil, fmt.Errorf("products directory not found: %s", productsDir)
+	}
+
+	// Read all product directories
+	entries, err := os.ReadDir(productsDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to read products directory: %w", err)
+	}
+
+	// Check if identifier is a UUID (contains hyphens in UUID format)
+	isUUIDFormat := isUUID(identifier)
+
+	// Search through all product directories
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		productYamlPath := filepath.Join(productsDir, entry.Name(), "product.yaml")
+
+		// Check if product.yaml exists
+		if _, err := os.Stat(productYamlPath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Read and parse product.yaml
+		data, err := os.ReadFile(productYamlPath)
+		if err != nil {
+			continue
+		}
+
+		var product Product
+		if err := yaml.Unmarshal(data, &product); err != nil {
+			continue
+		}
+
+		// Match by UUID or name
+		if isUUIDFormat {
+			if product.UUID == identifier {
+				return filepath.Join(productsDir, entry.Name()), &product, nil
+			}
+		} else {
+			if product.Name == identifier {
+				return filepath.Join(productsDir, entry.Name()), &product, nil
+			}
+		}
+	}
+
+	if isUUIDFormat {
+		return "", nil, fmt.Errorf("product with UUID '%s' not found", identifier)
+	}
+	return "", nil, fmt.Errorf("product with name '%s' not found", identifier)
+}
+
+// findComponentRelease searches for a component release by version or UUID
+// Returns the component release UUID
+func findComponentRelease(componentDir, identifier string) (string, error) {
+	releasesDir := filepath.Join(componentDir, "releases")
+
+	// Check if releases directory exists
+	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("releases directory not found: %s", releasesDir)
+	}
+
+	// Read all release directories
+	entries, err := os.ReadDir(releasesDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read releases directory: %w", err)
+	}
+
+	// Check if identifier is a UUID (contains hyphens in UUID format)
+	isUUIDFormat := isUUID(identifier)
+
+	// Search through all release directories
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		releaseYamlPath := filepath.Join(releasesDir, entry.Name(), "release.yaml")
+
+		// Check if release.yaml exists
+		if _, err := os.Stat(releaseYamlPath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Read and parse release.yaml
+		data, err := os.ReadFile(releaseYamlPath)
+		if err != nil {
+			continue
+		}
+
+		var release ComponentRelease
+		if err := yaml.Unmarshal(data, &release); err != nil {
+			continue
+		}
+
+		// Match by UUID or version
+		if isUUIDFormat {
+			if release.UUID == identifier {
+				return release.UUID, nil
+			}
+		} else {
+			if release.Version == identifier {
+				return release.UUID, nil
+			}
+		}
+	}
+
+	if isUUIDFormat {
+		return "", fmt.Errorf("component release with UUID '%s' not found", identifier)
+	}
+	return "", fmt.Errorf("component release with version '%s' not found", identifier)
 }

@@ -56,7 +56,8 @@ It is possible to set authentication data via explicit flags, login command (see
     1. [Add Product](#121-add-product)
     2. [Add Component](#122-add-component)
     3. [Add Component Release](#123-add-component-release)
-    4. [Add Artifact](#124-add-artifact)
+    4. [Add Product Release](#124-add-product-release)
+    5. [Add Artifact](#125-add-artifact)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -903,7 +904,170 @@ Dates must be in RFC3339 format with UTC timezone:
 
 If not provided, the current UTC timestamp will be used automatically.
 
-### 12.4 Add Artifact
+### 12.4 Add Product Release
+
+The `oolong add_product_release` command creates a new release for an existing product. It generates a release directory with `release.yaml` and an initial collection, and optionally links component releases to the product release.
+
+**Process:**
+1. Resolves the product by name or UUID
+2. Validates that component and component_release flags are properly paired
+3. Creates the release directory: `<product_dir>/releases/<version>/`
+4. Generates a UUID if not provided
+5. Sets timestamps to current UTC time if not provided
+6. For each component pair:
+   - Resolves the component by name or UUID
+   - Resolves the component release by version or UUID
+   - Creates a component reference with both UUIDs
+7. Creates `release.yaml` with release metadata, identifiers, and component references
+8. Creates an initial collection at `collections/1.yaml`
+9. Checks for existing release versions to prevent duplicates
+
+Sample command with product name:
+
+```bash
+rearm oolong add_product_release \
+    --contentdir ./content \
+    --product "My Product" \
+    --version "1.0.0"
+```
+
+Sample command with product UUID:
+
+```bash
+rearm oolong add_product_release \
+    --contentdir ./content \
+    --product "8ab3c557-7f36-4ebd-a593-026c28337630" \
+    --version "1.0.0"
+```
+
+Sample command with linked components:
+
+```bash
+rearm oolong add_product_release \
+    --contentdir ./content \
+    --product "My Product" \
+    --version "1.0.0" \
+    --component "Database Component" \
+    --component_release "1.0.0" \
+    --component "API Component" \
+    --component_release "2.1.0"
+```
+
+Sample command with identifiers and all options:
+
+```bash
+rearm oolong add_product_release \
+    --contentdir ./content \
+    --product "My Product" \
+    --version "1.0.0-beta" \
+    --uuid "9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073" \
+    --createddate "2025-10-16T19:26:57Z" \
+    --releasedate "2025-10-16T19:26:57Z" \
+    --prerelease \
+    --tei "urn:tei:uuid:demo.rearmhq.com:9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073" \
+    --purl "pkg:generic/my-product@1.0.0-beta" \
+    --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
+    --component_release "7a7fa4da-bf9b-478f-b934-2fe9e0fc317c"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--product** - Product name or UUID (required)
+- **--version** - Release version string (required)
+- **--uuid** - Release UUID (optional, auto-generated if not provided)
+- **--createddate** - Created date in RFC3339 format (optional, defaults to current UTC time)
+- **--releasedate** - Release date in RFC3339 format (optional, defaults to current UTC time)
+- **--prerelease** - Mark as pre-release (optional, defaults to false)
+- **--tei** - TEI identifier (optional, can be specified multiple times)
+- **--purl** - PURL identifier (optional, can be specified multiple times)
+- **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--component_release`)
+- **--component_release** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
+
+**Output:**
+
+```
+Successfully created product release: 1.0.0
+  Product: My Product
+  Directory: ./content/products/my_product/releases/1.0.0
+  UUID: 9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+  Linked components: 2
+  Created initial collection: collections/1.yaml
+```
+
+**Generated File Structure:**
+
+```
+content/
+└── products/
+    └── my_product/
+        ├── product.yaml
+        └── releases/
+            └── 1.0.0/
+                ├── release.yaml
+                └── collections/
+                    └── 1.yaml
+```
+
+**release.yaml Format:**
+
+```yaml
+uuid: 9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+version: 1.0.0
+createdDate: "2025-10-16T19:26:57Z"
+releaseDate: "2025-10-16T19:26:57Z"
+preRelease: false
+identifiers:
+- idType: TEI
+  idValue: urn:tei:uuid:demo.rearmhq.com:9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+- idType: PURL
+  idValue: pkg:generic/my-product@1.0.0
+components:
+- uuid: adc0909a-3039-47eb-82ba-7686767c0d52
+  release: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+- uuid: 35218a8a-7e08-4502-8165-fa2b7a4a0b8a
+  release: fd327965-a46b-42a1-85ad-a31468100e2b
+```
+
+**collections/1.yaml Format:**
+
+```yaml
+version: 1
+date: "2025-10-16T19:07:56Z"
+updateReason:
+  type: INITIAL_RELEASE
+  comment: ""
+artifacts: []
+```
+
+**Component Linking:**
+
+The `--component` and `--component_release` flags work in pairs:
+- Each `--component` flag must have a corresponding `--component_release` flag
+- The order matters: the first `--component` is paired with the first `--component_release`, and so on
+- Both flags accept either names or UUIDs
+- The command will:
+  1. Find the component by name or UUID
+  2. Find the component release within that component by version or UUID
+  3. Store both the component UUID and component release UUID in the product release
+
+**Product Resolution:**
+
+The `--product` flag accepts either:
+- **Product Name** - Exact match of the product name (e.g., "My Product")
+- **Product UUID** - Full UUID of the product (e.g., "8ab3c557-7f36-4ebd-a593-026c28337630")
+
+The command will search through all products in the content directory and match by either name or UUID.
+
+**Date Format:**
+
+Dates must be in RFC3339 format with UTC timezone:
+```
+2025-10-16T19:26:57Z
+```
+
+If not provided, the current UTC timestamp will be used automatically.
+
+### 12.5 Add Artifact
 
 The `oolong add_artifact` command creates a new artifact in the content directory. Artifacts represent external resources like SBOMs, attestations, licenses, and other release-related files.
 
