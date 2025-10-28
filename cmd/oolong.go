@@ -89,6 +89,17 @@ var addArtifactToReleasesComponentReleases []string
 var addArtifactToReleasesProducts []string
 var addArtifactToReleasesProductReleases []string
 
+// Add distribution to component release flags
+var distComponent string
+var distComponentRelease string
+var distPurls []string
+var distTeis []string
+var distUrl string
+var distSignatureUrl string
+var distDescription string
+var distDistributionType string
+var distHashes []string
+
 // Product represents the structure of product.yaml
 type Product struct {
 	UUID        string   `yaml:"uuid"`
@@ -109,6 +120,16 @@ type OolongIdentifier struct {
 	IdValue string `yaml:"idValue"`
 }
 
+// Distribution represents a distribution entry in component release.yaml
+type Distribution struct {
+	DistributionType string             `yaml:"distributionType"`
+	Description      string             `yaml:"description"`
+	Identifiers      []OolongIdentifier `yaml:"identifiers"`
+	Url              string             `yaml:"url"`
+	SignatureUrl     string             `yaml:"signatureUrl"`
+	Checksums        []Checksum         `yaml:"checksums"`
+}
+
 // ComponentRelease represents the structure of component release.yaml
 type ComponentRelease struct {
 	UUID          string             `yaml:"uuid"`
@@ -117,7 +138,7 @@ type ComponentRelease struct {
 	ReleaseDate   string             `yaml:"releaseDate"`
 	PreRelease    bool               `yaml:"preRelease"`
 	Identifiers   []OolongIdentifier `yaml:"identifiers"`
-	Distributions []string           `yaml:"distributions"`
+	Distributions []Distribution     `yaml:"distributions"`
 }
 
 // ProductReleaseComponent represents a component reference in product release.yaml
@@ -353,7 +374,7 @@ The component can be specified by name or UUID.`,
 			ReleaseDate:   relDate,
 			PreRelease:    releasePrerelease,
 			Identifiers:   identifiers,
-			Distributions: []string{},
+			Distributions: []Distribution{},
 		}
 
 		// Write release.yaml
@@ -684,6 +705,105 @@ If the artifact is already in the latest collection, no changes are made.`,
 	},
 }
 
+// add_distribution_to_component_releaseCmd represents the add_distribution_to_component_release command
+var add_distribution_to_component_releaseCmd = &cobra.Command{
+	Use:   "add_distribution_to_component_release",
+	Short: "Add a distribution to an existing component release",
+	Long:  `Adds a distribution entry to the distributions array of an existing component release.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Validate required flags
+		if distComponent == "" {
+			fmt.Fprintf(os.Stderr, "Error: --component is required\n")
+			os.Exit(1)
+		}
+		if distComponentRelease == "" {
+			fmt.Fprintf(os.Stderr, "Error: --componentrelease is required\n")
+			os.Exit(1)
+		}
+		if distUrl == "" {
+			fmt.Fprintf(os.Stderr, "Error: --url is required\n")
+			os.Exit(1)
+		}
+
+		// Find component
+		componentDir, componentData, err := findComponent(contentDir, distComponent)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Find component release
+		releaseDir, _, _, err := findComponentReleaseDir(componentDir, distComponentRelease)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Read existing release.yaml
+		releaseYamlPath := filepath.Join(releaseDir, "release.yaml")
+		data, err := os.ReadFile(releaseYamlPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to read release.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		var release ComponentRelease
+		if err := yaml.Unmarshal(data, &release); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to parse release.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Parse hashes
+		checksums := []Checksum{}
+		for _, hash := range distHashes {
+			parts := strings.SplitN(hash, "=", 2)
+			if len(parts) != 2 {
+				fmt.Fprintf(os.Stderr, "Error: invalid hash format '%s'. Expected format: algorithm=value\n", hash)
+				os.Exit(1)
+			}
+
+			algorithm, value := parts[0], parts[1]
+			normalizedAlg, err := normalizeHashAlgorithm(algorithm)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			checksums = append(checksums, Checksum{
+				AlgType:  normalizedAlg,
+				AlgValue: value,
+			})
+		}
+
+		// Build identifiers
+		identifiers := buildIdentifiers(distTeis, distPurls)
+
+		// Create distribution entry
+		distribution := Distribution{
+			DistributionType: distDistributionType,
+			Description:      distDescription,
+			Identifiers:      identifiers,
+			Url:              distUrl,
+			SignatureUrl:     distSignatureUrl,
+			Checksums:        checksums,
+		}
+
+		// Add distribution to release
+		release.Distributions = append(release.Distributions, distribution)
+
+		// Write updated release.yaml
+		if err := writeYAML(releaseYamlPath, release); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to write release.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Successfully added distribution to component release\n")
+		fmt.Printf("  Component: %s\n", componentData.Name)
+		fmt.Printf("  Release: %s\n", release.Version)
+		fmt.Printf("  Distribution URL: %s\n", distUrl)
+	},
+}
+
 func init() {
 	// Add flags to oolong command
 	oolongCmd.PersistentFlags().StringVar(&contentDir, "contentdir", "", "Content directory path")
@@ -753,6 +873,20 @@ func init() {
 	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProductReleases, "productrelease", []string{}, "Product release version or UUID (optional, can be specified multiple times, must be paired with --product)")
 	add_artifact_to_releasesCmd.MarkFlagRequired("artifactuuid")
 
+	// Add flags to add_distribution_to_component_release command
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponent, "component", "", "Component name or UUID (required)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponentRelease, "componentrelease", "", "Component release version or UUID (required)")
+	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distPurls, "purl", []string{}, "PURL identifier (optional, can be specified multiple times)")
+	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distTeis, "tei", []string{}, "TEI identifier (optional, can be specified multiple times)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distUrl, "url", "", "Distribution URL (required)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distSignatureUrl, "signatureurl", "", "Signature URL (optional)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDescription, "description", "", "Distribution description (optional)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDistributionType, "distributiontype", "", "Distribution type (optional)")
+	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
+	add_distribution_to_component_releaseCmd.MarkFlagRequired("component")
+	add_distribution_to_component_releaseCmd.MarkFlagRequired("componentrelease")
+	add_distribution_to_component_releaseCmd.MarkFlagRequired("url")
+
 	// Add subcommands to oolong
 	oolongCmd.AddCommand(add_productCmd)
 	oolongCmd.AddCommand(add_componentCmd)
@@ -760,6 +894,7 @@ func init() {
 	oolongCmd.AddCommand(add_product_releaseCmd)
 	oolongCmd.AddCommand(add_artifactCmd)
 	oolongCmd.AddCommand(add_artifact_to_releasesCmd)
+	oolongCmd.AddCommand(add_distribution_to_component_releaseCmd)
 }
 
 // isUUID checks if a string matches the UUID format

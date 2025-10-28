@@ -15,6 +15,7 @@ The `oolong` command provides tools for managing content in an Oolong TEA Server
 - [12.4 Add Product Release](#124-add-product-release)
 - [12.5 Add Artifact](#125-add-artifact)
 - [12.6 Add Artifact to Releases](#126-add-artifact-to-releases)
+- [12.7 Add Distribution to Component Release](#127-add-distribution-to-component-release)
 
 ### 12.1 Add Product
 
@@ -812,3 +813,146 @@ Running the command multiple times with the same artifact and releases is safe:
 - If the artifact is already in the latest collection, no new collection is created
 - A message is logged indicating the artifact is already present
 - The command succeeds without making changes
+
+### 12.7 Add Distribution to Component Release
+
+The `oolong add_distribution_to_component_release` command adds a distribution entry to an existing component release. Distributions represent different ways a component can be distributed (e.g., different binary formats, update files, etc.).
+
+**Process:**
+1. Resolves the component by name or UUID
+2. Resolves the component release by version or UUID
+3. Reads the existing release.yaml
+4. Creates a new distribution entry with the provided metadata
+5. Appends the distribution to the release's distributions array
+6. Writes the updated release.yaml
+
+Sample command:
+
+```bash
+rearm oolong add_distribution_to_component_release \
+    --contentdir ./content \
+    --component "Kauf Bulb Firmware" \
+    --componentrelease "1.96" \
+    --url "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin" \
+    --hash "sha256=5db2debf05bf9d7dcf7397cf2d780acf6079589dfbd474183cf4da80d8564e29"
+```
+
+Sample command with all options:
+
+```bash
+rearm oolong add_distribution_to_component_release \
+    --contentdir ./content \
+    --component "Kauf Bulb Firmware" \
+    --componentrelease "1.96" \
+    --url "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin" \
+    --signatureurl "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin.sig" \
+    --description "4MB firmware update binary" \
+    --distributiontype "FIRMWARE_UPDATE" \
+    --hash "sha256=7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9" \
+    --purl "pkg:generic/kauf-bulb-firmware@1.96?variant=4m" \
+    --tei "urn:tei:hash:kaufha.com:SHA256:7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9"
+```
+
+Sample command with multiple hashes:
+
+```bash
+rearm oolong add_distribution_to_component_release \
+    --contentdir ./content \
+    --component "35218a8a-7e08-4502-8165-fa2b7a4a0b8a" \
+    --componentrelease "ff742766-4925-4b97-871b-e3285b7f932a" \
+    --url "https://example.com/firmware/v2.0.bin" \
+    --hash "sha256=abc123def456" \
+    --hash "sha512=fedcba654321"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--component** - Component name or UUID (required)
+- **--componentrelease** - Component release version or UUID (required)
+- **--url** - Distribution URL (required)
+- **--signatureurl** - Signature URL (optional)
+- **--description** - Distribution description (optional)
+- **--distributiontype** - Distribution type (optional)
+- **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
+- **--purl** - PURL identifier (optional, can be specified multiple times)
+- **--tei** - TEI identifier (optional, can be specified multiple times)
+
+**Output:**
+
+```
+Successfully added distribution to component release
+  Component: Kauf Bulb Firmware
+  Release: 1.96
+  Distribution URL: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin
+```
+
+**Updated release.yaml Format:**
+
+After adding distributions, the release.yaml will include a distributions array:
+
+```yaml
+uuid: ff742766-4925-4b97-871b-e3285b7f932a
+version: 1.96
+createdDate: "2025-10-16T18:03:53Z"
+releaseDate: "2025-10-16T18:03:53Z"
+preRelease: false
+identifiers: []
+distributions:
+- distributionType: ""
+  description: ""
+  identifiers: []
+  url: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin
+  signatureUrl: ""
+  checksums:
+  - algType: SHA-256
+    algValue: 5db2debf05bf9d7dcf7397cf2d780acf6079589dfbd474183cf4da80d8564e29
+- distributionType: ""
+  description: ""
+  identifiers: []
+  url: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin
+  signatureUrl: ""
+  checksums:
+  - algType: SHA-256
+    algValue: 7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9
+```
+
+**Component and Release Resolution:**
+
+Both `--component` and `--componentrelease` flags accept either:
+- **Name/Version** - Exact match of the component name or release version
+- **UUID** - Full UUID of the component or release
+
+The command will search through the content directory and match by either identifier type.
+
+**Hash Format:**
+
+Hashes must be specified in the format `algorithm=value`:
+- `sha256=abc123def456`
+- `sha512=fedcba654321`
+- `blake3=123abc456def`
+
+**Supported Hash Algorithms:**
+- `MD5`
+- `SHA-1` (or `sha1`)
+- `SHA-256` (or `sha256`)
+- `SHA-384` (or `sha384`)
+- `SHA-512` (or `sha512`)
+- `SHA3-256` (or `sha3256`)
+- `SHA3-384` (or `sha3384`)
+- `SHA3-512` (or `sha3512`)
+- `BLAKE2b-256` (or `blake2b256`)
+- `BLAKE2b-384` (or `blake2b384`)
+- `BLAKE2b-512` (or `blake2b512`)
+- `BLAKE3`
+
+Algorithm names are case-insensitive and will be automatically normalized to the standard format.
+
+Multiple hashes can be provided by using the `--hash` flag multiple times.
+
+**Use Cases:**
+
+This command is useful for:
+- Adding multiple distribution formats for the same release (e.g., different binary variants)
+- Adding firmware update files with checksums
+- Providing different download options for different platforms or configurations
+- Associating identifiers (PURLs, TEIs) with specific distributions
