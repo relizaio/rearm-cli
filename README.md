@@ -52,6 +52,10 @@ It is possible to set authentication data via explicit flags, login command (see
 11. [Transparency Exchange API (TEA) Commands](#11-use-case-transparency-exchange-api-tea-commands)
     1. [Transparency Exchange API (TEA) Discovery](#111-transparency-exchange-api-tea-discovery)
     2. [Complete TEA Flow - Product and Component Details](#112-complete-tea-flow---product-and-component-details)
+12. [Oolong TEA Server Content Management Commands](#12-use-case-oolong-tea-server-content-management-commands)
+    1. [Add Product](#121-add-product)
+    2. [Add Component](#122-add-component)
+    3. [Add Component Release](#123-add-component-release)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -636,6 +640,267 @@ Version: 2.0.1
       Media Type: text/plain; charset=utf-8
       URL: https://registry.example.com/image:2.0.1
 ```
+
+## 12. Use Case: Oolong TEA Server Content Management Commands
+Base Command: `oolong`
+
+The `oolong` command provides tools for managing content in an Oolong TEA Server, including products, components, releases, and artifacts. These commands create and update YAML files in a structured content directory that can be used by the Oolong TEA Server.
+
+**Global Flag:**
+- **--contentdir** - Path to the content directory (required for all subcommands)
+
+### 12.1 Add Product
+
+The `oolong addproduct` command creates a new product in the content directory. It generates a product directory with a `product.yaml` file containing the product metadata.
+
+**Process:**
+1. Converts the product name to lowercase snake_case for the directory name
+2. Creates the directory structure: `<contentdir>/products/<snake_case_name>/`
+3. Generates a UUID if not provided
+4. Creates `product.yaml` with product metadata
+5. Checks for existing products to prevent duplicates
+
+Sample command:
+
+```bash
+rearm oolong addproduct \
+    --contentdir ./content \
+    --name "My Product"
+```
+
+Sample command with custom UUID:
+
+```bash
+rearm oolong addproduct \
+    --contentdir ./content \
+    --name "My Product" \
+    --uuid "8ab3c557-7f36-4ebd-a593-026c28337630"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--name** - Product name (required)
+- **--uuid** - Product UUID (optional, auto-generated if not provided)
+
+**Output:**
+
+```
+Successfully created/updated product: My Product
+  Directory: ./content/products/my_product
+  UUID: 8ab3c557-7f36-4ebd-a593-026c28337630
+```
+
+**Generated File Structure:**
+
+```
+content/
+└── products/
+    └── my_product/
+        └── product.yaml
+```
+
+**product.yaml Format:**
+
+```yaml
+uuid: 8ab3c557-7f36-4ebd-a593-026c28337630
+name: My Product
+identifiers: []
+```
+
+### 12.2 Add Component
+
+The `oolong addcomponent` command creates a new component in the content directory. It generates a component directory with a `component.yaml` file containing the component metadata.
+
+**Process:**
+1. Converts the component name to lowercase snake_case for the directory name
+2. Creates the directory structure: `<contentdir>/components/<snake_case_name>/`
+3. Generates a UUID if not provided
+4. Creates `component.yaml` with component metadata
+5. Checks for existing components to prevent duplicates
+
+Sample command:
+
+```bash
+rearm oolong addcomponent \
+    --contentdir ./content \
+    --name "Database Component"
+```
+
+Sample command with custom UUID:
+
+```bash
+rearm oolong addcomponent \
+    --contentdir ./content \
+    --name "Database Component" \
+    --uuid "adc0909a-3039-47eb-82ba-7686767c0d52"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--name** - Component name (required)
+- **--uuid** - Component UUID (optional, auto-generated if not provided)
+
+**Output:**
+
+```
+Successfully created/updated component: Database Component
+  Directory: ./content/components/database_component
+  UUID: adc0909a-3039-47eb-82ba-7686767c0d52
+```
+
+**Generated File Structure:**
+
+```
+content/
+└── components/
+    └── database_component/
+        └── component.yaml
+```
+
+**component.yaml Format:**
+
+```yaml
+uuid: adc0909a-3039-47eb-82ba-7686767c0d52
+name: Database Component
+identifiers: []
+```
+
+### 12.3 Add Component Release
+
+The `oolong addcomponentrelease` command creates a new release for an existing component. It generates a release directory with `release.yaml` and an initial collection.
+
+**Process:**
+1. Resolves the component by name or UUID
+2. Creates the release directory: `<component_dir>/releases/<version>/`
+3. Generates a UUID if not provided
+4. Sets timestamps to current UTC time if not provided
+5. Creates `release.yaml` with release metadata and identifiers
+6. Creates an initial collection at `collections/1.yaml`
+7. Checks for existing release versions to prevent duplicates
+
+Sample command with component name:
+
+```bash
+rearm oolong addcomponentrelease \
+    --contentdir ./content \
+    --component "Database Component" \
+    --version "1.0.0"
+```
+
+Sample command with component UUID:
+
+```bash
+rearm oolong addcomponentrelease \
+    --contentdir ./content \
+    --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
+    --version "1.0.0"
+```
+
+Sample command with identifiers:
+
+```bash
+rearm oolong addcomponentrelease \
+    --contentdir ./content \
+    --component "Database Component" \
+    --version "1.0.0" \
+    --tei "urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --purl "pkg:generic/database-component@1.0.0"
+```
+
+Sample command with all options:
+
+```bash
+rearm oolong addcomponentrelease \
+    --contentdir ./content \
+    --component "Database Component" \
+    --version "1.0.0-beta" \
+    --uuid "7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --createddate "2025-10-16T19:07:55Z" \
+    --releasedate "2025-10-16T19:07:55Z" \
+    --prerelease \
+    --tei "urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --tei "urn:tei:purl:demo.rearmhq.com:pkg:generic/database-component@1.0.0-beta" \
+    --purl "pkg:generic/database-component@1.0.0-beta"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--component** - Component name or UUID (required)
+- **--version** - Release version string (required)
+- **--uuid** - Release UUID (optional, auto-generated if not provided)
+- **--createddate** - Created date in RFC3339 format (optional, defaults to current UTC time)
+- **--releasedate** - Release date in RFC3339 format (optional, defaults to current UTC time)
+- **--prerelease** - Mark as pre-release (optional, defaults to false)
+- **--tei** - TEI identifier (optional, can be specified multiple times)
+- **--purl** - PURL identifier (optional, can be specified multiple times)
+
+**Output:**
+
+```
+Successfully created component release: 1.0.0
+  Component: Database Component
+  Directory: ./content/components/database_component/releases/1.0.0
+  UUID: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+  Created initial collection: collections/1.yaml
+```
+
+**Generated File Structure:**
+
+```
+content/
+└── components/
+    └── database_component/
+        ├── component.yaml
+        └── releases/
+            └── 1.0.0/
+                ├── release.yaml
+                └── collections/
+                    └── 1.yaml
+```
+
+**release.yaml Format:**
+
+```yaml
+uuid: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+version: 1.0.0
+createdDate: "2025-10-16T19:07:55Z"
+releaseDate: "2025-10-16T19:07:55Z"
+preRelease: false
+identifiers:
+- idType: TEI
+  idValue: urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+- idType: PURL
+  idValue: pkg:generic/database-component@1.0.0
+distributions: []
+```
+
+**collections/1.yaml Format:**
+
+```yaml
+version: 1
+date: "2025-10-16T19:07:56Z"
+updateReason:
+  type: INITIAL_RELEASE
+  comment: ""
+artifacts: []
+```
+
+**Component Resolution:**
+
+The `--component` flag accepts either:
+- **Component Name** - Exact match of the component name (e.g., "Database Component")
+- **Component UUID** - Full UUID of the component (e.g., "adc0909a-3039-47eb-82ba-7686767c0d52")
+
+The command will search through all components in the content directory and match by either name or UUID.
+
+**Date Format:**
+
+Dates must be in RFC3339 format with UTC timezone:
+```
+2025-10-16T19:07:55Z
+```
+
+If not provided, the current UTC timestamp will be used automatically.
 
 # Development of ReARM CLI
 
