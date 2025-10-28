@@ -810,6 +810,17 @@ rearm oolong add_component_release \
     --purl "pkg:generic/database-component@1.0.0"
 ```
 
+Sample command with artifacts:
+
+```bash
+rearm oolong add_component_release \
+    --contentdir ./content \
+    --component "Database Component" \
+    --version "1.0.0" \
+    --artifact "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --artifact "abc12345-1234-5678-9abc-def012345678"
+```
+
 Sample command with all options:
 
 ```bash
@@ -823,7 +834,8 @@ rearm oolong add_component_release \
     --prerelease \
     --tei "urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
     --tei "urn:tei:purl:demo.rearmhq.com:pkg:generic/database-component@1.0.0-beta" \
-    --purl "pkg:generic/database-component@1.0.0-beta"
+    --purl "pkg:generic/database-component@1.0.0-beta" \
+    --artifact "173cedd7-fabb-4d3a-9315-7d7465d236b6"
 ```
 
 **Flags:**
@@ -836,6 +848,7 @@ rearm oolong add_component_release \
 - **--prerelease** - Mark as pre-release (optional, defaults to false)
 - **--tei** - TEI identifier (optional, can be specified multiple times)
 - **--purl** - PURL identifier (optional, can be specified multiple times)
+- **--artifact** - Artifact UUID to add to initial collection (optional, can be specified multiple times)
 
 **Output:**
 
@@ -844,6 +857,17 @@ Successfully created component release: 1.0.0
   Component: Database Component
   Directory: ./content/components/database_component/releases/1.0.0
   UUID: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+  Created initial collection: collections/1.yaml
+```
+
+**Output with artifacts:**
+
+```
+Successfully created component release: 1.0.0
+  Component: Database Component
+  Directory: ./content/components/database_component/releases/1.0.0
+  UUID: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+  Artifacts added: 2
   Created initial collection: collections/1.yaml
 ```
 
@@ -954,6 +978,18 @@ rearm oolong add_product_release \
     --component_release "2.1.0"
 ```
 
+Sample command with artifacts:
+
+```bash
+rearm oolong add_product_release \
+    --contentdir ./content \
+    --product "My Product" \
+    --version "1.0.0" \
+    --artifact "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --component "Database Component" \
+    --component_release "1.0.0"
+```
+
 Sample command with identifiers and all options:
 
 ```bash
@@ -968,7 +1004,8 @@ rearm oolong add_product_release \
     --tei "urn:tei:uuid:demo.rearmhq.com:9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073" \
     --purl "pkg:generic/my-product@1.0.0-beta" \
     --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
-    --component_release "7a7fa4da-bf9b-478f-b934-2fe9e0fc317c"
+    --component_release "7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --artifact "173cedd7-fabb-4d3a-9315-7d7465d236b6"
 ```
 
 **Flags:**
@@ -983,6 +1020,7 @@ rearm oolong add_product_release \
 - **--purl** - PURL identifier (optional, can be specified multiple times)
 - **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--component_release`)
 - **--component_release** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
+- **--artifact** - Artifact UUID to add to initial collection (optional, can be specified multiple times)
 
 **Output:**
 
@@ -992,6 +1030,18 @@ Successfully created product release: 1.0.0
   Directory: ./content/products/my_product/releases/1.0.0
   UUID: 9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
   Linked components: 2
+  Created initial collection: collections/1.yaml
+```
+
+**Output with artifacts:**
+
+```
+Successfully created product release: 1.0.0
+  Product: My Product
+  Directory: ./content/products/my_product/releases/1.0.0
+  UUID: 9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+  Linked components: 1
+  Artifacts added: 1
   Created initial collection: collections/1.yaml
 ```
 

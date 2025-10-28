@@ -53,6 +53,7 @@ var releaseReleaseDate string
 var releasePrerelease bool
 var releaseTeis []string
 var releasePurls []string
+var componentReleaseArtifacts []string
 
 // Artifact flags
 var artifactUuid string
@@ -75,6 +76,7 @@ var productReleaseTeis []string
 var productReleasePurls []string
 var productReleaseComponents []string
 var productReleaseComponentReleases []string
+var productReleaseArtifacts []string
 
 // Add artifact to releases flags
 var addArtifactToReleasesArtifactUuid string
@@ -306,6 +308,14 @@ The component can be specified by name or UUID.`,
 			os.Exit(1)
 		}
 
+		// Validate artifacts exist if provided (BEFORE creating any directories)
+		if len(componentReleaseArtifacts) > 0 {
+			if err := validateArtifactsExist(contentDir, componentReleaseArtifacts); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
 		// Create release directory
 		releaseDir := filepath.Join(componentDir, "releases", componentReleaseVersion)
 
@@ -364,7 +374,7 @@ The component can be specified by name or UUID.`,
 				Type:    "INITIAL_RELEASE",
 				Comment: "",
 			},
-			Artifacts: []string{},
+			Artifacts: componentReleaseArtifacts,
 		}
 
 		collectionYamlPath := filepath.Join(collectionsDir, "1.yaml")
@@ -377,6 +387,9 @@ The component can be specified by name or UUID.`,
 		fmt.Printf("  Component: %s\n", componentData.Name)
 		fmt.Printf("  Directory: %s\n", releaseDir)
 		fmt.Printf("  UUID: %s\n", relUuid)
+		if len(componentReleaseArtifacts) > 0 {
+			fmt.Printf("  Artifacts added: %d\n", len(componentReleaseArtifacts))
+		}
 		fmt.Printf("  Created initial collection: collections/1.yaml\n")
 	},
 }
@@ -522,6 +535,14 @@ Optionally, components can be linked to the release by providing paired componen
 			os.Exit(1)
 		}
 
+		// Validate artifacts exist if provided (BEFORE creating any directories)
+		if len(productReleaseArtifacts) > 0 {
+			if err := validateArtifactsExist(contentDir, productReleaseArtifacts); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
 		// Create release directory
 		releaseDir := filepath.Join(productDir, "releases", productReleaseVersion)
 
@@ -606,7 +627,7 @@ Optionally, components can be linked to the release by providing paired componen
 				Type:    "INITIAL_RELEASE",
 				Comment: "",
 			},
-			Artifacts: []string{},
+			Artifacts: productReleaseArtifacts,
 		}
 
 		collectionYamlPath := filepath.Join(collectionsDir, "1.yaml")
@@ -621,6 +642,9 @@ Optionally, components can be linked to the release by providing paired componen
 		fmt.Printf("  UUID: %s\n", relUuid)
 		if len(components) > 0 {
 			fmt.Printf("  Linked components: %d\n", len(components))
+		}
+		if len(productReleaseArtifacts) > 0 {
+			fmt.Printf("  Artifacts added: %d\n", len(productReleaseArtifacts))
 		}
 		fmt.Printf("  Created initial collection: collections/1.yaml\n")
 	},
@@ -809,6 +833,7 @@ func init() {
 	add_component_releaseCmd.Flags().BoolVar(&releasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
 	add_component_releaseCmd.Flags().StringArrayVar(&releaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
 	add_component_releaseCmd.Flags().StringArrayVar(&releasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
+	add_component_releaseCmd.Flags().StringArrayVar(&componentReleaseArtifacts, "artifact", []string{}, "Artifact UUID to add to initial collection (optional, can be specified multiple times)")
 	add_component_releaseCmd.MarkFlagRequired("component")
 	add_component_releaseCmd.MarkFlagRequired("version")
 
@@ -823,6 +848,7 @@ func init() {
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --component_release)")
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponentReleases, "component_release", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseArtifacts, "artifact", []string{}, "Artifact UUID to add to initial collection (optional, can be specified multiple times)")
 	add_product_releaseCmd.MarkFlagRequired("product")
 	add_product_releaseCmd.MarkFlagRequired("version")
 
@@ -928,6 +954,19 @@ func parseOrDefaultDate(dateStr string) string {
 		return dateStr
 	}
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// validateArtifactsExist checks if all artifact UUIDs exist in the artifacts directory
+func validateArtifactsExist(contentDir string, artifactUUIDs []string) error {
+	artifactsDir := filepath.Join(contentDir, "artifacts")
+	
+	for _, artifactUUID := range artifactUUIDs {
+		artifactPath := filepath.Join(artifactsDir, artifactUUID+".yaml")
+		if _, err := os.Stat(artifactPath); os.IsNotExist(err) {
+			return fmt.Errorf("artifact with UUID '%s' not found at %s", artifactUUID, artifactPath)
+		}
+	}
+	return nil
 }
 
 // toSnakeCase converts a string to lowercase snake_case
