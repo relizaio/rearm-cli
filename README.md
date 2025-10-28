@@ -58,6 +58,7 @@ It is possible to set authentication data via explicit flags, login command (see
     3. [Add Component Release](#123-add-component-release)
     4. [Add Product Release](#124-add-product-release)
     5. [Add Artifact](#125-add-artifact)
+    6. [Add Artifact to Releases](#126-add-artifact-to-releases)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -1216,6 +1217,144 @@ Multiple hashes can be provided by using the `--hash` flag multiple times.
 **Artifact Types:**
 
 The artifact type must match one of the TEA (Transparency Exchange API) standard artifact types. These types help categorize and identify the purpose of each artifact in the transparency exchange ecosystem.
+
+### 12.6 Add Artifact to Releases
+
+The `oolong add_artifact_to_releases` command links an existing artifact to one or more component releases and/or product releases. For each release, it creates a new collection version with the artifact added.
+
+**Process:**
+1. Validates that component/componentrelease and product/productrelease flags are properly paired
+2. Validates that at least one release is specified
+3. Resolves all components and products by name or UUID (fails if any not found)
+4. Resolves all component releases and product releases by version or UUID (fails if any not found)
+5. For each release:
+   - Finds the latest collection version
+   - Checks if the artifact UUID already exists in that collection
+   - If exists: logs message and skips
+   - If not exists: creates new collection with incremented version, copies all data, adds artifact UUID, sets updateReason to ARTIFACT_ADDED
+6. No changes are made if any validation fails (atomic operation)
+
+Sample command with component release:
+
+```bash
+rearm oolong add_artifact_to_releases \
+    --contentdir ./content \
+    --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --component "Kauf Bulb Hardware" \
+    --componentrelease "BLF10"
+```
+
+Sample command with product release:
+
+```bash
+rearm oolong add_artifact_to_releases \
+    --contentdir ./content \
+    --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --product "Kauf Bulb" \
+    --productrelease "BLF10-1m-1.95"
+```
+
+Sample command with multiple component releases:
+
+```bash
+rearm oolong add_artifact_to_releases \
+    --contentdir ./content \
+    --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --component "Database Component" \
+    --componentrelease "1.0.0" \
+    --component "API Component" \
+    --componentrelease "2.1.0"
+```
+
+Sample command with both component and product releases:
+
+```bash
+rearm oolong add_artifact_to_releases \
+    --contentdir ./content \
+    --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
+    --componentrelease "BLF10" \
+    --product "8ab3c557-7f36-4ebd-a593-026c28337630" \
+    --productrelease "BLF10-1m-1.95"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--artifactuuid** - Artifact UUID to add (required)
+- **--component** - Component name or UUID (optional, can be specified multiple times, must be paired with `--componentrelease`)
+- **--componentrelease** - Component release version or UUID (optional, can be specified multiple times, must be paired with `--component`)
+- **--product** - Product name or UUID (optional, can be specified multiple times, must be paired with `--productrelease`)
+- **--productrelease** - Product release version or UUID (optional, can be specified multiple times, must be paired with `--product`)
+
+**Output when artifact is added:**
+
+```
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to component 'Kauf Bulb Hardware' release 'BLF10' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to product 'Kauf Bulb' release 'BLF10-1m-1.95' (collection version 2)
+
+Successfully processed 2 release(s)
+```
+
+**Output when artifact already exists:**
+
+```
+Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 already added to component 'Kauf Bulb Hardware' release 'BLF10'
+Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 already added to product 'Kauf Bulb' release 'BLF10-1m-1.95'
+
+Successfully processed 2 release(s)
+```
+
+**Created Collection Format:**
+
+When a new collection is created, it increments the version number and adds the artifact:
+
+```yaml
+version: 2
+date: "2025-10-28T16:26:48Z"
+updateReason:
+  type: ARTIFACT_ADDED
+  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6
+artifacts:
+- 173cedd7-fabb-4d3a-9315-7d7465d236b6
+```
+
+If the previous collection already had artifacts, they are preserved:
+
+```yaml
+version: 3
+date: "2025-10-28T16:30:00Z"
+updateReason:
+  type: ARTIFACT_ADDED
+  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6
+artifacts:
+- abc12345-1234-5678-9abc-def012345678
+- 173cedd7-fabb-4d3a-9315-7d7465d236b6
+```
+
+**Pairing Rules:**
+
+The `--component` and `--componentrelease` flags work in pairs:
+- Each `--component` flag must have a corresponding `--componentrelease` flag
+- The order matters: the first `--component` is paired with the first `--componentrelease`, and so on
+- Both flags accept either names or UUIDs
+
+The same pairing rules apply to `--product` and `--productrelease` flags.
+
+**Atomic Operation:**
+
+The command validates ALL releases before making ANY changes:
+- If any component is not found, the command exits with an error
+- If any component release is not found, the command exits with an error
+- If any product is not found, the command exits with an error
+- If any product release is not found, the command exits with an error
+- Only if all validations pass will the command proceed to update collections
+
+**Idempotent Behavior:**
+
+Running the command multiple times with the same artifact and releases is safe:
+- If the artifact is already in the latest collection, no new collection is created
+- A message is logged indicating the artifact is already present
+- The command succeeds without making changes
 
 # Development of ReARM CLI
 

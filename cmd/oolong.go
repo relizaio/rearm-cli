@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,6 +75,13 @@ var productReleaseTeis []string
 var productReleasePurls []string
 var productReleaseComponents []string
 var productReleaseComponentReleases []string
+
+// Add artifact to releases flags
+var addArtifactToReleasesArtifactUuid string
+var addArtifactToReleasesComponents []string
+var addArtifactToReleasesComponentReleases []string
+var addArtifactToReleasesProducts []string
+var addArtifactToReleasesProductReleases []string
 
 // Product represents the structure of product.yaml
 type Product struct {
@@ -694,6 +702,165 @@ Optionally, components can be linked to the release by providing paired componen
 	},
 }
 
+// add_artifact_to_releasesCmd represents the add_artifact_to_releases command
+var add_artifact_to_releasesCmd = &cobra.Command{
+	Use:   "add_artifact_to_releases",
+	Short: "Add an artifact to component and/or product releases",
+	Long: `Links an artifact to one or more component releases and/or product releases.
+For each release, creates a new collection version with the artifact added.
+If the artifact is already in the latest collection, no changes are made.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if addArtifactToReleasesArtifactUuid == "" {
+			fmt.Fprintf(os.Stderr, "Error: artifactuuid is required\n")
+			os.Exit(1)
+		}
+
+		// Validate component and component_release flags match
+		if len(addArtifactToReleasesComponents) != len(addArtifactToReleasesComponentReleases) {
+			fmt.Fprintf(os.Stderr, "Error: number of --component flags (%d) must match number of --componentrelease flags (%d)\n", len(addArtifactToReleasesComponents), len(addArtifactToReleasesComponentReleases))
+			os.Exit(1)
+		}
+
+		// Validate product and product_release flags match
+		if len(addArtifactToReleasesProducts) != len(addArtifactToReleasesProductReleases) {
+			fmt.Fprintf(os.Stderr, "Error: number of --product flags (%d) must match number of --productrelease flags (%d)\n", len(addArtifactToReleasesProducts), len(addArtifactToReleasesProductReleases))
+			os.Exit(1)
+		}
+
+		// Check that at least one release is specified
+		if len(addArtifactToReleasesComponents) == 0 && len(addArtifactToReleasesProducts) == 0 {
+			fmt.Fprintf(os.Stderr, "Error: at least one component/componentrelease or product/productrelease pair must be specified\n")
+			os.Exit(1)
+		}
+
+		type releaseInfo struct {
+			type_        string // "component" or "product"
+			name         string
+			releaseDir   string
+			releaseVersion string
+		}
+
+		var releases []releaseInfo
+
+		// Validate and collect all component releases
+		for i := 0; i < len(addArtifactToReleasesComponents); i++ {
+			componentIdentifier := addArtifactToReleasesComponents[i]
+			componentReleaseIdentifier := addArtifactToReleasesComponentReleases[i]
+
+			// Find component
+			componentDir, componentData, err := findComponent(contentDir, componentIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding component '%s': %v\n", componentIdentifier, err)
+				os.Exit(1)
+			}
+
+			// Find component release directory
+			releaseDir, releaseVersion, err := findComponentReleaseDir(componentDir, componentReleaseIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding component release '%s' for component '%s': %v\n", componentReleaseIdentifier, componentData.Name, err)
+				os.Exit(1)
+			}
+
+			releases = append(releases, releaseInfo{
+				type_:          "component",
+				name:           componentData.Name,
+				releaseDir:     releaseDir,
+				releaseVersion: releaseVersion,
+			})
+		}
+
+		// Validate and collect all product releases
+		for i := 0; i < len(addArtifactToReleasesProducts); i++ {
+			productIdentifier := addArtifactToReleasesProducts[i]
+			productReleaseIdentifier := addArtifactToReleasesProductReleases[i]
+
+			// Find product
+			productDir, productData, err := findProduct(contentDir, productIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding product '%s': %v\n", productIdentifier, err)
+				os.Exit(1)
+			}
+
+			// Find product release directory
+			releaseDir, releaseVersion, err := findProductReleaseDir(productDir, productReleaseIdentifier)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding product release '%s' for product '%s': %v\n", productReleaseIdentifier, productData.Name, err)
+				os.Exit(1)
+			}
+
+			releases = append(releases, releaseInfo{
+				type_:          "product",
+				name:           productData.Name,
+				releaseDir:     releaseDir,
+				releaseVersion: releaseVersion,
+			})
+		}
+
+		// Process each release
+		for _, rel := range releases {
+			collectionsDir := filepath.Join(rel.releaseDir, "collections")
+
+			// Find the latest collection version
+			latestVersion, err := findLatestCollectionVersion(collectionsDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error finding latest collection for %s release '%s': %v\n", rel.type_, rel.releaseVersion, err)
+				os.Exit(1)
+			}
+
+			// Read the latest collection
+			latestCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", latestVersion))
+			data, err := os.ReadFile(latestCollectionPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading collection %s: %v\n", latestCollectionPath, err)
+				os.Exit(1)
+			}
+
+			var collection Collection
+			if err := yaml.Unmarshal(data, &collection); err != nil {
+				fmt.Fprintf(os.Stderr, "Error parsing collection %s: %v\n", latestCollectionPath, err)
+				os.Exit(1)
+			}
+
+			// Check if artifact already exists in collection
+			artifactExists := false
+			for _, artifactUuid := range collection.Artifacts {
+				if artifactUuid == addArtifactToReleasesArtifactUuid {
+					artifactExists = true
+					break
+				}
+			}
+
+			if artifactExists {
+				fmt.Printf("Artifact %s already added to %s '%s' release '%s'\n", addArtifactToReleasesArtifactUuid, rel.type_, rel.name, rel.releaseVersion)
+				continue
+			}
+
+			// Create new collection with incremented version
+			newVersion := latestVersion + 1
+			newCollection := Collection{
+				Version: newVersion,
+				Date:    time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+				UpdateReason: UpdateReason{
+					Type:    "ARTIFACT_ADDED",
+					Comment: fmt.Sprintf("Added artifact %s", addArtifactToReleasesArtifactUuid),
+				},
+				Artifacts: append(collection.Artifacts, addArtifactToReleasesArtifactUuid),
+			}
+
+			// Write new collection
+			newCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", newVersion))
+			if err := writeYAML(newCollectionPath, newCollection); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing new collection %s: %v\n", newCollectionPath, err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("Added artifact %s to %s '%s' release '%s' (collection version %d)\n", addArtifactToReleasesArtifactUuid, rel.type_, rel.name, rel.releaseVersion, newVersion)
+		}
+
+		fmt.Printf("\nSuccessfully processed %d release(s)\n", len(releases))
+	},
+}
+
 func init() {
 	// Add flags to oolong command
 	oolongCmd.PersistentFlags().StringVar(&contentDir, "contentdir", "", "Content directory path")
@@ -749,12 +916,21 @@ func init() {
 	add_artifactCmd.MarkFlagRequired("mediatype")
 	add_artifactCmd.MarkFlagRequired("url")
 
+	// Add flags to add_artifact_to_releases command
+	add_artifact_to_releasesCmd.Flags().StringVar(&addArtifactToReleasesArtifactUuid, "artifactuuid", "", "Artifact UUID (required)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponents, "component", []string{}, "Component name or UUID (optional, can be specified multiple times, must be paired with --componentrelease)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponentReleases, "componentrelease", []string{}, "Component release version or UUID (optional, can be specified multiple times, must be paired with --component)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProducts, "product", []string{}, "Product name or UUID (optional, can be specified multiple times, must be paired with --productrelease)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProductReleases, "productrelease", []string{}, "Product release version or UUID (optional, can be specified multiple times, must be paired with --product)")
+	add_artifact_to_releasesCmd.MarkFlagRequired("artifactuuid")
+
 	// Add subcommands to oolong
 	oolongCmd.AddCommand(add_productCmd)
 	oolongCmd.AddCommand(add_componentCmd)
 	oolongCmd.AddCommand(add_component_releaseCmd)
 	oolongCmd.AddCommand(add_product_releaseCmd)
 	oolongCmd.AddCommand(add_artifactCmd)
+	oolongCmd.AddCommand(add_artifact_to_releasesCmd)
 }
 
 // isUUID checks if a string matches the UUID format
@@ -983,4 +1159,169 @@ func findComponentRelease(componentDir, identifier string) (string, error) {
 		return "", fmt.Errorf("component release with UUID '%s' not found", identifier)
 	}
 	return "", fmt.Errorf("component release with version '%s' not found", identifier)
+}
+
+// findComponentReleaseDir searches for a component release by version or UUID
+// Returns the release directory path and version
+func findComponentReleaseDir(componentDir, identifier string) (string, string, error) {
+	releasesDir := filepath.Join(componentDir, "releases")
+
+	// Check if releases directory exists
+	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
+		return "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
+	}
+
+	// Read all release directories
+	entries, err := os.ReadDir(releasesDir)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read releases directory: %w", err)
+	}
+
+	// Check if identifier is a UUID (contains hyphens in UUID format)
+	isUUIDFormat := isUUID(identifier)
+
+	// Search through all release directories
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		releaseYamlPath := filepath.Join(releasesDir, entry.Name(), "release.yaml")
+
+		// Check if release.yaml exists
+		if _, err := os.Stat(releaseYamlPath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Read and parse release.yaml
+		data, err := os.ReadFile(releaseYamlPath)
+		if err != nil {
+			continue
+		}
+
+		var release ComponentRelease
+		if err := yaml.Unmarshal(data, &release); err != nil {
+			continue
+		}
+
+		// Match by UUID or version
+		if isUUIDFormat {
+			if release.UUID == identifier {
+				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+			}
+		} else {
+			if release.Version == identifier {
+				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+			}
+		}
+	}
+
+	if isUUIDFormat {
+		return "", "", fmt.Errorf("component release with UUID '%s' not found", identifier)
+	}
+	return "", "", fmt.Errorf("component release with version '%s' not found", identifier)
+}
+
+// findProductReleaseDir searches for a product release by version or UUID
+// Returns the release directory path and version
+func findProductReleaseDir(productDir, identifier string) (string, string, error) {
+	releasesDir := filepath.Join(productDir, "releases")
+
+	// Check if releases directory exists
+	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
+		return "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
+	}
+
+	// Read all release directories
+	entries, err := os.ReadDir(releasesDir)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read releases directory: %w", err)
+	}
+
+	// Check if identifier is a UUID (contains hyphens in UUID format)
+	isUUIDFormat := isUUID(identifier)
+
+	// Search through all release directories
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		releaseYamlPath := filepath.Join(releasesDir, entry.Name(), "release.yaml")
+
+		// Check if release.yaml exists
+		if _, err := os.Stat(releaseYamlPath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Read and parse release.yaml
+		data, err := os.ReadFile(releaseYamlPath)
+		if err != nil {
+			continue
+		}
+
+		var release ProductRelease
+		if err := yaml.Unmarshal(data, &release); err != nil {
+			continue
+		}
+
+		// Match by UUID or version
+		if isUUIDFormat {
+			if release.UUID == identifier {
+				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+			}
+		} else {
+			if release.Version == identifier {
+				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+			}
+		}
+	}
+
+	if isUUIDFormat {
+		return "", "", fmt.Errorf("product release with UUID '%s' not found", identifier)
+	}
+	return "", "", fmt.Errorf("product release with version '%s' not found", identifier)
+}
+
+// findLatestCollectionVersion finds the highest collection version number in a collections directory
+func findLatestCollectionVersion(collectionsDir string) (int, error) {
+	// Check if collections directory exists
+	if _, err := os.Stat(collectionsDir); os.IsNotExist(err) {
+		return 0, fmt.Errorf("collections directory not found: %s", collectionsDir)
+	}
+
+	// Read all collection files
+	entries, err := os.ReadDir(collectionsDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read collections directory: %w", err)
+	}
+
+	maxVersion := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Parse version from filename (e.g., "1.yaml" -> 1)
+		filename := entry.Name()
+		if !strings.HasSuffix(filename, ".yaml") {
+			continue
+		}
+
+		versionStr := strings.TrimSuffix(filename, ".yaml")
+		version, err := strconv.Atoi(versionStr)
+		if err != nil {
+			continue
+		}
+
+		if version > maxVersion {
+			maxVersion = version
+		}
+	}
+
+	if maxVersion == 0 {
+		return 0, fmt.Errorf("no valid collection files found in %s", collectionsDir)
+	}
+
+	return maxVersion, nil
 }
