@@ -755,7 +755,7 @@ If the artifact is already in the latest collection, no changes are made.`,
 			}
 
 			// Find component release directory
-			releaseDir, releaseVersion, err := findComponentReleaseDir(componentDir, componentReleaseIdentifier)
+			releaseDir, releaseVersion, _, err := findComponentReleaseDir(componentDir, componentReleaseIdentifier)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error finding component release '%s' for component '%s': %v\n", componentReleaseIdentifier, componentData.Name, err)
 				os.Exit(1)
@@ -782,7 +782,7 @@ If the artifact is already in the latest collection, no changes are made.`,
 			}
 
 			// Find product release directory
-			releaseDir, releaseVersion, err := findProductReleaseDir(productDir, productReleaseIdentifier)
+			releaseDir, releaseVersion, _, err := findProductReleaseDir(productDir, productReleaseIdentifier)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error finding product release '%s' for product '%s': %v\n", productReleaseIdentifier, productData.Name, err)
 				os.Exit(1)
@@ -1103,78 +1103,24 @@ func findProduct(contentDir, identifier string) (string, *Product, error) {
 // findComponentRelease searches for a component release by version or UUID
 // Returns the component release UUID
 func findComponentRelease(componentDir, identifier string) (string, error) {
-	releasesDir := filepath.Join(componentDir, "releases")
-
-	// Check if releases directory exists
-	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
-		return "", fmt.Errorf("releases directory not found: %s", releasesDir)
-	}
-
-	// Read all release directories
-	entries, err := os.ReadDir(releasesDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to read releases directory: %w", err)
-	}
-
-	// Check if identifier is a UUID (contains hyphens in UUID format)
-	isUUIDFormat := isUUID(identifier)
-
-	// Search through all release directories
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		releaseYamlPath := filepath.Join(releasesDir, entry.Name(), "release.yaml")
-
-		// Check if release.yaml exists
-		if _, err := os.Stat(releaseYamlPath); os.IsNotExist(err) {
-			continue
-		}
-
-		// Read and parse release.yaml
-		data, err := os.ReadFile(releaseYamlPath)
-		if err != nil {
-			continue
-		}
-
-		var release ComponentRelease
-		if err := yaml.Unmarshal(data, &release); err != nil {
-			continue
-		}
-
-		// Match by UUID or version
-		if isUUIDFormat {
-			if release.UUID == identifier {
-				return release.UUID, nil
-			}
-		} else {
-			if release.Version == identifier {
-				return release.UUID, nil
-			}
-		}
-	}
-
-	if isUUIDFormat {
-		return "", fmt.Errorf("component release with UUID '%s' not found", identifier)
-	}
-	return "", fmt.Errorf("component release with version '%s' not found", identifier)
+	_, _, uuid, err := findComponentReleaseDir(componentDir, identifier)
+	return uuid, err
 }
 
 // findComponentReleaseDir searches for a component release by version or UUID
-// Returns the release directory path and version
-func findComponentReleaseDir(componentDir, identifier string) (string, string, error) {
+// Returns the release directory path, version, and UUID
+func findComponentReleaseDir(componentDir, identifier string) (string, string, string, error) {
 	releasesDir := filepath.Join(componentDir, "releases")
 
 	// Check if releases directory exists
 	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
-		return "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
+		return "", "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
 	}
 
 	// Read all release directories
 	entries, err := os.ReadDir(releasesDir)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read releases directory: %w", err)
+		return "", "", "", fmt.Errorf("failed to read releases directory: %w", err)
 	}
 
 	// Check if identifier is a UUID (contains hyphens in UUID format)
@@ -1207,35 +1153,35 @@ func findComponentReleaseDir(componentDir, identifier string) (string, string, e
 		// Match by UUID or version
 		if isUUIDFormat {
 			if release.UUID == identifier {
-				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+				return filepath.Join(releasesDir, entry.Name()), release.Version, release.UUID, nil
 			}
 		} else {
 			if release.Version == identifier {
-				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+				return filepath.Join(releasesDir, entry.Name()), release.Version, release.UUID, nil
 			}
 		}
 	}
 
 	if isUUIDFormat {
-		return "", "", fmt.Errorf("component release with UUID '%s' not found", identifier)
+		return "", "", "", fmt.Errorf("component release with UUID '%s' not found", identifier)
 	}
-	return "", "", fmt.Errorf("component release with version '%s' not found", identifier)
+	return "", "", "", fmt.Errorf("component release with version '%s' not found", identifier)
 }
 
 // findProductReleaseDir searches for a product release by version or UUID
-// Returns the release directory path and version
-func findProductReleaseDir(productDir, identifier string) (string, string, error) {
+// Returns the release directory path, version, and UUID
+func findProductReleaseDir(productDir, identifier string) (string, string, string, error) {
 	releasesDir := filepath.Join(productDir, "releases")
 
 	// Check if releases directory exists
 	if _, err := os.Stat(releasesDir); os.IsNotExist(err) {
-		return "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
+		return "", "", "", fmt.Errorf("releases directory not found: %s", releasesDir)
 	}
 
 	// Read all release directories
 	entries, err := os.ReadDir(releasesDir)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read releases directory: %w", err)
+		return "", "", "", fmt.Errorf("failed to read releases directory: %w", err)
 	}
 
 	// Check if identifier is a UUID (contains hyphens in UUID format)
@@ -1268,19 +1214,19 @@ func findProductReleaseDir(productDir, identifier string) (string, string, error
 		// Match by UUID or version
 		if isUUIDFormat {
 			if release.UUID == identifier {
-				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+				return filepath.Join(releasesDir, entry.Name()), release.Version, release.UUID, nil
 			}
 		} else {
 			if release.Version == identifier {
-				return filepath.Join(releasesDir, entry.Name()), release.Version, nil
+				return filepath.Join(releasesDir, entry.Name()), release.Version, release.UUID, nil
 			}
 		}
 	}
 
 	if isUUIDFormat {
-		return "", "", fmt.Errorf("product release with UUID '%s' not found", identifier)
+		return "", "", "", fmt.Errorf("product release with UUID '%s' not found", identifier)
 	}
-	return "", "", fmt.Errorf("product release with version '%s' not found", identifier)
+	return "", "", "", fmt.Errorf("product release with version '%s' not found", identifier)
 }
 
 // findLatestCollectionVersion finds the highest collection version number in a collections directory
