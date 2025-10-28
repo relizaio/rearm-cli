@@ -321,38 +321,15 @@ The component can be specified by name or UUID.`,
 		}
 
 		// Generate UUID if not provided
-		var relUuid string
-		if componentReleaseUuid != "" {
-			relUuid = componentReleaseUuid
-		} else {
-			relUuid = uuid.New().String()
-		}
+		relUuid := getOrGenerateUUID(componentReleaseUuid)
 
 		// Set timestamps if not provided
 		currentTime := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		createdDate := releaseCreatedDate
-		if createdDate == "" {
-			createdDate = currentTime
-		}
-		relDate := releaseReleaseDate
-		if relDate == "" {
-			relDate = currentTime
-		}
+		createdDate := parseOrDefaultDate(releaseCreatedDate)
+		relDate := parseOrDefaultDate(releaseReleaseDate)
 
 		// Build identifiers list
-		identifiers := []OolongIdentifier{}
-		for _, tei := range releaseTeis {
-			identifiers = append(identifiers, OolongIdentifier{
-				IdType:  "TEI",
-				IdValue: tei,
-			})
-		}
-		for _, purl := range releasePurls {
-			identifiers = append(identifiers, OolongIdentifier{
-				IdType:  "PURL",
-				IdValue: purl,
-			})
-		}
+		identifiers := buildIdentifiers(releaseTeis, releasePurls)
 
 		// Create component release structure
 		release := ComponentRelease{
@@ -448,12 +425,7 @@ The artifact file is named with its UUID.`,
 		}
 
 		// Generate UUID if not provided
-		var artUuid string
-		if artifactUuid != "" {
-			artUuid = artifactUuid
-		} else {
-			artUuid = uuid.New().String()
-		}
+		artUuid := getOrGenerateUUID(artifactUuid)
 
 		// Create artifacts directory if it doesn't exist
 		artifactsDir := filepath.Join(contentDir, "artifacts")
@@ -478,34 +450,9 @@ The artifact file is named with its UUID.`,
 				os.Exit(1)
 			}
 			// Normalize algorithm name
-			algType := strings.ToUpper(parts[0])
-			switch algType {
-			case "MD5":
-				algType = "MD5"
-			case "SHA1", "SHA-1":
-				algType = "SHA-1"
-			case "SHA256", "SHA-256":
-				algType = "SHA-256"
-			case "SHA384", "SHA-384":
-				algType = "SHA-384"
-			case "SHA512", "SHA-512":
-				algType = "SHA-512"
-			case "SHA3-256", "SHA3256":
-				algType = "SHA3-256"
-			case "SHA3-384", "SHA3384":
-				algType = "SHA3-384"
-			case "SHA3-512", "SHA3512":
-				algType = "SHA3-512"
-			case "BLAKE2B-256", "BLAKE2B256":
-				algType = "BLAKE2b-256"
-			case "BLAKE2B-384", "BLAKE2B384":
-				algType = "BLAKE2b-384"
-			case "BLAKE2B-512", "BLAKE2B512":
-				algType = "BLAKE2b-512"
-			case "BLAKE3":
-				algType = "BLAKE3"
-			default:
-				fmt.Fprintf(os.Stderr, "Error: invalid hash algorithm '%s'. Must be one of: MD5, SHA-1, SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3\n", parts[0])
+			algType, err := normalizeHashAlgorithm(parts[0])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			checksums = append(checksums, Checksum{
@@ -590,38 +537,15 @@ Optionally, components can be linked to the release by providing paired componen
 		}
 
 		// Generate UUID if not provided
-		var relUuid string
-		if productReleaseUuid != "" {
-			relUuid = productReleaseUuid
-		} else {
-			relUuid = uuid.New().String()
-		}
+		relUuid := getOrGenerateUUID(productReleaseUuid)
 
 		// Set timestamps if not provided
 		currentTime := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		createdDate := productReleaseCreatedDate
-		if createdDate == "" {
-			createdDate = currentTime
-		}
-		relDate := productReleaseReleaseDate
-		if relDate == "" {
-			relDate = currentTime
-		}
+		createdDate := parseOrDefaultDate(productReleaseCreatedDate)
+		relDate := parseOrDefaultDate(productReleaseReleaseDate)
 
 		// Build identifiers list
-		identifiers := []OolongIdentifier{}
-		for _, tei := range productReleaseTeis {
-			identifiers = append(identifiers, OolongIdentifier{
-				IdType:  "TEI",
-				IdValue: tei,
-			})
-		}
-		for _, purl := range productReleasePurls {
-			identifiers = append(identifiers, OolongIdentifier{
-				IdType:  "PURL",
-				IdValue: purl,
-			})
-		}
+		identifiers := buildIdentifiers(productReleaseTeis, productReleasePurls)
 
 		// Process component references
 		components := []ProductReleaseComponent{}
@@ -939,6 +863,73 @@ func isUUID(s string) bool {
 	return uuidPattern.MatchString(s)
 }
 
+// buildIdentifiers creates a list of OolongIdentifier from TEI and PURL lists
+func buildIdentifiers(teis, purls []string) []OolongIdentifier {
+	identifiers := []OolongIdentifier{}
+	for _, tei := range teis {
+		identifiers = append(identifiers, OolongIdentifier{
+			IdType:  "TEI",
+			IdValue: tei,
+		})
+	}
+	for _, purl := range purls {
+		identifiers = append(identifiers, OolongIdentifier{
+			IdType:  "PURL",
+			IdValue: purl,
+		})
+	}
+	return identifiers
+}
+
+// normalizeHashAlgorithm normalizes hash algorithm names to standard format
+func normalizeHashAlgorithm(algorithm string) (string, error) {
+	algType := strings.ToUpper(algorithm)
+	switch algType {
+	case "MD5":
+		return "MD5", nil
+	case "SHA1", "SHA-1":
+		return "SHA-1", nil
+	case "SHA256", "SHA-256":
+		return "SHA-256", nil
+	case "SHA384", "SHA-384":
+		return "SHA-384", nil
+	case "SHA512", "SHA-512":
+		return "SHA-512", nil
+	case "SHA3-256", "SHA3256":
+		return "SHA3-256", nil
+	case "SHA3-384", "SHA3384":
+		return "SHA3-384", nil
+	case "SHA3-512", "SHA3512":
+		return "SHA3-512", nil
+	case "BLAKE2B-256", "BLAKE2B256":
+		return "BLAKE2b-256", nil
+	case "BLAKE2B-384", "BLAKE2B384":
+		return "BLAKE2b-384", nil
+	case "BLAKE2B-512", "BLAKE2B512":
+		return "BLAKE2b-512", nil
+	case "BLAKE3":
+		return "BLAKE3", nil
+	default:
+		return "", fmt.Errorf("invalid hash algorithm '%s'. Must be one of: MD5, SHA-1, SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3", algorithm)
+	}
+}
+
+// getOrGenerateUUID returns the provided UUID if not empty, otherwise generates a new one
+func getOrGenerateUUID(providedUUID string) string {
+	if providedUUID != "" {
+		return providedUUID
+	}
+	return uuid.New().String()
+}
+
+// parseOrDefaultDate parses the provided date string or returns current UTC time in RFC3339 format
+func parseOrDefaultDate(dateStr string) string {
+	if dateStr != "" {
+		return dateStr
+	}
+	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
 // toSnakeCase converts a string to lowercase snake_case
 func toSnakeCase(s string) string {
 	// Replace spaces and hyphens with underscores
@@ -978,126 +969,128 @@ func writeYAML(path string, data interface{}) error {
 	return nil
 }
 
-// findComponent searches for a component by name or UUID in the content directory
-// Returns the component directory path and the component data
-func findComponent(contentDir, identifier string) (string, *Component, error) {
-	componentsDir := filepath.Join(contentDir, "components")
+// entityMatcher is an interface for entities that can be matched by UUID or name
+type entityMatcher interface {
+	matchUUID(uuid string) bool
+	matchName(name string) bool
+	getUUID() string
+	getName() string
+}
 
-	// Check if components directory exists
-	if _, err := os.Stat(componentsDir); os.IsNotExist(err) {
-		return "", nil, fmt.Errorf("components directory not found: %s", componentsDir)
+// componentMatcher wraps Component to implement entityMatcher
+type componentMatcher struct {
+	*Component
+}
+
+func (c componentMatcher) matchUUID(uuid string) bool { return c.UUID == uuid }
+func (c componentMatcher) matchName(name string) bool { return c.Name == name }
+func (c componentMatcher) getUUID() string            { return c.UUID }
+func (c componentMatcher) getName() string            { return c.Name }
+
+// productMatcher wraps Product to implement entityMatcher
+type productMatcher struct {
+	*Product
+}
+
+func (p productMatcher) matchUUID(uuid string) bool { return p.UUID == uuid }
+func (p productMatcher) matchName(name string) bool { return p.Name == name }
+func (p productMatcher) getUUID() string            { return p.UUID }
+func (p productMatcher) getName() string            { return p.Name }
+
+// findEntity is a generic function to find components or products by name or UUID
+func findEntity(contentDir, subDir, yamlFileName, entityType, identifier string, unmarshalFunc func([]byte) (entityMatcher, error)) (string, entityMatcher, error) {
+	entitiesDir := filepath.Join(contentDir, subDir)
+
+	// Check if directory exists
+	if _, err := os.Stat(entitiesDir); os.IsNotExist(err) {
+		return "", nil, fmt.Errorf("%s directory not found: %s", entityType, entitiesDir)
 	}
 
-	// Read all component directories
-	entries, err := os.ReadDir(componentsDir)
+	// Read all directories
+	entries, err := os.ReadDir(entitiesDir)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to read components directory: %w", err)
+		return "", nil, fmt.Errorf("failed to read %s directory: %w", entityType, err)
 	}
 
-	// Check if identifier is a UUID (contains hyphens in UUID format)
+	// Check if identifier is a UUID
 	isUUIDFormat := isUUID(identifier)
 
-	// Search through all component directories
+	// Search through all directories
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		componentYamlPath := filepath.Join(componentsDir, entry.Name(), "component.yaml")
+		yamlPath := filepath.Join(entitiesDir, entry.Name(), yamlFileName)
 
-		// Check if component.yaml exists
-		if _, err := os.Stat(componentYamlPath); os.IsNotExist(err) {
+		// Check if YAML file exists
+		if _, err := os.Stat(yamlPath); os.IsNotExist(err) {
 			continue
 		}
 
-		// Read and parse component.yaml
-		data, err := os.ReadFile(componentYamlPath)
+		// Read and parse YAML
+		data, err := os.ReadFile(yamlPath)
 		if err != nil {
 			continue
 		}
 
-		var component Component
-		if err := yaml.Unmarshal(data, &component); err != nil {
+		entity, err := unmarshalFunc(data)
+		if err != nil {
 			continue
 		}
 
 		// Match by UUID or name
 		if isUUIDFormat {
-			if component.UUID == identifier {
-				return filepath.Join(componentsDir, entry.Name()), &component, nil
+			if entity.matchUUID(identifier) {
+				return filepath.Join(entitiesDir, entry.Name()), entity, nil
 			}
 		} else {
-			if component.Name == identifier {
-				return filepath.Join(componentsDir, entry.Name()), &component, nil
+			if entity.matchName(identifier) {
+				return filepath.Join(entitiesDir, entry.Name()), entity, nil
 			}
 		}
 	}
 
 	if isUUIDFormat {
-		return "", nil, fmt.Errorf("component with UUID '%s' not found", identifier)
+		return "", nil, fmt.Errorf("%s with UUID '%s' not found", entityType, identifier)
 	}
-	return "", nil, fmt.Errorf("component with name '%s' not found", identifier)
+	return "", nil, fmt.Errorf("%s with name '%s' not found", entityType, identifier)
+}
+
+// findComponent searches for a component by name or UUID in the content directory
+// Returns the component directory path and the component data
+func findComponent(contentDir, identifier string) (string, *Component, error) {
+	unmarshalFunc := func(data []byte) (entityMatcher, error) {
+		var component Component
+		if err := yaml.Unmarshal(data, &component); err != nil {
+			return nil, err
+		}
+		return componentMatcher{&component}, nil
+	}
+
+	dir, entity, err := findEntity(contentDir, "components", "component.yaml", "component", identifier, unmarshalFunc)
+	if err != nil {
+		return "", nil, err
+	}
+	return dir, entity.(componentMatcher).Component, nil
 }
 
 // findProduct searches for a product by name or UUID in the content directory
 // Returns the product directory path and the product data
 func findProduct(contentDir, identifier string) (string, *Product, error) {
-	productsDir := filepath.Join(contentDir, "products")
-
-	// Check if products directory exists
-	if _, err := os.Stat(productsDir); os.IsNotExist(err) {
-		return "", nil, fmt.Errorf("products directory not found: %s", productsDir)
-	}
-
-	// Read all product directories
-	entries, err := os.ReadDir(productsDir)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read products directory: %w", err)
-	}
-
-	// Check if identifier is a UUID (contains hyphens in UUID format)
-	isUUIDFormat := isUUID(identifier)
-
-	// Search through all product directories
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		productYamlPath := filepath.Join(productsDir, entry.Name(), "product.yaml")
-
-		// Check if product.yaml exists
-		if _, err := os.Stat(productYamlPath); os.IsNotExist(err) {
-			continue
-		}
-
-		// Read and parse product.yaml
-		data, err := os.ReadFile(productYamlPath)
-		if err != nil {
-			continue
-		}
-
+	unmarshalFunc := func(data []byte) (entityMatcher, error) {
 		var product Product
 		if err := yaml.Unmarshal(data, &product); err != nil {
-			continue
+			return nil, err
 		}
-
-		// Match by UUID or name
-		if isUUIDFormat {
-			if product.UUID == identifier {
-				return filepath.Join(productsDir, entry.Name()), &product, nil
-			}
-		} else {
-			if product.Name == identifier {
-				return filepath.Join(productsDir, entry.Name()), &product, nil
-			}
-		}
+		return productMatcher{&product}, nil
 	}
 
-	if isUUIDFormat {
-		return "", nil, fmt.Errorf("product with UUID '%s' not found", identifier)
+	dir, entity, err := findEntity(contentDir, "products", "product.yaml", "product", identifier, unmarshalFunc)
+	if err != nil {
+		return "", nil, err
 	}
-	return "", nil, fmt.Errorf("product with name '%s' not found", identifier)
+	return dir, entity.(productMatcher).Product, nil
 }
 
 // findComponentRelease searches for a component release by version or UUID
