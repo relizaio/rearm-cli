@@ -43,22 +43,22 @@ It is possible to set authentication data via explicit flags, login command (see
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
-9. [CycloneDX xBOM Utilities](#9-use-case-cyclonedx-xbom-utilities)
-    1. [Fix incorrect OCI purl generated via cdxgen](#91-fix-incorrect-oci-purl-generated-via-cdxgen)
-    2. [BOM supplier enrichment with BEAR](#92-bom-supplier-enrichment-with-bear)
-    3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
-    4. [Merge Multiple BOMs](#94-merge-multiple-boms)
+9. [xBOM Utilities](docs/bomutils.md)
+    1. [Fix incorrect OCI purl generated via cdxgen](docs/bomutils.md#91-fix-incorrect-oci-purl-generated-via-cdxgen)
+    2. [BOM supplier enrichment with BEAR](docs/bomutils.md#92-bom-supplier-enrichment-with-bear)
+    3. [Convert SPDX to CycloneDX](docs/bomutils.md#93-convert-spdx-to-cyclonedx)
+    4. [Merge Multiple BOMs](docs/bomutils.md#94-merge-multiple-boms)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
-11. [Transparency Exchange API (TEA) Commands](#11-use-case-transparency-exchange-api-tea-commands)
-    1. [Transparency Exchange API (TEA) Discovery](#111-transparency-exchange-api-tea-discovery)
-    2. [Complete TEA Flow - Product and Component Details](#112-complete-tea-flow---product-and-component-details)
-12. [Oolong TEA Server Content Management Commands](#12-use-case-oolong-tea-server-content-management-commands)
-    1. [Add Product](#121-add-product)
-    2. [Add Component](#122-add-component)
-    3. [Add Component Release](#123-add-component-release)
-    4. [Add Product Release](#124-add-product-release)
-    5. [Add Artifact](#125-add-artifact)
-    6. [Add Artifact to Releases](#126-add-artifact-to-releases)
+11. [Transparency Exchange API (TEA) Commands](docs/tea.md)
+    1. [Transparency Exchange API (TEA) Discovery](docs/tea.md#111-transparency-exchange-api-tea-discovery)
+    2. [Complete TEA Flow - Product and Component Details](docs/tea.md#112-complete-tea-flow---product-and-component-details)
+12. [Oolong TEA Server Content Management Commands](docs/oolong.md)
+    1. [Add Product](docs/oolong.md#121-add-product)
+    2. [Add Component](docs/oolong.md#122-add-component)
+    3. [Add Component Release](docs/oolong.md#123-add-component-release)
+    4. [Add Product Release](docs/oolong.md#124-add-product-release)
+    5. [Add Artifact](docs/oolong.md#125-add-artifact)
+    6. [Add Artifact to Releases](docs/oolong.md#126-add-artifact-to-releases)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -357,7 +357,7 @@ Flags stand for:
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
 
-## 9. Use Case: CycloneDX xBOM Utilities
+## 9. Use Case: xBOM Utilities
 See [bomutils documentation](docs/bomutils.md)
 
 ### 10. Use Case: Finalize Release After CI Completion
