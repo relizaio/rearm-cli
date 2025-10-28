@@ -1130,6 +1130,11 @@ The `oolong add_artifact` command creates a new artifact in the content director
 5. Parses hash values and normalizes algorithm names
 6. Creates a single format entry with the provided metadata
 7. Checks for existing artifact UUIDs to prevent duplicates
+8. Optionally links the artifact to specified component and/or product releases by:
+   - Validating that component/componentrelease and product/productrelease flags are properly paired
+   - Finding the latest collection version for each release
+   - Creating a new collection version with the artifact added
+   - Setting the update reason to `ARTIFACT_ADDED`
 
 Sample command:
 
@@ -1181,6 +1186,22 @@ rearm oolong add_artifact \
     --uuid "173cedd7-fabb-4d3a-9315-7d7465d236b6"
 ```
 
+Sample command with release linking:
+
+```bash
+rearm oolong add_artifact \
+    --contentdir ./content \
+    --name "Product SBOM" \
+    --type BOM \
+    --mediatype "application/vnd.cyclonedx+json" \
+    --url "https://example.com/artifacts/sbom.json" \
+    --hash "sha256=abc123def456" \
+    --component "Database Component" \
+    --componentrelease "1.0.0" \
+    --product "My Product" \
+    --productrelease "1.0.0"
+```
+
 **Flags:**
 - **--contentdir** - Content directory path (required, global flag)
 - **--name** - Artifact name (required)
@@ -1202,6 +1223,10 @@ rearm oolong add_artifact \
 - **--signatureurl** - Signature URL (optional)
 - **--description** - Artifact description (optional, defaults to empty)
 - **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
+- **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--componentrelease`)
+- **--componentrelease** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
+- **--product** - Product name or UUID to link (optional, can be specified multiple times, must be paired with `--productrelease`)
+- **--productrelease** - Product release version or UUID to link (optional, can be specified multiple times, must be paired with `--product`)
 
 **Output:**
 
@@ -1210,6 +1235,21 @@ Successfully created artifact: Product SBOM
   Type: BOM
   File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
   UUID: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+```
+
+**Output with release linking:**
+
+```
+Successfully created artifact: Product SBOM
+  Type: BOM
+  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+  UUID: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+
+Linking artifact to releases...
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to component 'Database Component' release '1.0.0' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to product 'My Product' release '1.0.0' (collection version 2)
+
+Successfully processed 2 release(s)
 ```
 
 **Generated File Structure:**
@@ -1237,7 +1277,10 @@ formats:
     algValue: 05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe
 ```
 
-**Note:** If `--description` is not provided, the `description` field will be empty in the YAML output.
+**Notes:**
+- If `--description` is not provided, the `description` field will be empty in the YAML output.
+- When linking to releases, the artifact is added to a new collection version with update reason `ARTIFACT_ADDED`. This is the same behavior as the `add_artifact_to_releases` command.
+- You can link the artifact to multiple component and product releases in a single command by specifying the flags multiple times.
 
 **Hash Format:**
 

@@ -64,6 +64,10 @@ var artifactUrl string
 var artifactSignatureUrl string
 var artifactDescription string
 var artifactHashes []string
+var artifactComponents []string
+var artifactComponentReleases []string
+var artifactProducts []string
+var artifactProductReleases []string
 
 // Product release flags
 var productReleaseProduct string
@@ -502,6 +506,15 @@ The artifact file is named with its UUID.`,
 		fmt.Printf("  Type: %s\n", artifactType)
 		fmt.Printf("  File: %s\n", artifactPath)
 		fmt.Printf("  UUID: %s\n", artUuid)
+
+		// Add artifact to releases if specified
+		if len(artifactComponents) > 0 || len(artifactProducts) > 0 {
+			fmt.Println("\nLinking artifact to releases...")
+			if err := addArtifactToReleases(contentDir, artUuid, artifactComponents, artifactComponentReleases, artifactProducts, artifactProductReleases); err != nil {
+				fmt.Fprintf(os.Stderr, "Error linking artifact to releases: %v\n", err)
+				os.Exit(1)
+			}
+		}
 	},
 }
 
@@ -663,149 +676,11 @@ If the artifact is already in the latest collection, no changes are made.`,
 			os.Exit(1)
 		}
 
-		// Validate component and component_release flags match
-		if len(addArtifactToReleasesComponents) != len(addArtifactToReleasesComponentReleases) {
-			fmt.Fprintf(os.Stderr, "Error: number of --component flags (%d) must match number of --componentrelease flags (%d)\n", len(addArtifactToReleasesComponents), len(addArtifactToReleasesComponentReleases))
+		// Use the helper function to add artifact to releases
+		if err := addArtifactToReleases(contentDir, addArtifactToReleasesArtifactUuid, addArtifactToReleasesComponents, addArtifactToReleasesComponentReleases, addArtifactToReleasesProducts, addArtifactToReleasesProductReleases); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Validate product and product_release flags match
-		if len(addArtifactToReleasesProducts) != len(addArtifactToReleasesProductReleases) {
-			fmt.Fprintf(os.Stderr, "Error: number of --product flags (%d) must match number of --productrelease flags (%d)\n", len(addArtifactToReleasesProducts), len(addArtifactToReleasesProductReleases))
-			os.Exit(1)
-		}
-
-		// Check that at least one release is specified
-		if len(addArtifactToReleasesComponents) == 0 && len(addArtifactToReleasesProducts) == 0 {
-			fmt.Fprintf(os.Stderr, "Error: at least one component/componentrelease or product/productrelease pair must be specified\n")
-			os.Exit(1)
-		}
-
-		type releaseInfo struct {
-			type_        string // "component" or "product"
-			name         string
-			releaseDir   string
-			releaseVersion string
-		}
-
-		var releases []releaseInfo
-
-		// Validate and collect all component releases
-		for i := 0; i < len(addArtifactToReleasesComponents); i++ {
-			componentIdentifier := addArtifactToReleasesComponents[i]
-			componentReleaseIdentifier := addArtifactToReleasesComponentReleases[i]
-
-			// Find component
-			componentDir, componentData, err := findComponent(contentDir, componentIdentifier)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error finding component '%s': %v\n", componentIdentifier, err)
-				os.Exit(1)
-			}
-
-			// Find component release directory
-			releaseDir, releaseVersion, _, err := findComponentReleaseDir(componentDir, componentReleaseIdentifier)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error finding component release '%s' for component '%s': %v\n", componentReleaseIdentifier, componentData.Name, err)
-				os.Exit(1)
-			}
-
-			releases = append(releases, releaseInfo{
-				type_:          "component",
-				name:           componentData.Name,
-				releaseDir:     releaseDir,
-				releaseVersion: releaseVersion,
-			})
-		}
-
-		// Validate and collect all product releases
-		for i := 0; i < len(addArtifactToReleasesProducts); i++ {
-			productIdentifier := addArtifactToReleasesProducts[i]
-			productReleaseIdentifier := addArtifactToReleasesProductReleases[i]
-
-			// Find product
-			productDir, productData, err := findProduct(contentDir, productIdentifier)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error finding product '%s': %v\n", productIdentifier, err)
-				os.Exit(1)
-			}
-
-			// Find product release directory
-			releaseDir, releaseVersion, _, err := findProductReleaseDir(productDir, productReleaseIdentifier)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error finding product release '%s' for product '%s': %v\n", productReleaseIdentifier, productData.Name, err)
-				os.Exit(1)
-			}
-
-			releases = append(releases, releaseInfo{
-				type_:          "product",
-				name:           productData.Name,
-				releaseDir:     releaseDir,
-				releaseVersion: releaseVersion,
-			})
-		}
-
-		// Process each release
-		for _, rel := range releases {
-			collectionsDir := filepath.Join(rel.releaseDir, "collections")
-
-			// Find the latest collection version
-			latestVersion, err := findLatestCollectionVersion(collectionsDir)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error finding latest collection for %s release '%s': %v\n", rel.type_, rel.releaseVersion, err)
-				os.Exit(1)
-			}
-
-			// Read the latest collection
-			latestCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", latestVersion))
-			data, err := os.ReadFile(latestCollectionPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading collection %s: %v\n", latestCollectionPath, err)
-				os.Exit(1)
-			}
-
-			var collection Collection
-			if err := yaml.Unmarshal(data, &collection); err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing collection %s: %v\n", latestCollectionPath, err)
-				os.Exit(1)
-			}
-
-			// Check if artifact already exists in collection
-			artifactExists := false
-			for _, artifactUuid := range collection.Artifacts {
-				if artifactUuid == addArtifactToReleasesArtifactUuid {
-					artifactExists = true
-					break
-				}
-			}
-
-			if artifactExists {
-				fmt.Printf("Artifact %s already added to %s '%s' release '%s'\n", addArtifactToReleasesArtifactUuid, rel.type_, rel.name, rel.releaseVersion)
-				continue
-			}
-
-			// Create new collection with incremented version
-			newVersion := latestVersion + 1
-			newCollection := Collection{
-				Version: newVersion,
-				Date:    time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-				UpdateReason: UpdateReason{
-					Type:    "ARTIFACT_ADDED",
-					Comment: fmt.Sprintf("Added artifact %s", addArtifactToReleasesArtifactUuid),
-				},
-				Artifacts: append(collection.Artifacts, addArtifactToReleasesArtifactUuid),
-			}
-
-			// Write new collection
-			newCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", newVersion))
-			if err := writeYAML(newCollectionPath, newCollection); err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing new collection %s: %v\n", newCollectionPath, err)
-				os.Exit(1)
-			}
-
-			fmt.Printf("Added artifact %s to %s '%s' release '%s' (collection version %d)\n", addArtifactToReleasesArtifactUuid, rel.type_, rel.name, rel.releaseVersion, newVersion)
-		}
-
-		fmt.Printf("\nSuccessfully processed %d release(s)\n", len(releases))
 	},
 }
 
@@ -861,6 +736,10 @@ func init() {
 	add_artifactCmd.Flags().StringVar(&artifactSignatureUrl, "signatureurl", "", "Signature URL (optional)")
 	add_artifactCmd.Flags().StringVar(&artifactDescription, "description", "", "Artifact description (optional, defaults to empty)")
 	add_artifactCmd.Flags().StringArrayVar(&artifactHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --componentrelease)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactComponentReleases, "componentrelease", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactProducts, "product", []string{}, "Product name or UUID to link (optional, can be specified multiple times, must be paired with --productrelease)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactProductReleases, "productrelease", []string{}, "Product release version or UUID to link (optional, can be specified multiple times, must be paired with --product)")
 	add_artifactCmd.MarkFlagRequired("name")
 	add_artifactCmd.MarkFlagRequired("type")
 	add_artifactCmd.MarkFlagRequired("mediatype")
@@ -966,6 +845,144 @@ func validateArtifactsExist(contentDir string, artifactUUIDs []string) error {
 			return fmt.Errorf("artifact with UUID '%s' not found at %s", artifactUUID, artifactPath)
 		}
 	}
+	return nil
+}
+
+// releaseInfo holds information about a release for artifact linking
+type releaseInfo struct {
+	type_          string // "component" or "product"
+	name           string
+	releaseDir     string
+	releaseVersion string
+}
+
+// addArtifactToReleases adds an artifact to multiple releases by creating new collection versions
+func addArtifactToReleases(contentDir, artifactUUID string, components, componentReleases, products, productReleases []string) error {
+	// Validate component and component_release flags match
+	if len(components) != len(componentReleases) {
+		return fmt.Errorf("number of --component flags (%d) must match number of --componentrelease flags (%d)", len(components), len(componentReleases))
+	}
+
+	// Validate product and product_release flags match
+	if len(products) != len(productReleases) {
+		return fmt.Errorf("number of --product flags (%d) must match number of --productrelease flags (%d)", len(products), len(productReleases))
+	}
+
+	// Check that at least one release is specified
+	if len(components) == 0 && len(products) == 0 {
+		return fmt.Errorf("at least one component/componentrelease or product/productrelease pair must be specified")
+	}
+
+	var releases []releaseInfo
+
+	// Validate and collect all component releases
+	for i := 0; i < len(components); i++ {
+		componentIdentifier := components[i]
+		componentReleaseIdentifier := componentReleases[i]
+
+		// Find component
+		componentDir, componentData, err := findComponent(contentDir, componentIdentifier)
+		if err != nil {
+			return fmt.Errorf("finding component '%s': %w", componentIdentifier, err)
+		}
+
+		// Find component release directory
+		releaseDir, releaseVersion, _, err := findComponentReleaseDir(componentDir, componentReleaseIdentifier)
+		if err != nil {
+			return fmt.Errorf("finding component release '%s' for component '%s': %w", componentReleaseIdentifier, componentData.Name, err)
+		}
+
+		releases = append(releases, releaseInfo{
+			type_:          "component",
+			name:           componentData.Name,
+			releaseDir:     releaseDir,
+			releaseVersion: releaseVersion,
+		})
+	}
+
+	// Validate and collect all product releases
+	for i := 0; i < len(products); i++ {
+		productIdentifier := products[i]
+		productReleaseIdentifier := productReleases[i]
+
+		// Find product
+		productDir, productData, err := findProduct(contentDir, productIdentifier)
+		if err != nil {
+			return fmt.Errorf("finding product '%s': %w", productIdentifier, err)
+		}
+
+		// Find product release directory
+		releaseDir, releaseVersion, _, err := findProductReleaseDir(productDir, productReleaseIdentifier)
+		if err != nil {
+			return fmt.Errorf("finding product release '%s' for product '%s': %w", productReleaseIdentifier, productData.Name, err)
+		}
+
+		releases = append(releases, releaseInfo{
+			type_:          "product",
+			name:           productData.Name,
+			releaseDir:     releaseDir,
+			releaseVersion: releaseVersion,
+		})
+	}
+
+	// Process each release
+	for _, rel := range releases {
+		collectionsDir := filepath.Join(rel.releaseDir, "collections")
+
+		// Find the latest collection version
+		latestVersion, err := findLatestCollectionVersion(collectionsDir)
+		if err != nil {
+			return fmt.Errorf("finding latest collection for %s release '%s': %w", rel.type_, rel.releaseVersion, err)
+		}
+
+		// Read the latest collection
+		latestCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", latestVersion))
+		data, err := os.ReadFile(latestCollectionPath)
+		if err != nil {
+			return fmt.Errorf("reading collection %s: %w", latestCollectionPath, err)
+		}
+
+		var collection Collection
+		if err := yaml.Unmarshal(data, &collection); err != nil {
+			return fmt.Errorf("parsing collection %s: %w", latestCollectionPath, err)
+		}
+
+		// Check if artifact already exists in collection
+		artifactExists := false
+		for _, existingArtifactUuid := range collection.Artifacts {
+			if existingArtifactUuid == artifactUUID {
+				artifactExists = true
+				break
+			}
+		}
+
+		if artifactExists {
+			fmt.Printf("Artifact %s already added to %s '%s' release '%s'\n", artifactUUID, rel.type_, rel.name, rel.releaseVersion)
+			continue
+		}
+
+		// Create new collection with incremented version
+		newVersion := latestVersion + 1
+		newCollection := Collection{
+			Version: newVersion,
+			Date:    time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			UpdateReason: UpdateReason{
+				Type:    "ARTIFACT_ADDED",
+				Comment: fmt.Sprintf("Added artifact %s", artifactUUID),
+			},
+			Artifacts: append(collection.Artifacts, artifactUUID),
+		}
+
+		// Write new collection
+		newCollectionPath := filepath.Join(collectionsDir, fmt.Sprintf("%d.yaml", newVersion))
+		if err := writeYAML(newCollectionPath, newCollection); err != nil {
+			return fmt.Errorf("writing new collection %s: %w", newCollectionPath, err)
+		}
+
+		fmt.Printf("Added artifact %s to %s '%s' release '%s' (collection version %d)\n", artifactUUID, rel.type_, rel.name, rel.releaseVersion, newVersion)
+	}
+
+	fmt.Printf("\nSuccessfully processed %d release(s)\n", len(releases))
 	return nil
 }
 
