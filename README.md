@@ -56,6 +56,7 @@ It is possible to set authentication data via explicit flags, login command (see
     1. [Add Product](#121-add-product)
     2. [Add Component](#122-add-component)
     3. [Add Component Release](#123-add-component-release)
+    4. [Add Artifact](#124-add-artifact)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -901,6 +902,156 @@ Dates must be in RFC3339 format with UTC timezone:
 ```
 
 If not provided, the current UTC timestamp will be used automatically.
+
+### 12.4 Add Artifact
+
+The `oolong add_artifact` command creates a new artifact in the content directory. Artifacts represent external resources like SBOMs, attestations, licenses, and other release-related files.
+
+**Process:**
+1. Validates the artifact type against allowed TEA artifact types
+2. Generates a UUID if not provided
+3. Creates the artifacts directory if it doesn't exist
+4. Creates a YAML file named `<uuid>.yaml` in the artifacts directory
+5. Parses hash values and normalizes algorithm names
+6. Creates a single format entry with the provided metadata
+7. Checks for existing artifact UUIDs to prevent duplicates
+
+Sample command:
+
+```bash
+rearm oolong add_artifact \
+    --contentdir ./content \
+    --name "Product SBOM" \
+    --type BOM \
+    --mediatype "application/vnd.cyclonedx+json" \
+    --url "https://example.com/artifacts/sbom.json"
+```
+
+Sample command with signature and checksums:
+
+```bash
+rearm oolong add_artifact \
+    --contentdir ./content \
+    --name "Product SBOM" \
+    --type BOM \
+    --mediatype "application/vnd.cyclonedx+json" \
+    --url "https://example.com/artifacts/sbom.json" \
+    --signatureurl "https://example.com/artifacts/sbom.json.sig" \
+    --description "CycloneDX SBOM in JSON format" \
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe"
+```
+
+Sample command with multiple hashes:
+
+```bash
+rearm oolong add_artifact \
+    --contentdir ./content \
+    --name "Release Attestation" \
+    --type ATTESTATION \
+    --mediatype "application/vnd.in-toto+json" \
+    --url "https://example.com/attestation.json" \
+    --hash "sha256=abc123def456" \
+    --hash "sha512=fedcba654321"
+```
+
+Sample command with custom UUID:
+
+```bash
+rearm oolong add_artifact \
+    --contentdir ./content \
+    --name "License File" \
+    --type LICENSE \
+    --mediatype "text/plain" \
+    --url "https://example.com/LICENSE" \
+    --uuid "173cedd7-fabb-4d3a-9315-7d7465d236b6"
+```
+
+**Flags:**
+- **--contentdir** - Content directory path (required, global flag)
+- **--name** - Artifact name (required)
+- **--type** - Artifact type (required), must be one of:
+  - `ATTESTATION` - attestation (i.e., build or release attestation)
+  - `BOM` - Bill of Materials (SBOM, HBOM, OBOM, AIBOM, etc or a mix)
+  - `BUILD_META` - Build metadata
+  - `CERTIFICATION` - Certifications and compliance documents
+  - `FORMULATION` - Build formulation or recipe
+  - `LICENSE` - License files
+  - `RELEASE_NOTES` - Release notes and changelogs
+  - `SECURITY_TXT` - Security contact information
+  - `THREAT_MODEL` - Threat model documentation
+  - `VULNERABILITIES` - Vulnerability reports (VEX, etc.)
+  - `OTHER` - Other artifact types
+- **--mediatype** - media type (required)
+- **--url** - Artifact URL (required)
+- **--uuid** - Artifact UUID (optional, auto-generated if not provided)
+- **--signatureurl** - Signature URL (optional)
+- **--description** - Artifact description (optional, defaults to empty)
+- **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
+
+**Output:**
+
+```
+Successfully created artifact: Product SBOM
+  Type: BOM
+  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+  UUID: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+```
+
+**Generated File Structure:**
+
+```
+content/
+└── artifacts/
+    └── 173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+```
+
+**Artifact YAML Format:**
+
+```yaml
+name: Product SBOM
+type: BOM
+version: 1
+distributionTypes: []
+formats:
+- mimeType: application/vnd.cyclonedx+json
+  description: CycloneDX SBOM in JSON format
+  url: https://example.com/artifacts/sbom.json
+  signatureUrl: https://example.com/artifacts/sbom.json.sig
+  checksums:
+  - algType: SHA-256
+    algValue: 05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe
+```
+
+**Note:** If `--description` is not provided, the `description` field will be empty in the YAML output.
+
+**Hash Format:**
+
+Hashes must be specified in the format `algorithm=value`:
+- `sha256=abc123def456`
+- `sha512=fedcba654321`
+- `blake3=123abc456def`
+
+**Supported Hash Algorithms:**
+- `MD5`
+- `SHA-1` (or `sha1`)
+- `SHA-256` (or `sha256`)
+- `SHA-384` (or `sha384`)
+- `SHA-512` (or `sha512`)
+- `SHA3-256` (or `sha3256`)
+- `SHA3-384` (or `sha3384`)
+- `SHA3-512` (or `sha3512`)
+- `BLAKE2b-256` (or `blake2b256`)
+- `BLAKE2b-384` (or `blake2b384`)
+- `BLAKE2b-512` (or `blake2b512`)
+- `BLAKE3`
+
+Algorithm names are case-insensitive and will be automatically normalized to the standard format.
+
+Multiple hashes can be provided by using the `--hash` flag multiple times.
+
+**Artifact Types:**
+
+The artifact type must match one of the TEA (Transparency Exchange API) standard artifact types. These types help categorize and identify the purpose of each artifact in the transparency exchange ecosystem.
 
 # Development of ReARM CLI
 

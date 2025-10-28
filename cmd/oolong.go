@@ -53,6 +53,16 @@ var releasePrerelease bool
 var releaseTeis []string
 var releasePurls []string
 
+// Artifact flags
+var artifactUuid string
+var artifactName string
+var artifactType string
+var artifactMediaType string
+var artifactUrl string
+var artifactSignatureUrl string
+var artifactDescription string
+var artifactHashes []string
+
 // Product represents the structure of product.yaml
 type Product struct {
 	UUID        string   `yaml:"uuid"`
@@ -96,6 +106,30 @@ type Collection struct {
 	Date         string       `yaml:"date"`
 	UpdateReason UpdateReason `yaml:"updateReason"`
 	Artifacts    []string     `yaml:"artifacts"`
+}
+
+// Checksum represents a checksum in artifact format
+type Checksum struct {
+	AlgType  string `yaml:"algType"`
+	AlgValue string `yaml:"algValue"`
+}
+
+// ArtifactFormat represents a format entry in artifact.yaml
+type ArtifactFormat struct {
+	MimeType     string     `yaml:"mimeType"`
+	Description  string     `yaml:"description"`
+	Url          string     `yaml:"url"`
+	SignatureUrl string     `yaml:"signatureUrl"`
+	Checksums    []Checksum `yaml:"checksums"`
+}
+
+// OolongArtifact represents the structure of artifact.yaml
+type OolongArtifact struct {
+	Name              string           `yaml:"name"`
+	Type              string           `yaml:"type"`
+	Version           int              `yaml:"version"`
+	DistributionTypes []string         `yaml:"distributionTypes"`
+	Formats           []ArtifactFormat `yaml:"formats"`
 }
 
 // add_productCmd represents the add_product command
@@ -333,6 +367,147 @@ The component can be specified by name or UUID.`,
 	},
 }
 
+// add_artifactCmd represents the add_artifact command
+var add_artifactCmd = &cobra.Command{
+	Use:   "add_artifact",
+	Short: "Add an artifact to the content directory",
+	Long: `Creates an artifact YAML file in the artifacts directory.
+The artifact file is named with its UUID.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if artifactName == "" {
+			fmt.Fprintf(os.Stderr, "Error: artifact name is required\n")
+			os.Exit(1)
+		}
+		if artifactType == "" {
+			fmt.Fprintf(os.Stderr, "Error: artifact type is required\n")
+			os.Exit(1)
+		}
+		if artifactMediaType == "" {
+			fmt.Fprintf(os.Stderr, "Error: media type is required\n")
+			os.Exit(1)
+		}
+		if artifactUrl == "" {
+			fmt.Fprintf(os.Stderr, "Error: url is required\n")
+			os.Exit(1)
+		}
+
+		// Validate artifact type
+		validTypes := map[string]bool{
+			"ATTESTATION":   true,
+			"BOM":           true,
+			"BUILD_META":    true,
+			"CERTIFICATION": true,
+			"FORMULATION":   true,
+			"LICENSE":       true,
+			"RELEASE_NOTES": true,
+			"SECURITY_TXT":  true,
+			"THREAT_MODEL":  true,
+			"VULNERABILITIES": true,
+			"OTHER":         true,
+		}
+		if !validTypes[artifactType] {
+			fmt.Fprintf(os.Stderr, "Error: invalid artifact type '%s'. Must be one of: ATTESTATION, BOM, BUILD_META, CERTIFICATION, FORMULATION, LICENSE, RELEASE_NOTES, SECURITY_TXT, THREAT_MODEL, VULNERABILITIES, OTHER\n", artifactType)
+			os.Exit(1)
+		}
+
+		// Generate UUID if not provided
+		var artUuid string
+		if artifactUuid != "" {
+			artUuid = artifactUuid
+		} else {
+			artUuid = uuid.New().String()
+		}
+
+		// Create artifacts directory if it doesn't exist
+		artifactsDir := filepath.Join(contentDir, "artifacts")
+		if err := os.MkdirAll(artifactsDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create artifacts directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Check if artifact file already exists
+		artifactPath := filepath.Join(artifactsDir, artUuid+".yaml")
+		if _, err := os.Stat(artifactPath); err == nil {
+			fmt.Fprintf(os.Stderr, "Error: artifact with UUID '%s' already exists at %s\n", artUuid, artifactPath)
+			os.Exit(1)
+		}
+
+		// Parse hashes
+		checksums := []Checksum{}
+		for _, hash := range artifactHashes {
+			parts := strings.SplitN(hash, "=", 2)
+			if len(parts) != 2 {
+				fmt.Fprintf(os.Stderr, "Error: invalid hash format '%s'. Expected format: algorithm=value (e.g., sha256=abcd)\n", hash)
+				os.Exit(1)
+			}
+			// Normalize algorithm name
+			algType := strings.ToUpper(parts[0])
+			switch algType {
+			case "MD5":
+				algType = "MD5"
+			case "SHA1", "SHA-1":
+				algType = "SHA-1"
+			case "SHA256", "SHA-256":
+				algType = "SHA-256"
+			case "SHA384", "SHA-384":
+				algType = "SHA-384"
+			case "SHA512", "SHA-512":
+				algType = "SHA-512"
+			case "SHA3-256", "SHA3256":
+				algType = "SHA3-256"
+			case "SHA3-384", "SHA3384":
+				algType = "SHA3-384"
+			case "SHA3-512", "SHA3512":
+				algType = "SHA3-512"
+			case "BLAKE2B-256", "BLAKE2B256":
+				algType = "BLAKE2b-256"
+			case "BLAKE2B-384", "BLAKE2B384":
+				algType = "BLAKE2b-384"
+			case "BLAKE2B-512", "BLAKE2B512":
+				algType = "BLAKE2b-512"
+			case "BLAKE3":
+				algType = "BLAKE3"
+			default:
+				fmt.Fprintf(os.Stderr, "Error: invalid hash algorithm '%s'. Must be one of: MD5, SHA-1, SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3\n", parts[0])
+				os.Exit(1)
+			}
+			checksums = append(checksums, Checksum{
+				AlgType:  algType,
+				AlgValue: parts[1],
+			})
+		}
+
+		// Create artifact format
+		format := ArtifactFormat{
+			MimeType:     artifactMediaType,
+			Description:  artifactDescription,
+			Url:          artifactUrl,
+			SignatureUrl: artifactSignatureUrl,
+			Checksums:    checksums,
+		}
+
+		// Create artifact structure
+		artifact := OolongArtifact{
+			Name:              artifactName,
+			Type:              artifactType,
+			Version:           1,
+			DistributionTypes: []string{},
+			Formats:           []ArtifactFormat{format},
+		}
+
+		// Write YAML file
+		if err := writeYAML(artifactPath, artifact); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to write artifact.yaml: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Successfully created artifact: %s\n", artifactName)
+		fmt.Printf("  Type: %s\n", artifactType)
+		fmt.Printf("  File: %s\n", artifactPath)
+		fmt.Printf("  UUID: %s\n", artUuid)
+	},
+}
+
 func init() {
 	// Add flags to oolong command
 	oolongCmd.PersistentFlags().StringVar(&contentDir, "contentdir", "", "Content directory path")
@@ -360,10 +535,25 @@ func init() {
 	add_component_releaseCmd.MarkFlagRequired("component")
 	add_component_releaseCmd.MarkFlagRequired("version")
 
+	// Add flags to add_artifact command
+	add_artifactCmd.Flags().StringVar(&artifactUuid, "uuid", "", "Artifact UUID (optional, will be generated if not provided)")
+	add_artifactCmd.Flags().StringVar(&artifactName, "name", "", "Artifact name (required)")
+	add_artifactCmd.Flags().StringVar(&artifactType, "type", "", "Artifact type: ATTESTATION, BOM, BUILD_META, CERTIFICATION, FORMULATION, LICENSE, RELEASE_NOTES, SECURITY_TXT, THREAT_MODEL, VULNERABILITIES, OTHER (required)")
+	add_artifactCmd.Flags().StringVar(&artifactMediaType, "mediatype", "", "Media type / MIME type (required)")
+	add_artifactCmd.Flags().StringVar(&artifactUrl, "url", "", "Artifact URL (required)")
+	add_artifactCmd.Flags().StringVar(&artifactSignatureUrl, "signatureurl", "", "Signature URL (optional)")
+	add_artifactCmd.Flags().StringVar(&artifactDescription, "description", "", "Artifact description (optional, defaults to empty)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
+	add_artifactCmd.MarkFlagRequired("name")
+	add_artifactCmd.MarkFlagRequired("type")
+	add_artifactCmd.MarkFlagRequired("mediatype")
+	add_artifactCmd.MarkFlagRequired("url")
+
 	// Add subcommands to oolong
 	oolongCmd.AddCommand(add_productCmd)
 	oolongCmd.AddCommand(add_componentCmd)
 	oolongCmd.AddCommand(add_component_releaseCmd)
+	oolongCmd.AddCommand(add_artifactCmd)
 }
 
 // toSnakeCase converts a string to lowercase snake_case
