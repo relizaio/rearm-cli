@@ -717,7 +717,7 @@ var add_distribution_to_component_releaseCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		if distComponentRelease == "" {
-			fmt.Fprintf(os.Stderr, "Error: --componentrelease is required\n")
+			fmt.Fprintf(os.Stderr, "Error: --component_release is required\n")
 			os.Exit(1)
 		}
 		if distUrl == "" {
@@ -856,10 +856,10 @@ func init() {
 	add_artifactCmd.Flags().StringVar(&artifactSignatureUrl, "signatureurl", "", "Signature URL (optional)")
 	add_artifactCmd.Flags().StringVar(&artifactDescription, "description", "", "Artifact description (optional, defaults to empty)")
 	add_artifactCmd.Flags().StringArrayVar(&artifactHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
-	add_artifactCmd.Flags().StringArrayVar(&artifactComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --componentrelease)")
-	add_artifactCmd.Flags().StringArrayVar(&artifactComponentReleases, "componentrelease", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
-	add_artifactCmd.Flags().StringArrayVar(&artifactProducts, "product", []string{}, "Product name or UUID to link (optional, can be specified multiple times, must be paired with --productrelease)")
-	add_artifactCmd.Flags().StringArrayVar(&artifactProductReleases, "productrelease", []string{}, "Product release version or UUID to link (optional, can be specified multiple times, must be paired with --product)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --component_release)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactComponentReleases, "component_release", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactProducts, "product", []string{}, "Product name or UUID to link (optional, can be specified multiple times, must be paired with --product_release)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactProductReleases, "product_release", []string{}, "Product release version or UUID to link (optional, can be specified multiple times, must be paired with --product)")
 	add_artifactCmd.MarkFlagRequired("name")
 	add_artifactCmd.MarkFlagRequired("type")
 	add_artifactCmd.MarkFlagRequired("mediatype")
@@ -867,15 +867,15 @@ func init() {
 
 	// Add flags to add_artifact_to_releases command
 	add_artifact_to_releasesCmd.Flags().StringVar(&addArtifactToReleasesArtifactUuid, "artifactuuid", "", "Artifact UUID (required)")
-	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponents, "component", []string{}, "Component name or UUID (optional, can be specified multiple times, must be paired with --componentrelease)")
-	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponentReleases, "componentrelease", []string{}, "Component release version or UUID (optional, can be specified multiple times, must be paired with --component)")
-	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProducts, "product", []string{}, "Product name or UUID (optional, can be specified multiple times, must be paired with --productrelease)")
-	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProductReleases, "productrelease", []string{}, "Product release version or UUID (optional, can be specified multiple times, must be paired with --product)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponents, "component", []string{}, "Component name or UUID (optional, can be specified multiple times, must be paired with --component_release)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesComponentReleases, "component_release", []string{}, "Component release version or UUID (optional, can be specified multiple times, must be paired with --component)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProducts, "product", []string{}, "Product name or UUID (optional, can be specified multiple times, must be paired with --product_release)")
+	add_artifact_to_releasesCmd.Flags().StringArrayVar(&addArtifactToReleasesProductReleases, "product_release", []string{}, "Product release version or UUID (optional, can be specified multiple times, must be paired with --product)")
 	add_artifact_to_releasesCmd.MarkFlagRequired("artifactuuid")
 
 	// Add flags to add_distribution_to_component_release command
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponent, "component", "", "Component name or UUID (required)")
-	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponentRelease, "componentrelease", "", "Component release version or UUID (required)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponentRelease, "component_release", "", "Component release version or UUID (required)")
 	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distPurls, "purl", []string{}, "PURL identifier (optional, can be specified multiple times)")
 	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distTeis, "tei", []string{}, "TEI identifier (optional, can be specified multiple times)")
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distUrl, "url", "", "Distribution URL (required)")
@@ -884,7 +884,7 @@ func init() {
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDistributionType, "distributiontype", "", "Distribution type (optional)")
 	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
 	add_distribution_to_component_releaseCmd.MarkFlagRequired("component")
-	add_distribution_to_component_releaseCmd.MarkFlagRequired("componentrelease")
+	add_distribution_to_component_releaseCmd.MarkFlagRequired("component_release")
 	add_distribution_to_component_releaseCmd.MarkFlagRequired("url")
 
 	// Add subcommands to oolong
@@ -995,17 +995,17 @@ type releaseInfo struct {
 func addArtifactToReleases(contentDir, artifactUUID string, components, componentReleases, products, productReleases []string) error {
 	// Validate component and component_release flags match
 	if len(components) != len(componentReleases) {
-		return fmt.Errorf("number of --component flags (%d) must match number of --componentrelease flags (%d)", len(components), len(componentReleases))
+		return fmt.Errorf("number of --component flags (%d) must match number of --component_release flags (%d)", len(components), len(componentReleases))
 	}
 
 	// Validate product and product_release flags match
 	if len(products) != len(productReleases) {
-		return fmt.Errorf("number of --product flags (%d) must match number of --productrelease flags (%d)", len(products), len(productReleases))
+		return fmt.Errorf("number of --product flags (%d) must match number of --product_release flags (%d)", len(products), len(productReleases))
 	}
 
 	// Check that at least one release is specified
 	if len(components) == 0 && len(products) == 0 {
-		return fmt.Errorf("at least one component/componentrelease or product/productrelease pair must be specified")
+		return fmt.Errorf("at least one component/component_release or product/product_release pair must be specified")
 	}
 
 	var releases []releaseInfo

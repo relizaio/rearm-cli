@@ -496,7 +496,7 @@ The `oolong add_artifact` command creates a new artifact in the content director
 6. Creates a single format entry with the provided metadata
 7. Checks for existing artifact UUIDs to prevent duplicates
 8. Optionally links the artifact to specified component and/or product releases by:
-   - Validating that component/componentrelease and product/productrelease flags are properly paired
+   - Validating that component/component_release and product/product_release flags are properly paired
    - Finding the latest collection version for each release
    - Creating a new collection version with the artifact added
    - Setting the update reason to `ARTIFACT_ADDED`
@@ -562,9 +562,9 @@ rearm oolong add_artifact \
     --url "https://example.com/artifacts/sbom.json" \
     --hash "sha256=abc123def456" \
     --component "Database Component" \
-    --componentrelease "1.0.0" \
+    --component_release "1.0.0" \
     --product "My Product" \
-    --productrelease "1.0.0"
+    --product_release "1.0.0"
 ```
 
 **Flags:**
@@ -588,10 +588,10 @@ rearm oolong add_artifact \
 - **--signatureurl** - Signature URL (optional)
 - **--description** - Artifact description (optional, defaults to empty)
 - **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
-- **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--componentrelease`)
-- **--componentrelease** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
-- **--product** - Product name or UUID to link (optional, can be specified multiple times, must be paired with `--productrelease`)
-- **--productrelease** - Product release version or UUID to link (optional, can be specified multiple times, must be paired with `--product`)
+- **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--component_release`)
+- **--component_release** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
+- **--product** - Product name or UUID to link (optional, can be specified multiple times, must be paired with `--product_release`)
+- **--product_release** - Product release version or UUID to link (optional, can be specified multiple times, must be paired with `--product`)
 
 **Output:**
 
@@ -681,7 +681,7 @@ The artifact type must match one of the TEA (Transparency Exchange API) standard
 The `oolong add_artifact_to_releases` command links an existing artifact to one or more component releases and/or product releases. For each release, it creates a new collection version with the artifact added.
 
 **Process:**
-1. Validates that component/componentrelease and product/productrelease flags are properly paired
+1. Validates that component/component_release and product/product_release flags are properly paired
 2. Validates that at least one release is specified
 3. Resolves all components and products by name or UUID (fails if any not found)
 4. Resolves all component releases and product releases by version or UUID (fails if any not found)
@@ -699,7 +699,7 @@ rearm oolong add_artifact_to_releases \
     --contentdir ./content \
     --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
     --component "Kauf Bulb Hardware" \
-    --componentrelease "BLF10"
+    --component_release "BLF10"
 ```
 
 Sample command with product release:
@@ -709,7 +709,7 @@ rearm oolong add_artifact_to_releases \
     --contentdir ./content \
     --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
     --product "Kauf Bulb" \
-    --productrelease "BLF10-1m-1.95"
+    --product_release "BLF10-1m-1.95"
 ```
 
 Sample command with multiple component releases:
@@ -719,9 +719,9 @@ rearm oolong add_artifact_to_releases \
     --contentdir ./content \
     --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
     --component "Database Component" \
-    --componentrelease "1.0.0" \
+    --component_release "1.0.0" \
     --component "API Component" \
-    --componentrelease "2.1.0"
+    --component_release "2.1.0"
 ```
 
 Sample command with both component and product releases:
@@ -731,18 +731,18 @@ rearm oolong add_artifact_to_releases \
     --contentdir ./content \
     --artifactuuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
     --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
-    --componentrelease "BLF10" \
+    --component_release "BLF10" \
     --product "8ab3c557-7f36-4ebd-a593-026c28337630" \
-    --productrelease "BLF10-1m-1.95"
+    --product_release "BLF10-1m-1.95"
 ```
 
 **Flags:**
 - **--contentdir** - Content directory path (required, global flag)
 - **--artifactuuid** - Artifact UUID to add (required)
-- **--component** - Component name or UUID (optional, can be specified multiple times, must be paired with `--componentrelease`)
-- **--componentrelease** - Component release version or UUID (optional, can be specified multiple times, must be paired with `--component`)
-- **--product** - Product name or UUID (optional, can be specified multiple times, must be paired with `--productrelease`)
-- **--productrelease** - Product release version or UUID (optional, can be specified multiple times, must be paired with `--product`)
+- **--component** - Component name or UUID (optional, can be specified multiple times, must be paired with `--component_release`)
+- **--component_release** - Component release version or UUID (optional, can be specified multiple times, must be paired with `--component`)
+- **--product** - Product name or UUID (optional, can be specified multiple times, must be paired with `--product_release`)
+- **--product_release** - Product release version or UUID (optional, can be specified multiple times, must be paired with `--product`)
 
 **Output when artifact is added:**
 
@@ -791,12 +791,12 @@ artifacts:
 
 **Pairing Rules:**
 
-The `--component` and `--componentrelease` flags work in pairs:
-- Each `--component` flag must have a corresponding `--componentrelease` flag
-- The order matters: the first `--component` is paired with the first `--componentrelease`, and so on
+The `--component` and `--component_release` flags work in pairs:
+- Each `--component` flag must have a corresponding `--component_release` flag
+- The order matters: the first `--component` is paired with the first `--component_release`, and so on
 - Both flags accept either names or UUIDs
 
-The same pairing rules apply to `--product` and `--productrelease` flags.
+The same pairing rules apply to `--product` and `--product_release` flags.
 
 **Atomic Operation:**
 
@@ -832,7 +832,7 @@ Sample command:
 rearm oolong add_distribution_to_component_release \
     --contentdir ./content \
     --component "Kauf Bulb Firmware" \
-    --componentrelease "1.96" \
+    --component_release "1.96" \
     --url "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin" \
     --hash "sha256=5db2debf05bf9d7dcf7397cf2d780acf6079589dfbd474183cf4da80d8564e29"
 ```
@@ -843,7 +843,7 @@ Sample command with all options:
 rearm oolong add_distribution_to_component_release \
     --contentdir ./content \
     --component "Kauf Bulb Firmware" \
-    --componentrelease "1.96" \
+    --component_release "1.96" \
     --url "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin" \
     --signatureurl "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin.sig" \
     --description "4MB firmware update binary" \
@@ -859,7 +859,7 @@ Sample command with multiple hashes:
 rearm oolong add_distribution_to_component_release \
     --contentdir ./content \
     --component "35218a8a-7e08-4502-8165-fa2b7a4a0b8a" \
-    --componentrelease "ff742766-4925-4b97-871b-e3285b7f932a" \
+    --component_release "ff742766-4925-4b97-871b-e3285b7f932a" \
     --url "https://example.com/firmware/v2.0.bin" \
     --hash "sha256=abc123def456" \
     --hash "sha512=fedcba654321"
@@ -868,7 +868,7 @@ rearm oolong add_distribution_to_component_release \
 **Flags:**
 - **--contentdir** - Content directory path (required, global flag)
 - **--component** - Component name or UUID (required)
-- **--componentrelease** - Component release version or UUID (required)
+- **--component_release** - Component release version or UUID (required)
 - **--url** - Distribution URL (required)
 - **--signatureurl** - Signature URL (optional)
 - **--description** - Distribution description (optional)
@@ -918,7 +918,7 @@ distributions:
 
 **Component and Release Resolution:**
 
-Both `--component` and `--componentrelease` flags accept either:
+Both `--component` and `--component_release` flags accept either:
 - **Name/Version** - Exact match of the component name or release version
 - **UUID** - Full UUID of the component or release
 
