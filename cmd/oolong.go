@@ -98,9 +98,9 @@ type Collection struct {
 	Artifacts    []string     `yaml:"artifacts"`
 }
 
-// addProductCmd represents the addproduct command
-var addProductCmd = &cobra.Command{
-	Use:   "addproduct",
+// add_productCmd represents the add_product command
+var add_productCmd = &cobra.Command{
+	Use:   "add_product",
 	Short: "Add or update a product in the content directory",
 	Long: `Creates or updates a product.yaml file in the content directory.
 The product directory name will be the lowercase snake_case version of the product name.`,
@@ -123,13 +123,13 @@ The product directory name will be the lowercase snake_case version of the produ
 
 		// Create directory path
 		productDir := filepath.Join(contentDir, "products", dirName)
-		
+
 		// Check if directory already exists
 		if _, err := os.Stat(productDir); err == nil {
 			fmt.Fprintf(os.Stderr, "Error: product with name '%s' already exists at %s\n", productName, productDir)
 			os.Exit(1)
 		}
-		
+
 		if err := os.MkdirAll(productDir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to create directory %s: %v\n", productDir, err)
 			os.Exit(1)
@@ -155,9 +155,9 @@ The product directory name will be the lowercase snake_case version of the produ
 	},
 }
 
-// addComponentCmd represents the addcomponent command
-var addComponentCmd = &cobra.Command{
-	Use:   "addcomponent",
+// add_componentCmd represents the add_component command
+var add_componentCmd = &cobra.Command{
+	Use:   "add_component",
 	Short: "Add or update a component in the content directory",
 	Long: `Creates or updates a component.yaml file in the content directory.
 The component directory name will be the lowercase snake_case version of the component name.`,
@@ -180,13 +180,13 @@ The component directory name will be the lowercase snake_case version of the com
 
 		// Create directory path
 		componentDir := filepath.Join(contentDir, "components", dirName)
-		
+
 		// Check if directory already exists
 		if _, err := os.Stat(componentDir); err == nil {
 			fmt.Fprintf(os.Stderr, "Error: component with name '%s' already exists at %s\n", componentNameFlag, componentDir)
 			os.Exit(1)
 		}
-		
+
 		if err := os.MkdirAll(componentDir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to create directory %s: %v\n", componentDir, err)
 			os.Exit(1)
@@ -212,9 +212,9 @@ The component directory name will be the lowercase snake_case version of the com
 	},
 }
 
-// addComponentReleaseCmd represents the addcomponentrelease command
-var addComponentReleaseCmd = &cobra.Command{
-	Use:   "addcomponentrelease",
+// add_component_releaseCmd represents the add_component_release command
+var add_component_releaseCmd = &cobra.Command{
+	Use:   "add_component_release",
 	Short: "Add a component release to the content directory",
 	Long: `Creates a component release with release.yaml and an initial collection.
 The component can be specified by name or UUID.`,
@@ -237,7 +237,7 @@ The component can be specified by name or UUID.`,
 
 		// Create release directory
 		releaseDir := filepath.Join(componentDir, "releases", componentReleaseVersion)
-		
+
 		// Check if release already exists
 		if _, err := os.Stat(releaseDir); err == nil {
 			fmt.Fprintf(os.Stderr, "Error: release version '%s' already exists for component '%s'\n", componentReleaseVersion, componentData.Name)
@@ -338,32 +338,32 @@ func init() {
 	oolongCmd.PersistentFlags().StringVar(&contentDir, "contentdir", "", "Content directory path")
 	oolongCmd.MarkFlagRequired("contentdir")
 
-	// Add flags to addproduct command
-	addProductCmd.Flags().StringVar(&productName, "name", "", "Product name (required)")
-	addProductCmd.Flags().StringVar(&productUuid, "uuid", "", "Product UUID (optional, will be generated if not provided)")
-	addProductCmd.MarkFlagRequired("name")
+	// Add flags to add_product command
+	add_productCmd.Flags().StringVar(&productName, "name", "", "Product name (required)")
+	add_productCmd.Flags().StringVar(&productUuid, "uuid", "", "Product UUID (optional, will be generated if not provided)")
+	add_productCmd.MarkFlagRequired("name")
 
-	// Add flags to addcomponent command
-	addComponentCmd.Flags().StringVar(&componentNameFlag, "name", "", "Component name (required)")
-	addComponentCmd.Flags().StringVar(&componentUuid, "uuid", "", "Component UUID (optional, will be generated if not provided)")
-	addComponentCmd.MarkFlagRequired("name")
+	// Add flags to add_component command
+	add_componentCmd.Flags().StringVar(&componentNameFlag, "name", "", "Component name (required)")
+	add_componentCmd.Flags().StringVar(&componentUuid, "uuid", "", "Component UUID (optional, will be generated if not provided)")
+	add_componentCmd.MarkFlagRequired("name")
 
-	// Add flags to addcomponentrelease command
-	addComponentReleaseCmd.Flags().StringVar(&releaseComponent, "component", "", "Component name or UUID (required)")
-	addComponentReleaseCmd.Flags().StringVar(&componentReleaseVersion, "version", "", "Release version (required)")
-	addComponentReleaseCmd.Flags().StringVar(&componentReleaseUuid, "uuid", "", "Release UUID (optional, will be generated if not provided)")
-	addComponentReleaseCmd.Flags().StringVar(&releaseCreatedDate, "createddate", "", "Created date in RFC3339 format (optional, defaults to current time)")
-	addComponentReleaseCmd.Flags().StringVar(&releaseReleaseDate, "releasedate", "", "Release date in RFC3339 format (optional, defaults to current time)")
-	addComponentReleaseCmd.Flags().BoolVar(&releasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
-	addComponentReleaseCmd.Flags().StringArrayVar(&releaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
-	addComponentReleaseCmd.Flags().StringArrayVar(&releasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
-	addComponentReleaseCmd.MarkFlagRequired("component")
-	addComponentReleaseCmd.MarkFlagRequired("version")
+	// Add flags to add_component_release command
+	add_component_releaseCmd.Flags().StringVar(&releaseComponent, "component", "", "Component name or UUID (required)")
+	add_component_releaseCmd.Flags().StringVar(&componentReleaseVersion, "version", "", "Release version (required)")
+	add_component_releaseCmd.Flags().StringVar(&componentReleaseUuid, "uuid", "", "Release UUID (optional, will be generated if not provided)")
+	add_component_releaseCmd.Flags().StringVar(&releaseCreatedDate, "createddate", "", "Created date in RFC3339 format (optional, defaults to current time)")
+	add_component_releaseCmd.Flags().StringVar(&releaseReleaseDate, "releasedate", "", "Release date in RFC3339 format (optional, defaults to current time)")
+	add_component_releaseCmd.Flags().BoolVar(&releasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
+	add_component_releaseCmd.Flags().StringArrayVar(&releaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
+	add_component_releaseCmd.Flags().StringArrayVar(&releasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
+	add_component_releaseCmd.MarkFlagRequired("component")
+	add_component_releaseCmd.MarkFlagRequired("version")
 
 	// Add subcommands to oolong
-	oolongCmd.AddCommand(addProductCmd)
-	oolongCmd.AddCommand(addComponentCmd)
-	oolongCmd.AddCommand(addComponentReleaseCmd)
+	oolongCmd.AddCommand(add_productCmd)
+	oolongCmd.AddCommand(add_componentCmd)
+	oolongCmd.AddCommand(add_component_releaseCmd)
 }
 
 // toSnakeCase converts a string to lowercase snake_case
@@ -409,7 +409,7 @@ func writeYAML(path string, data interface{}) error {
 // Returns the component directory path and the component data
 func findComponent(contentDir, identifier string) (string, *Component, error) {
 	componentsDir := filepath.Join(contentDir, "components")
-	
+
 	// Check if components directory exists
 	if _, err := os.Stat(componentsDir); os.IsNotExist(err) {
 		return "", nil, fmt.Errorf("components directory not found: %s", componentsDir)
@@ -431,7 +431,7 @@ func findComponent(contentDir, identifier string) (string, *Component, error) {
 		}
 
 		componentYamlPath := filepath.Join(componentsDir, entry.Name(), "component.yaml")
-		
+
 		// Check if component.yaml exists
 		if _, err := os.Stat(componentYamlPath); os.IsNotExist(err) {
 			continue

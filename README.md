@@ -651,7 +651,7 @@ The `oolong` command provides tools for managing content in an Oolong TEA Server
 
 ### 12.1 Add Product
 
-The `oolong addproduct` command creates a new product in the content directory. It generates a product directory with a `product.yaml` file containing the product metadata.
+The `oolong add_product` command creates a new product in the content directory. It generates a product directory with a `product.yaml` file containing the product metadata.
 
 **Process:**
 1. Converts the product name to lowercase snake_case for the directory name
@@ -663,7 +663,7 @@ The `oolong addproduct` command creates a new product in the content directory. 
 Sample command:
 
 ```bash
-rearm oolong addproduct \
+rearm oolong add_product \
     --contentdir ./content \
     --name "My Product"
 ```
@@ -671,7 +671,7 @@ rearm oolong addproduct \
 Sample command with custom UUID:
 
 ```bash
-rearm oolong addproduct \
+rearm oolong add_product \
     --contentdir ./content \
     --name "My Product" \
     --uuid "8ab3c557-7f36-4ebd-a593-026c28337630"
@@ -709,7 +709,7 @@ identifiers: []
 
 ### 12.2 Add Component
 
-The `oolong addcomponent` command creates a new component in the content directory. It generates a component directory with a `component.yaml` file containing the component metadata.
+The `oolong add_component` command creates a new component in the content directory. It generates a component directory with a `component.yaml` file containing the component metadata.
 
 **Process:**
 1. Converts the component name to lowercase snake_case for the directory name
@@ -721,7 +721,7 @@ The `oolong addcomponent` command creates a new component in the content directo
 Sample command:
 
 ```bash
-rearm oolong addcomponent \
+rearm oolong add_component \
     --contentdir ./content \
     --name "Database Component"
 ```
@@ -729,7 +729,7 @@ rearm oolong addcomponent \
 Sample command with custom UUID:
 
 ```bash
-rearm oolong addcomponent \
+rearm oolong add_component \
     --contentdir ./content \
     --name "Database Component" \
     --uuid "adc0909a-3039-47eb-82ba-7686767c0d52"
@@ -767,7 +767,7 @@ identifiers: []
 
 ### 12.3 Add Component Release
 
-The `oolong addcomponentrelease` command creates a new release for an existing component. It generates a release directory with `release.yaml` and an initial collection.
+The `oolong add_component_release` command creates a new release for an existing component. It generates a release directory with `release.yaml` and an initial collection.
 
 **Process:**
 1. Resolves the component by name or UUID
@@ -781,7 +781,7 @@ The `oolong addcomponentrelease` command creates a new release for an existing c
 Sample command with component name:
 
 ```bash
-rearm oolong addcomponentrelease \
+rearm oolong add_component_release \
     --contentdir ./content \
     --component "Database Component" \
     --version "1.0.0"
@@ -790,7 +790,7 @@ rearm oolong addcomponentrelease \
 Sample command with component UUID:
 
 ```bash
-rearm oolong addcomponentrelease \
+rearm oolong add_component_release \
     --contentdir ./content \
     --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
     --version "1.0.0"
@@ -799,7 +799,7 @@ rearm oolong addcomponentrelease \
 Sample command with identifiers:
 
 ```bash
-rearm oolong addcomponentrelease \
+rearm oolong add_component_release \
     --contentdir ./content \
     --component "Database Component" \
     --version "1.0.0" \
@@ -810,7 +810,7 @@ rearm oolong addcomponentrelease \
 Sample command with all options:
 
 ```bash
-rearm oolong addcomponentrelease \
+rearm oolong add_component_release \
     --contentdir ./content \
     --component "Database Component" \
     --version "1.0.0-beta" \
