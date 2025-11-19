@@ -396,6 +396,13 @@ var addreleaseCmd = &cobra.Command{
 		if len(component) > 0 {
 			body["component"] = component
 		}
+		// Add VCS-based component identification parameters
+		if len(vcsUri) > 0 {
+			body["vcsUri"] = vcsUri
+			if len(repoPath) > 0 {
+				body["repoPath"] = repoPath
+			}
+		}
 		if len(odelId) > 0 {
 			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
 		}
@@ -493,6 +500,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&endpoint, "endpoint", "", "Test endpoint for this release")
 	addreleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
+	addreleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	addreleaseCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id")
 	addreleaseCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")

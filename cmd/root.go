@@ -87,6 +87,7 @@ var vcsTag string
 var vcsType string
 var vcsUri string
 var vcsUuid string
+var repoPath string
 
 const (
 	defaultConfigFilename = ".rearm"
@@ -593,6 +594,10 @@ var createComponentCmd = &cobra.Command{
 			body["vcsRepository"] = vcsRepository
 		}
 
+		if len(repoPath) > 0 {
+			body["repoPath"] = repoPath
+		}
+
 		body["includeApi"] = includeApi
 
 		req := graphql.NewRequest(`
@@ -618,6 +623,13 @@ var getVersionCmd = &cobra.Command{
 		body := map[string]interface{}{"branch": branch}
 		if len(component) > 0 {
 			body["component"] = component
+		}
+		// Add VCS-based component identification parameters
+		if len(vcsUri) > 0 {
+			body["vcsUri"] = vcsUri
+			if len(repoPath) > 0 {
+				body["repoPath"] = repoPath
+			}
 		}
 		if len(modifier) > 0 {
 			body["modifier"] = modifier
@@ -808,6 +820,7 @@ func init() {
 	createComponentCmd.PersistentFlags().StringVar(&featureBranchVersioning, "featurebranchversioning", "Branch.Micro", "Feature branch version schema of component (Optional, default set to Branch.Micro")
 	createComponentCmd.PersistentFlags().StringVar(&vcsUuid, "vcsuuid", "", "Vcs repository UUID (if retreiving existing vcs repository, either vcsuuid or vcsuri must be set)")
 	createComponentCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "Vcs repository URI, if existing repository with uri does not exist and vcsname and vcstype are not set, will attempt to autoparse github, gitlab, and bitbucket uri's")
+	createComponentCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
 	createComponentCmd.PersistentFlags().StringVar(&vcsName, "vcsname", "", "Name of vcs repository (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of vcs type (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().BoolVar(&includeApi, "includeapi", false, "(Optional) Set --includeapi flag to create and return api key and id for created component during command")
@@ -821,6 +834,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&modifier, "modifier", "", "Version modifier")
 	getVersionCmd.PersistentFlags().StringVar(&versionSchema, "pin", "", "Version pin if creating new branch")
 	getVersionCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
+	getVersionCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
 	getVersionCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	getVersionCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id (required to create Source Code Entry for new release)")
 	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
