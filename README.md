@@ -59,6 +59,11 @@ It is possible to set authentication data via explicit flags, login command (see
     4. [Add Product Release](docs/oolong.md#124-add-product-release)
     5. [Add Artifact](docs/oolong.md#125-add-artifact)
     6. [Add Artifact to Releases](docs/oolong.md#126-add-artifact-to-releases)
+13. [VCS-based Component Resolution](#13-use-case-vcs-based-component-resolution)
+    1. [Creating Components](#131-creating-components)
+    2. [Getting Versions](#132-getting-versions)
+    3. [Adding Releases](#133-adding-releases)
+    4. [Monorepo Support](#134-monorepo-support)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -100,6 +105,19 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     -b main    \
     --onlyversion
 ```
+
+Sample command using VCS-based component resolution:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    getversion    \
+    -i organization_wide_rw_api_id    \
+    -k organization_wide_rw_api_key    \
+    --vcsuri github.com/myorg/myapp    \
+    -b main
+```
+
+This approach identifies the component by VCS URI instead of component UUID, simplifying CI/CD integration. For monorepos with multiple components in one repository, add `--repo-path` to specify the subdirectory (e.g., `--repo-path frontend`).
 
 Flags stand for:
 
@@ -186,6 +204,21 @@ The addrelease command supports three types of artifacts, each serving a differe
    - Use when: The artifact is specific to a deliverable (container, binary, package)
    - Note: Must have one `--odelartsjson` entry per `--odelid` deliverable
 
+Sample command using VCS-based component resolution:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addrelease    \
+    -i organization_wide_rw_api_id    \
+    -k organization_wide_rw_api_key    \
+    --vcsuri github.com/myorg/myapp    \
+    -b main    \
+    -v 1.0.0    \
+    --vcstype git    \
+    --commit abc123def456
+```
+
+This approach identifies the component by VCS URI instead of component UUID, eliminating the need to track UUIDs in CI/CD workflows. For monorepos with multiple components in one repository, add `--repo-path` to specify the subdirectory (e.g., `--repo-path frontend`).
 
 Flags stand for:
 
@@ -335,13 +368,35 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     createcomponent    \
     -i org_api_id    \
     -k org_api_key    \
-    --name componentname
-    --type component
-    --versionschema semver
-    --featurebranchversioning Branch.Micro
+    --name componentname    \
+    --type component    \
+    --versionschema semver    \
+    --featurebranchversioning Branch.Micro    \
     --vcsuri github.com/registry.relizahub.com/library/rearm-cli
-    --includeapi
 ```
+
+Sample command for monorepo component:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    createcomponent    \
+    -i org_api_id    \
+    -k org_api_key    \
+    --name myapp-frontend    \
+    --type component    \
+    --versionschema semver    \
+    --vcsuri github.com/myorg/myrepo    \
+    --repo-path frontend
+```
+
+**⚠️ Important: Version Schema Requirement**
+
+The `--versionschema` flag is **critical** for components created via API. Without it:
+- `getversion` command will fail with "missing version schema configuration" error
+- Version generation will not work
+- Component will need manual update via UI
+
+**Always include**: `--versionschema semver` when creating components.
 
 Flags stand for:
 
@@ -455,6 +510,90 @@ See [tea documentation](docs/tea.md)
 ## 12. Use Case: Oolong TEA Server Content Management Commands
 Base Command: `oolong`
 See [oolong documentation](docs/oolong.md)
+
+## 13. Use Case: VCS-based Component Resolution
+
+ReARM supports identifying components by VCS repository URI in addition to component UUID:
+
+**Traditional (UUID-based):**
+```bash
+getversion --component "4b272da8-2fea-4f13-a6a4-8e6e746c6e86" -b "main"
+```
+
+**VCS-based (Recommended for CI/CD):**
+```bash
+getversion --vcsuri "github.com/myorg/myapp" -b "main"
+```
+
+**Benefits**: Eliminates UUID management, uses repository context already available in CI/CD pipelines.
+
+**For Monorepos**: Add `--repo-path` when multiple components share one repository:
+```bash
+getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
+```
+
+---
+
+### 13.1: Creating Components
+
+**Single Repository:**
+```bash
+createcomponent --name "myapp" --type "component" \
+  --vcsuri "github.com/myorg/myapp" --versionschema "semver"
+```
+
+**Monorepo (add --repo-path):**
+```bash
+createcomponent --name "myapp-frontend" --type "component" \
+  --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" --versionschema "semver"
+```
+
+**Key Flags:**
+- `--vcsuri` - Repository URI for VCS-based resolution
+- `--versionschema "semver"` - **Required** for version generation
+- `--repo-path` - Optional, only for monorepos
+
+---
+
+### 13.2: Getting Versions
+
+**Single Repository:**
+```bash
+getversion --vcsuri "github.com/myorg/myapp" -b "main"
+```
+
+**Monorepo:**
+```bash
+getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
+```
+
+---
+
+### 13.3: Adding Releases
+
+**Single Repository:**
+```bash
+addrelease --vcsuri "github.com/myorg/myapp" -b "main" -v "1.0.0"
+```
+
+**Monorepo:**
+```bash
+addrelease --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main" -v "1.0.0"
+```
+
+---
+
+### 13.4: Monorepo Support
+
+For repositories with multiple components, use `--repo-path` to specify the subdirectory:
+
+```bash
+--vcsuri "github.com/myorg/myrepo" --repo-path "frontend"
+--vcsuri "github.com/myorg/myrepo" --repo-path "backend"
+--vcsuri "github.com/myorg/myrepo" --repo-path "services/auth"
+```
+
+---
 
 # Development of ReARM CLI
 
