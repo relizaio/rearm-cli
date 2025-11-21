@@ -147,6 +147,46 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     --odeldigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd
 ```
 
+Sample command with all three artifact types (Source Code Entry, Release, and Deliverable artifacts):
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addrelease    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    -b main    \
+    -v 1.0.0    \
+    --vcsuri github.com/myorg/myapp    \
+    --vcstype git    \
+    --commit abc123def456    \
+    --vcstag v1.0.0    \
+    --date 2025-11-20T15:30:00Z    \
+    --scearts '[{"displayIdentifier":"build-log","type":"BUILD_META","storedIn":"REARM","filePath":"./build.log"}]'    \
+    --releasearts '[{"displayIdentifier":"release-notes-v1.0.0","type":"RELEASE_NOTES","storedIn":"EXTERNALLY","downloadLinks":[{"uri":"https://docs.example.com/releases/v1.0.0","content":"Release Notes"}]},{"displayIdentifier":"security-report","type":"USER_DOCUMENT","storedIn":"REARM","filePath":"./security-report.pdf"}]'    \
+    --odelid myapp-docker-image    \
+    --odeltype CONTAINER    \
+    --odeldigests sha256:abc123def456    \
+    --odelartsjson '[{"displayIdentifier":"myapp-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","inventoryTypes":["SOFTWARE"],"filePath":"./sbom.json"},{"displayIdentifier":"myapp-attestation","type":"ATTESTATION","storedIn":"REARM","filePath":"./attestation.json"}]'
+```
+
+**Understanding Artifact Types:**
+
+The addrelease command supports three types of artifacts, each serving a different purpose:
+
+1. **Source Code Entry Artifacts (`--scearts`)**: Artifacts attached to the commit/source code entry
+   - Examples: Source Code SBOM
+   - Use when: The artifact is specific to the source code at that commit
+
+2. **Release Artifacts (`--releasearts`)**: Artifacts attached directly to the release
+   - Examples: Release notes, security reports, user documentation, certifications
+   - Use when: The artifact describes or documents the release as a whole
+
+3. **Deliverable Artifacts (`--odelartsjson`)**: Artifacts attached to specific deliverables
+   - Examples: SBOMs, attestations, signatures, VEX documents
+   - Use when: The artifact is specific to a deliverable (container, binary, package)
+   - Note: Must have one `--odelartsjson` entry per `--odelid` deliverable
+
+
 Flags stand for:
 
 - **addrelease** - command that denotes we are sending Release Metadata of a Component to ReARM.
@@ -164,6 +204,14 @@ Flags stand for:
 - **scearts** - flag to denote metadata Artifacts set on Source Code Entry - or commit (optional). Expects JSON Array representation, with Keys for each object: type, bomFormat, filePath. Sample entry:
 ```json
 [{"bomFormat": "CYCLONEDX","type": "BOM","filePath": "./fs.cdx.bom.json"}]
+```
+- **releasearts** - flag to denote metadata Artifacts attached directly to the release (optional). Expects JSON Array representation, with Keys for each object: displayIdentifier, type, storedIn, filePath (or downloadLinks for external storage). Sample entry for internal storage:
+```json
+[{"displayIdentifier": "release-notes-v1.0.0","type": "RELEASE_NOTES","storedIn": "REARM","filePath": "./release-notes.md"}]
+```
+Sample entry for external storage:
+```json
+[{"displayIdentifier": "release-notes-v1.0.0","type": "RELEASE_NOTES","storedIn": "EXTERNALLY","downloadLinks": [{"uri": "https://docs.example.com/releases/v1.0.0","content": "Release Notes"}]}]
 ```
 - **date** - flag to denote date time with timezone when commit was made, iso strict formatting with timezone is required, i.e. for git use git log --date=iso-strict (optional).
 - **vcstag** - flag to denote vcs tag (optional). This is needed to include vcs tag into commit, if present.
