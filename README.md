@@ -419,7 +419,7 @@ Flags stand for:
 
 Sends a list of Live Git branches to ReARM. Non-live branches present on ReARM will be archived.
 
-Sample command:
+Sample command using component UUID:
 
 ```bash
 docker run --rm registry.relizahub.com/library/rearm-cli    \
@@ -430,8 +430,22 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     --livebranches $(git branch -r --format="%(refname)" | base64 -w 0)
 ```
 
+Sample command using VCS-based component resolution:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    syncbranches \
+    -i organization_wide_rw_api_id    \
+    -k organization_wide_rw_api_key    \
+    --vcsuri github.com/myorg/myrepo    \
+    --repo-path frontend    \
+    --livebranches $(git branch -r --format="%(refname)" | base64 -w 0)
+```
+
 Flags stand for:
-- **--component** - flag to specify component uuid, which can be obtained from the component settings on ReARM UI (either this flag or component's API key must be used).
+- **--component** - flag to specify component uuid, which can be obtained from the component settings on ReARM UI (either this flag, vcsuri, or component's API key must be used).
+- **--vcsuri** - URI of VCS repository for VCS-based component resolution (optional, alternative to component UUID).
+- **--repo-path** - Repository path for monorepo components (optional, use with vcsuri when multiple components share one repository).
 - **--livebranches** - base64'd list of git branches, for local branches use `git branch --format=\"%(refname)\" | base64 -w 0` to obtain, for remote branches use `git branch -r --format=\"%(refname)\" | base64 -w 0`. Choose between local and remote branches based on your CI context.
 
 
