@@ -120,7 +120,8 @@ Flags stand for:
 - **--modifier** - flag to set version modifier (optional). This may be semver modifier or custom version schema metadata.
 - **--manual** - flag to indicate a manual release (optional). Sets lifecycle as 'DRAFT', otherwise 'PENDING' lifecycle is set.
 - **--onlyversion** - boolean flag to skip creation of the release (optional). Default is false.
-- **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional). Default is true. Supported values: true|false.
+- **--repo-path** - Repository path for monorepo components (optional).
+- **--action** - Bump action name: bump | bumppatch | bumpminor | bumpmajor | bumpdate (optional).
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
@@ -182,6 +183,15 @@ Flags stand for:
 --odeldigests sha256:4e8b31b19ef16731a6f82410f9fb929da692aa97b71faeb1596c55fbf663dcdd,sha1:fe4165996a41501715ea0662b6a906b55e34a2a1
 ```
 - **odelartsjson** - flag to denote metadata Artifacts set on Output Deliverable(optional). Format is similar to *scearts* - expects JSON Array representation, with Keys for each object: type, bomFormat, filePath
+- **--repo-path** - Repository path for monorepo components (optional).
+- **--releasearts** - Release Artifacts json array (optional).
+- **--odelgroup** - Deliverable group (multiple allowed, optional).
+- **--odelpackage** - Deliverable package type (multiple allowed, optional).
+- **--osarr** - Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable, optional).
+- **--cpuarr** - Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable, optional).
+- **--odelversion** - Deliverable version, if different from release (multiple allowed, optional).
+- **--tagsarr** - Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon, optional).
+- **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional). Default is true. Supported values: true|false.
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
@@ -236,6 +246,11 @@ Flags stand for:
   - **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
   - **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).
   - **--approvalstate** - Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present).
+  - **--env** - Environment to obtain approvals details from (optional).
+  - **--instance** - Instance ID for which to check release (optional).
+  - **--namespace** - Namespace within instance for which to check release, only matters if instance is supplied (optional).
+  - **--tagkey** - Tag key to use for picking artifact (optional).
+  - **--tagval** - Tag value to use for picking artifact (optional).
 
 ## 5. Use Case: Persist ReARM Credentials in a Config File
 
@@ -295,6 +310,7 @@ Flags stand for:
 - **vcsname** - flag to denote name of vcs repository to create for component (required if ReARM cannot parse uri).
 - **vcstype** - flag to denote type of vcs to create for component. Supported values: git, svn, mercurial (required if ReARM cannot parse uri).
 - **includeapi** - boolean flag to return component api key and id of newly created component (optional). Default is false.
+- **--repo-path** - Repository path for monorepo components (optional).
 
 ## 7. Use Case: Synchronize Live Git Branches with ReARM
 
@@ -340,7 +356,7 @@ Flags stand for:
 - **--cpuarr** - Array of CPU architectures supported by this Deliverable (optional, multiple allowed)
 - **--dateend** - Deliverable Build End date and time (optional, multiple allowed)
 - **--datestart** - Deliverable Build Start date and time (optional, multiple allowed)
-- **--identifiers** - Deliverable Identifiers (i.e. PURL) IdentifierType-Value Pairs (multiple allowed, separate several IdentifierType-Value pairs for one Deliverable with commas, and seprate IdentifierType-Value in a pair with colon, e.g. --identifiers "PURL:somepurl,TEI:sometei")
+- **--odelidentifiers** - Deliverable Identifiers (i.e. PURL) IdentifierType-Value Pairs (multiple allowed, separate several IdentifierType-Value pairs for one Deliverable with commas, and seprate IdentifierType-Value in a pair with colon, e.g. --odelidentifiers "PURL:somepurl,TEI:sometei")
 - **--odelartsjson** -Deliverable Artifacts json array (optional, multiple allowed, use a json array for each deliverable, similar to add release use case)
 - **--odelbuildid** - Deliverable Build ID (optional, multiple allowed)
 - **--odelbuilduri** - Deliverable Build URI (multiple allowed)
@@ -349,6 +365,7 @@ Flags stand for:
 - **--odelid** - Deliverable Primary Identifier (multiple allowed)
 - **--odelpackage** - Deliverable package type (i.e. Maven) (multiple allowed)
 - **--odelpublisher** - Deliverable publisher (multiple allowed)
+- **--odelgroup** - Deliverable group (multiple allowed)
 - **--odelversion** -  Deliverable version, if different from release (multiple allowed)
 - **--osarr** - Deliverable supported OS array (multiple allowed, use comma seprated values for each deliverable)
 - **--releaseid** - UUID of release to add deliverable to (either releaseid or component, branch, and version must be set)
