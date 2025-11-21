@@ -31,7 +31,9 @@ import (
 var rawBranchesBase64 string
 
 type SynchronizeBranchInput struct {
-	Component    string   `json:"component"`
+	Component    string   `json:"component,omitempty"`
+	VcsUri       string   `json:"vcsUri,omitempty"`
+	RepoPath     string   `json:"repoPath,omitempty"`
 	LiveBranches []string `json:"liveBranches"`
 }
 
@@ -59,7 +61,12 @@ var synchronizeBranchesCmd = &cobra.Command{
 			}
 		}
 
-		sbi := SynchronizeBranchInput{Component: component, LiveBranches: noEmptyBranches}
+		sbi := SynchronizeBranchInput{
+			Component:    component,
+			VcsUri:       vcsUri,
+			RepoPath:     repoPath,
+			LiveBranches: noEmptyBranches,
+		}
 
 		if debug == "true" {
 			jsonBody, _ := json.Marshal(sbi)
@@ -77,7 +84,9 @@ var synchronizeBranchesCmd = &cobra.Command{
 }
 
 func init() {
-	synchronizeBranchesCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component for which we are performing synchronization. Either this UUID must be provided or API key belonging to specific component.")
+	synchronizeBranchesCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component for which we are performing synchronization. Either this UUID, vcsuri, or API key belonging to specific component must be provided.")
+	synchronizeBranchesCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository for VCS-based component resolution (optional)")
+	synchronizeBranchesCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
 	synchronizeBranchesCmd.PersistentFlags().StringVar(&rawBranchesBase64, "livebranches", "", "Live branches of components in base64, use `git branch --format=\"%(refname)\" | base64 -w 0` or `git branch -r --format=\"%(refname)\" | base64 -w 0` to obtain")
 	synchronizeBranchesCmd.MarkPersistentFlagRequired("livebranches")
 	rootCmd.AddCommand(synchronizeBranchesCmd)
