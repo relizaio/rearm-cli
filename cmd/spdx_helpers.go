@@ -83,9 +83,89 @@ func determineComponentType(primaryPackagePurpose string) cdx.ComponentType {
 	}
 }
 
+// normalizeMalformedLicenseString fixes malformed comma-separated license strings
+// from tools like Microsoft BOM tool that produce invalid SPDX expressions like:
+// "AND, BSD-2-Clause, BSD-3-Clause, Beerware, Domain, ISC, Public"
+// and converts them to proper SPDX expressions like:
+// "BSD-2-Clause AND BSD-3-Clause AND Beerware AND ISC"
+func normalizeMalformedLicenseString(licenseStr string) string {
+	// Check if it's a comma-separated list (malformed format)
+	if !strings.Contains(licenseStr, ",") {
+		return licenseStr
+	}
+
+	// Split by comma and trim spaces
+	parts := strings.Split(licenseStr, ",")
+	var licenses []string
+	var operator string
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Check if this is an operator (AND, OR)
+		upperPart := strings.ToUpper(part)
+		if upperPart == "AND" || upperPart == "OR" {
+			// Store the operator if we haven't found one yet
+			if operator == "" {
+				operator = upperPart
+			}
+			continue
+		}
+
+		// Filter out invalid or generic license identifiers
+		if part == "Domain" || part == "Public" {
+			// These are not valid SPDX license identifiers
+			// "Domain" likely means "Public Domain"
+			continue
+		}
+
+		licenses = append(licenses, part)
+	}
+
+	// If no valid licenses found, return NOASSERTION instead of invalid original
+	if len(licenses) == 0 {
+		return "NOASSERTION"
+	}
+
+	// If only one license, return it
+	if len(licenses) == 1 {
+		return licenses[0]
+	}
+
+	// Default to AND if no operator was specified
+	if operator == "" {
+		operator = "AND"
+	}
+
+	// Join licenses with the operator
+	return strings.Join(licenses, " "+operator+" ")
+}
+
+// isPublicDomainVariant checks if the license string is a Public-Domain variant
+func isPublicDomainVariant(licenseStr string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(licenseStr, "-", ""))
+	return normalized == "publicdomain" || normalized == "public domain"
+}
+
 func parseLicenseExpression(licenseStr string) cdx.Licenses {
 	if licenseStr == "" || licenseStr == "NOASSERTION" {
 		return nil
+	}
+
+	// Normalize malformed comma-separated license strings (e.g., from Microsoft BOM tool)
+	licenseStr = normalizeMalformedLicenseString(licenseStr)
+
+	// Handle Public-Domain variants with name property instead of ID
+	if isPublicDomainVariant(licenseStr) {
+		return cdx.Licenses{{
+			License: &cdx.License{
+				Name:            "Public Domain",
+				Acknowledgement: cdx.LicenseAcknowledgementDeclared,
+			},
+		}}
 	}
 
 	// For simple license IDs like "MIT", "Apache-2.0", create license objects
