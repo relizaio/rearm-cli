@@ -83,6 +83,14 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		body["lifecycle"] = strings.ToUpper(lifecycle)
 	}
 
+	// Add VCS-based component identification parameters
+	if len(vcsUri) > 0 {
+		body["vcsUri"] = vcsUri
+		if len(repoPath) > 0 {
+			body["repoPath"] = repoPath
+		}
+	}
+
 	if len(approvalEntries) > 0 || len(approvalStates) > 0 {
 		if len(approvalEntries) != len(approvalStates) {
 			fmt.Println("Error: number of approvalentry and approvalstate arguments must be the same!")
@@ -141,6 +149,8 @@ func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM for which to obtain latest release")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&product, "product", "", "Product UUID from ReARM to condition component release to this product (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of branch or Feature Set from ReARM for which latest release is requested, if not supplied UI mapping is used (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&environment, "env", "", "Environment to obtain approvals details from (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&instance, "instance", "", "Instance ID for which to check release (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace within instance for which to check release, only matters if instance is supplied (optional)")
