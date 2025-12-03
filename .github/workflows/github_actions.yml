@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: RelizaHub Build And Submit Release metadata action
-        uses: relizaio/reliza-docker-action@1b5949194b35164a1952f940edb211c606f5829b # experimental 3.12
+        uses: relizaio/reliza-docker-action@9144a07ade5fca8699fbee913e238ced60f6501f # 3.11
         with:
           registry_username: ${{ secrets.DOCKER_LOGIN }}
           registry_password: ${{ secrets.DOCKER_TOKEN }}
@@ -22,5 +22,4 @@ jobs:
           reliza_api_key: ${{ secrets.RELIZA_API_KEY }}
           reliza_project_id: ${{ secrets.RELIZA_HUB_PROJECT_ID }}
           enable_sbom: 'false'
-          platform_architectures: 'linux/amd64,linux/arm64,windows/amd64'
           # push_latest_tag: false
