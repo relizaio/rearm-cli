@@ -72,6 +72,21 @@ type FileData struct {
 	Filename string
 }
 
+// sanitizeFilename removes any characters that are not a-zA-Z0-9.-_
+func sanitizeFilename(filename string) string {
+	var result []byte
+	for i := 0; i < len(filename); i++ {
+		c := filename[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' {
+			result = append(result, c)
+		}
+	}
+	if len(result) == 0 {
+		return "file"
+	}
+	return string(result)
+}
+
 func init() {
 	attachBomCmd.PersistentFlags().StringVar(&infile, "infile", "", "Input file with bom json")
 	attachBomCmd.PersistentFlags().StringVar(&artDigest, "artdigest", "", "SHA 256 digest of the artifact")

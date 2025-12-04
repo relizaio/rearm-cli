@@ -783,7 +783,7 @@ func processODelSingleArtifactInput(artInput *Artifact, indexPrefix string, file
 	(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(fileJCounter) + ".file"}
 	(*filesMap)[currentIndex] = FileData{
 		Bytes:    fileBytes,
-		Filename: filepath.Base(artInput.FilePath),
+		Filename: sanitizeFilename(filepath.Base(artInput.FilePath)),
 	}
 	artInput.File = nil
 	(*artInput).FilePath = ""
