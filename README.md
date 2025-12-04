@@ -204,6 +204,30 @@ The addrelease command supports three types of artifacts, each serving a differe
    - Use when: The artifact is specific to a deliverable (container, binary, package)
    - Note: Must have one `--odelartsjson` entry per `--odelid` deliverable
 
+**Using Tags on Artifacts:**
+
+Tags can be added to artifacts in `--releasearts`, `--scearts`, and `--odelartsjson` using the `tags` field. Tags are key-value pairs useful for categorization, filtering, and metadata.
+
+Example with tags on release artifacts:
+```bash
+--releasearts '[{"displayIdentifier":"security-report","type":"USER_DOCUMENT","storedIn":"REARM","filePath":"./security-report.pdf","tags":[{"key":"category","value":"security"},{"key":"reviewed","value":"true"}]}]'
+```
+
+Example with tags on SCE artifacts:
+```bash
+--scearts '[{"displayIdentifier":"source-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","filePath":"./source-sbom.json","tags":[{"key":"generator","value":"cdxgen"},{"key":"scope","value":"source"}]}]'
+```
+
+Example with tags on deliverable artifacts:
+```bash
+--odelartsjson '[{"displayIdentifier":"container-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","inventoryTypes":["SOFTWARE"],"filePath":"./sbom.json","tags":[{"key":"format","value":"cyclonedx"},{"key":"version","value":"1.5"}]}]'
+```
+
+Example with nested artifacts (artifacts within artifacts) with tags:
+```bash
+--odelartsjson '[{"displayIdentifier":"main-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","filePath":"./main-sbom.json","tags":[{"key":"primary","value":"true"}],"artifacts":[{"displayIdentifier":"nested-vex","type":"VEX","storedIn":"REARM","filePath":"./vex.json","tags":[{"key":"type","value":"openvex"}]}]}]'
+```
+
 Sample command using VCS-based component resolution:
 
 ```bash

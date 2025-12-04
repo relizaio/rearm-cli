@@ -66,6 +66,12 @@ type Link struct {
 	Content string `json:"content"`
 }
 
+// FileData holds file bytes and original filename for upload
+type FileData struct {
+	Bytes    []byte
+	Filename string
+}
+
 func init() {
 	attachBomCmd.PersistentFlags().StringVar(&infile, "infile", "", "Input file with bom json")
 	attachBomCmd.PersistentFlags().StringVar(&artDigest, "artdigest", "", "SHA 256 digest of the artifact")

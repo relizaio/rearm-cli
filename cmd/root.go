@@ -475,30 +475,9 @@ var addODeliverableCmd = &cobra.Command{
 					if err != nil {
 						fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 					} else {
-						artifactsObject := make([]Artifact, len(artifactsInput))
-						for j, artifactInput := range artifactsInput {
-							artifactsObject[j] = Artifact{}
-							if artifactInput.FilePath != "" {
-								fileBytes, err := os.ReadFile(artifactInput.FilePath)
-								if err != nil {
-									fmt.Println("Error reading file: ", err)
-									os.Exit(1)
-								} else {
-									filesCounter++
-									currentIndex := strconv.Itoa(filesCounter)
-
-									locationMap[currentIndex] = []string{"variables.addODeliverableInput.deliverables." + strconv.Itoa(i) + ".artifacts." + strconv.Itoa(j) + ".file"}
-									filesMap[currentIndex] = fileBytes
-									artifactInput.File = nil
-
-								}
-								artifactInput.FilePath = ""
-								artifactInput.StripBom = strings.ToUpper(stripBom)
-								artifactsObject[j] = artifactInput
-							}
-						}
-						// TODO: replace file path with actual file
-						outboundDeliverables[i]["artifacts"] = artifactsObject
+						indexPrefix := "variables.addODeliverableInput.deliverables." + strconv.Itoa(i) + ".artifacts."
+						artifactsObject := processODelArtifactsInput(&artifactsInput, indexPrefix, &filesCounter, &locationMap, &filesMap)
+						outboundDeliverables[i]["artifacts"] = *artifactsObject
 					}
 				}
 			}
@@ -533,11 +512,11 @@ var addODeliverableCmd = &cobra.Command{
 		}
 		c := client.R()
 		for key, value := range filesMap {
-			if bytesValue, ok := value.([]byte); ok {
-				c.SetFileReader(key, key, bytes.NewReader(bytesValue))
+			if fileData, ok := value.(FileData); ok {
+				c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
 			} else {
-				// Handle error case: value is not []byte
-				fmt.Printf("Warning: Value for key '%s' is not []byte\n", key)
+				// Handle error case: value is not FileData
+				fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
 			}
 		}
 
@@ -770,6 +749,46 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func processODelArtifactsInput(artifactsInput *[]Artifact, indexPrefix string, filesCounter *int,
+	locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
+	artifactsObject := make([]Artifact, len(*artifactsInput))
+	for j, artifactInput := range *artifactsInput {
+		artifactsObject[j] = *processODelSingleArtifactInput(&artifactInput, indexPrefix, j, filesCounter, locationMap, filesMap)
+	}
+	return &artifactsObject
+}
+
+func processODelSingleArtifactInput(artInput *Artifact, indexPrefix string, fileJCounter int, filesCounter *int,
+	locationMap *map[string][]string, filesMap *map[string]interface{}) *Artifact {
+	// Process nested artifacts recursively
+	if len((*artInput).Artifacts) > 0 {
+		updIndex := indexPrefix + strconv.Itoa(fileJCounter) + ".artifacts."
+		(*artInput).Artifacts = *processODelArtifactsInput(&(*artInput).Artifacts, updIndex, filesCounter, locationMap, filesMap)
+	}
+	// File path is required for artifacts
+	if (*artInput).FilePath == "" {
+		fmt.Fprintln(os.Stderr, "Error: filePath is required for each artifact in odelartsjson")
+		os.Exit(1)
+	}
+	fileBytes, err := os.ReadFile(artInput.FilePath)
+	if err != nil {
+		fmt.Println("Error reading file: ", err)
+		os.Exit(1)
+	}
+	*filesCounter++
+	currentIndex := strconv.Itoa(*filesCounter)
+
+	(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(fileJCounter) + ".file"}
+	(*filesMap)[currentIndex] = FileData{
+		Bytes:    fileBytes,
+		Filename: filepath.Base(artInput.FilePath),
+	}
+	artInput.File = nil
+	(*artInput).FilePath = ""
+	(*artInput).StripBom = strings.ToUpper(stripBom)
+	return artInput
 }
 
 func init() {

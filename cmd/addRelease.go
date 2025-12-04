@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -272,26 +273,30 @@ func processSingleArtifactInput(artInput *Artifact, indexPrefix string, fileJCou
 	locationMap *map[string][]string, filesMap *map[string]interface{}) *Artifact {
 	// TODO: replace file path with actual file
 	if len((*artInput).Artifacts) > 0 {
-		updIndex := indexPrefix + "0.artifacts."
+		updIndex := indexPrefix + strconv.Itoa(fileJCounter) + ".artifacts."
 		(*artInput).Artifacts = *processArtifactsInput(&(*artInput).Artifacts, updIndex, filesCounter, locationMap, filesMap)
 	}
-	if (*artInput).FilePath != "" {
-		fileBytes, err := os.ReadFile(artInput.FilePath)
-		if err != nil {
-			fmt.Println("Error reading file: ", err)
-			os.Exit(1)
-		} else {
-			*filesCounter++
-			currentIndex := strconv.Itoa(*filesCounter)
-
-			(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(fileJCounter) + ".file"}
-			(*filesMap)[currentIndex] = fileBytes
-			artInput.File = nil
-
-		}
-		(*artInput).FilePath = ""
-		(*artInput).StripBom = strings.ToUpper(stripBom)
+	// File path is required for artifacts
+	if (*artInput).FilePath == "" {
+		fmt.Fprintln(os.Stderr, "Error: filePath is required for each artifact")
+		os.Exit(1)
 	}
+	fileBytes, err := os.ReadFile(artInput.FilePath)
+	if err != nil {
+		fmt.Println("Error reading file: ", err)
+		os.Exit(1)
+	}
+	*filesCounter++
+	currentIndex := strconv.Itoa(*filesCounter)
+
+	(*locationMap)[currentIndex] = []string{indexPrefix + strconv.Itoa(fileJCounter) + ".file"}
+	(*filesMap)[currentIndex] = FileData{
+		Bytes:    fileBytes,
+		Filename: filepath.Base(artInput.FilePath),
+	}
+	artInput.File = nil
+	(*artInput).FilePath = ""
+	(*artInput).StripBom = strings.ToUpper(stripBom)
 	return artInput
 }
 
@@ -471,11 +476,11 @@ var addreleaseCmd = &cobra.Command{
 		}
 		c := client.R()
 		for key, value := range filesMap {
-			if bytesValue, ok := value.([]byte); ok {
-				c.SetFileReader(key, key, bytes.NewReader(bytesValue))
+			if fileData, ok := value.(FileData); ok {
+				c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
 			} else {
-				// Handle error case: value is not []byte
-				fmt.Printf("Warning: Value for key '%s' is not []byte\n", key)
+				// Handle error case: value is not FileData
+				fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
 			}
 		}
 
