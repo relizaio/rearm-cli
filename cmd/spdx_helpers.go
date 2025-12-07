@@ -150,6 +150,57 @@ func isPublicDomainVariant(licenseStr string) bool {
 	return normalized == "publicdomain" || normalized == "public domain"
 }
 
+// Helper function to check if a license string is a simple SPDX license ID
+func isSimpleLicenseId(license string) bool {
+	// First check if it's a complex expression
+	if strings.Contains(license, " AND ") ||
+		strings.Contains(license, " OR ") ||
+		strings.Contains(license, " WITH ") ||
+		strings.Contains(license, "(") ||
+		strings.Contains(license, ")") {
+		return false
+	}
+
+	// Check if it's in our valid SPDX license list
+	if validSpdxLicenses[license] {
+		return true
+	}
+
+	// For LicenseRef- IDs, these are also considered simple IDs in SPDX but
+	// CycloneDX handles them via ID field if they are valid SPDX IDs or Name field if custom
+	// However, if we want to be strict about "spdx-known license ids" only going into ID field:
+	// If it starts with LicenseRef-, it's a custom license defined in the SPDX document itself.
+	// CycloneDX supports this via the ID field but it's not a "known SPDX license ID".
+	// But usually LicenseRef- is used in ID field.
+	// The user request says: "if particular encountered license during conversion is not in that license list, in the resulting cyclonedx file use "name" field for this license instead of "id" - so the "id" field is reserved for only spdx-known license ids"
+
+	// So if it's not in the list, it's NOT a simple SPDX ID for our purpose of putting it in the ID field.
+	return false
+}
+
+// validateLicenseExpressionIds checks if all license IDs in an expression are valid SPDX IDs
+func validateLicenseExpressionIds(expression string) bool {
+	// Simple tokenization: replace operators and parens with spaces
+	// Note: SPDX allows "WITH" for exceptions. Exceptions are also in our validSpdxLicenses map.
+	replacer := strings.NewReplacer(
+		"(", " ",
+		")", " ",
+		" AND ", " ",
+		" OR ", " ",
+		" WITH ", " ",
+	)
+	cleaned := replacer.Replace(expression)
+
+	parts := strings.Fields(cleaned)
+	for _, part := range parts {
+		// Verify each part is a known SPDX license ID or exception ID
+		if !validSpdxLicenses[part] {
+			return false
+		}
+	}
+	return true
+}
+
 func parseLicenseExpression(licenseStr string) cdx.Licenses {
 	if licenseStr == "" || licenseStr == "NOASSERTION" {
 		return nil
@@ -168,9 +219,9 @@ func parseLicenseExpression(licenseStr string) cdx.Licenses {
 		}}
 	}
 
-	// For simple license IDs like "MIT", "Apache-2.0", create license objects
-	// For complex expressions, use expression field
+	// If it looks like a simple license ID (no operators)
 	if isSimpleLicenseId(licenseStr) {
+		// It's already validated by isSimpleLicenseId to be in our map
 		return cdx.Licenses{{
 			License: &cdx.License{
 				ID:              licenseStr,
@@ -179,22 +230,27 @@ func parseLicenseExpression(licenseStr string) cdx.Licenses {
 		}}
 	}
 
-	// Keep complex license expressions as expressions
-	return cdx.Licenses{{Expression: licenseStr}}
-}
+	// If it contains boolean operators, it's a complex expression
+	if strings.Contains(licenseStr, " AND ") ||
+		strings.Contains(licenseStr, " OR ") ||
+		strings.Contains(licenseStr, " WITH ") ||
+		strings.Contains(licenseStr, "(") ||
+		strings.Contains(licenseStr, ")") {
 
-// Helper function to check if a license string is a simple SPDX license ID
-func isSimpleLicenseId(license string) bool {
-	// First check if it's a complex expression
-	if strings.Contains(license, " AND ") ||
-		strings.Contains(license, " OR ") ||
-		strings.Contains(license, " WITH ") ||
-		strings.Contains(license, "(") ||
-		strings.Contains(license, ")") {
-		return false
+		// Validate that all IDs in the expression are known SPDX IDs
+		if validateLicenseExpressionIds(licenseStr) {
+			return cdx.Licenses{{Expression: licenseStr}}
+		}
+		// If validation fails (contains unknown IDs), fall through to use Name field
 	}
-	// Here we assume that it's already a valid SPDX license identifier
-	return true
+
+	// Otherwise (unknown license ID, simple string not in our list, or invalid expression), use the Name field
+	return cdx.Licenses{{
+		License: &cdx.License{
+			Name:            licenseStr,
+			Acknowledgement: cdx.LicenseAcknowledgementDeclared,
+		},
+	}}
 }
 
 func convertChecksums(checksums []common.Checksum) []cdx.Hash {
