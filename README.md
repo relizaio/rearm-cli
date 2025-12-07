@@ -303,7 +303,7 @@ Sample entry for external storage:
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
-For sample of how to use workflow in CI, refer to the ReARM Add Release GitHub Action[here](https://github.com/relizaio/rearm-add-release).
+For sample of how to use workflow in CI, refer to the ReARM Add Release GitHub Action [here](https://github.com/relizaio/rearm-add-release).
 
 ## 3. Use Case: Check If Artifact Hash Already Present In Some Release
 
