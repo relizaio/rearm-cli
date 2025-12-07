@@ -268,7 +268,7 @@ Sample entry for external storage:
 ```json
 [{"displayIdentifier": "release-notes-v1.0.0","type": "RELEASE_NOTES","storedIn": "EXTERNALLY","downloadLinks": [{"uri": "https://docs.example.com/releases/v1.0.0","content": "Release Notes"}]}]
 ```
-- **date** - flag to denote date time with timezone when commit was made, iso strict formatting with timezone is required, i.e. for git use git log --date=iso-strict (optional).
+- **date** - flag to denote date time with timezone when commit was made, iso strict formatting with timezone is required, i.e. for git use git log --date=iso-strict (optional, required if commit is present).
 - **vcstag** - flag to denote vcs tag (optional). This is needed to include vcs tag into commit, if present.
 - **lifecycle** - flag to denote release lifecycle (optional). Set to 'REJECTED' for failed releases, otherwise 'DRAFT' is used, may be also set to 'ASSEMBLED'.
 - **odelid** - flag to denote output deliverable identifier (optional). This is required to add output deliverable metadata into release.
@@ -299,6 +299,7 @@ Sample entry for external storage:
 - **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
+- **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 

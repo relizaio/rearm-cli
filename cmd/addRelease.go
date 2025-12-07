@@ -50,6 +50,7 @@ var (
 	createComponentIfMissing           bool
 	createComponentVersionSchema       string
 	createComponentBranchVersionSchema string
+	rebuildRelease                     bool
 )
 
 type Identifier struct {
@@ -412,6 +413,9 @@ var addreleaseCmd = &cobra.Command{
 				body["repoPath"] = repoPath
 			}
 		}
+		if rebuildRelease {
+			body["rebuildRelease"] = true
+		}
 		// Add createComponentIfMissing options (requires org-wide read-write key)
 		if createComponentIfMissing {
 			body["createComponentIfMissing"] = true
@@ -551,5 +555,6 @@ func init() {
 	addreleaseCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
+	addreleaseCmd.PersistentFlags().BoolVar(&rebuildRelease, "rebuild", false, "(Optional) Allow rebuilding release on repeated CI reruns. Default is false.")
 	rootCmd.AddCommand(addreleaseCmd)
 }
