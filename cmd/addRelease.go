@@ -46,6 +46,10 @@ var (
 	odelPublisher []string
 	odelGroup     []string
 	odelPackage   []string
+
+	createComponentIfMissing           bool
+	createComponentVersionSchema       string
+	createComponentBranchVersionSchema string
 )
 
 type Identifier struct {
@@ -408,6 +412,16 @@ var addreleaseCmd = &cobra.Command{
 				body["repoPath"] = repoPath
 			}
 		}
+		// Add createComponentIfMissing options (requires org-wide read-write key)
+		if createComponentIfMissing {
+			body["createComponentIfMissing"] = true
+			if len(createComponentVersionSchema) > 0 {
+				body["createComponentVersionSchema"] = createComponentVersionSchema
+			}
+			if len(createComponentBranchVersionSchema) > 0 {
+				body["createComponentFeatureBranchVersionSchema"] = createComponentBranchVersionSchema
+			}
+		}
 		if len(odelId) > 0 {
 			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
 		}
@@ -534,5 +548,8 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
 	addreleaseCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
+	addreleaseCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
+	addreleaseCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
+	addreleaseCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	rootCmd.AddCommand(addreleaseCmd)
 }

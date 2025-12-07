@@ -238,7 +238,6 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     --vcsuri github.com/myorg/myapp    \
     -b main    \
     -v 1.0.0    \
-    --vcstype git    \
     --commit abc123def456
 ```
 
@@ -254,7 +253,6 @@ Flags stand for:
 - **endpoint** - flag to denote test endpoint URI (optional). This would be useful for systems where every release gets test URI.
 - **component** - flag to denote component uuid (optional). Required if organization-wide read-write key is used, ignored if component specific api key is used.
 - **vcsuri** - flag to denote vcs uri (optional). Currently this flag is needed if we want to set a commit for the release. However, soon it will be needed only if the vcs uri is not yet set for the component.
-- **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. As with vcsuri, this flag is needed if we want to set a commit for the release. However, soon it will be needed only if the vcs uri is not yet set for the component.
 - **commit** - flag to denote vcs commit id or hash (optional). This is needed to provide source code entry metadata into the release.
 - **commitmessage** - flag to denote vcs commit subject (optional). Alongside *commit* flag this would be used to provide source code entry metadata into the release.
 - **commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release.
@@ -297,6 +295,10 @@ Sample entry for external storage:
 - **--odelversion** - Deliverable version, if different from release (multiple allowed, optional).
 - **--tagsarr** - Deliverable Tag Key-Value Pairs (multiple allowed, separate several tag key-value pairs for one Deliverable with commas, and seprate key-value in a pair with colon, optional).
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional). Default is true. Supported values: true|false.
+- **--createcomponent** - flag to create component if it doesn't exist (optional). **Requires organization-wide read-write API key.** When set, if the component identified by `--vcsuri` (and optionally `--repo-path`) doesn't exist, it will be automatically created.
+- **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
+- **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
+- **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
