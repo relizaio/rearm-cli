@@ -700,6 +700,7 @@ var getVersionCmd = &cobra.Command{
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
 					dockerTagSafeVersion
+					releaseAlreadyExists
 				}
 			}
 		`)
