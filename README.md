@@ -362,6 +362,7 @@ Flags stand for:
   - **--namespace** - Namespace within instance for which to check release, only matters if instance is supplied (optional).
   - **--tagkey** - Tag key to use for picking artifact (optional).
   - **--tagval** - Tag value to use for picking artifact (optional).
+  - **--uptoversion** - Upper bound version to filter releases (optional). Returns latest release up to this version.
 
 ## 5. Use Case: Persist ReARM Credentials in a Config File
 

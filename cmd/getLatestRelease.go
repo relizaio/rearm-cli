@@ -33,6 +33,7 @@ var (
 	approvalMatchOperator string
 	approvalEntries       []string
 	approvalStates        []string
+	upToVersion           string
 )
 
 type ConditionOnReleaseInput struct {
@@ -89,6 +90,10 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		if len(repoPath) > 0 {
 			body["repoPath"] = repoPath
 		}
+	}
+
+	if len(upToVersion) > 0 {
+		body["upToVersion"] = upToVersion
 	}
 
 	if len(approvalEntries) > 0 || len(approvalStates) > 0 {
@@ -160,5 +165,6 @@ func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&approvalMatchOperator, "operator", "AND", "Match operator for a list of approvals, 'AND' or 'OR' default is 'AND' (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalEntries, "approvalentry", []string{}, "Approval entry names or ids (optional, multiple allowed)")
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalStates, "approvalstate", []string{}, "Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&upToVersion, "uptoversion", "", "Upper bound version to filter releases (optional). Returns latest release up to this version.")
 	rootCmd.AddCommand(getLatestReleaseCmd)
 }
