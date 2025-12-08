@@ -166,13 +166,7 @@ func isSimpleLicenseId(license string) bool {
 		return true
 	}
 
-	// For LicenseRef- IDs, these are also considered simple IDs in SPDX but
-	// CycloneDX handles them via ID field if they are valid SPDX IDs or Name field if custom
-	// However, if we want to be strict about "spdx-known license ids" only going into ID field:
-	// If it starts with LicenseRef-, it's a custom license defined in the SPDX document itself.
-	// CycloneDX supports this via the ID field but it's not a "known SPDX license ID".
-	// But usually LicenseRef- is used in ID field.
-	// The user request says: "if particular encountered license during conversion is not in that license list, in the resulting cyclonedx file use "name" field for this license instead of "id" - so the "id" field is reserved for only spdx-known license ids"
+	// if particular encountered license during conversion is not in that license list, in the resulting cyclonedx file use "name" field for this license instead of "id" - so the "id" field is reserved for only spdx-known license ids
 
 	// So if it's not in the list, it's NOT a simple SPDX ID for our purpose of putting it in the ID field.
 	return false
