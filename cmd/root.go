@@ -610,6 +610,16 @@ var getVersionCmd = &cobra.Command{
 				body["repoPath"] = repoPath
 			}
 		}
+		// Add createComponentIfMissing options (requires org-wide read-write key)
+		if createComponentIfMissing {
+			body["createComponentIfMissing"] = true
+			if len(createComponentVersionSchema) > 0 {
+				body["createComponentVersionSchema"] = createComponentVersionSchema
+			}
+			if len(createComponentBranchVersionSchema) > 0 {
+				body["createComponentFeatureBranchVersionSchema"] = createComponentBranchVersionSchema
+			}
+		}
 		if len(modifier) > 0 {
 			body["modifier"] = modifier
 		}
@@ -862,6 +872,9 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
 	getVersionCmd.PersistentFlags().BoolVar(&manual, "manual", false, "(Optional) Set --manual flag to indicate a manual release.")
 	getVersionCmd.PersistentFlags().BoolVar(&onlyVersion, "onlyversion", false, "(Optional) Set --onlyVersion flag to retrieve next version only and not create a release.")
+	getVersionCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
+	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
+	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")

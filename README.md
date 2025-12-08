@@ -140,6 +140,9 @@ Flags stand for:
 - **--onlyversion** - boolean flag to skip creation of the release (optional). Default is false.
 - **--repo-path** - Repository path for monorepo components (optional).
 - **--action** - Bump action name: bump | bumppatch | bumpminor | bumpmajor | bumpdate (optional).
+- **--createcomponent** - flag to create component if it doesn't exist (optional). **Requires organization-wide read-write API key.** When set, if the component identified by `--vcsuri` (and optionally `--repo-path`) doesn't exist, it will be automatically created.
+- **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
+- **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
