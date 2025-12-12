@@ -161,7 +161,7 @@ func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace within instance for which to check release, only matters if instance is supplied (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&tagKey, "tagkey", "", "Tag key to use for picking artifact (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&tagVal, "tagval", "", "Tag value to use for picking artifact (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of the release, default is 'DRAFT' (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "", "Lifecycle filter for the release (optional). If not specified, returns the absolute latest release regardless of lifecycle. Use 'DRAFT' to get latest DRAFT or higher, 'ASSEMBLED' for assembled releases only, etc.")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&approvalMatchOperator, "operator", "AND", "Match operator for a list of approvals, 'AND' or 'OR' default is 'AND' (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalEntries, "approvalentry", []string{}, "Approval entry names or ids (optional, multiple allowed)")
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalStates, "approvalstate", []string{}, "Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present)")
