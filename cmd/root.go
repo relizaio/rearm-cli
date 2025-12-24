@@ -609,6 +609,9 @@ var getVersionCmd = &cobra.Command{
 			if len(repoPath) > 0 {
 				body["repoPath"] = repoPath
 			}
+			if len(vcsDisplayName) > 0 {
+				body["vcsDisplayName"] = vcsDisplayName
+			}
 		}
 		// Add createComponentIfMissing options (requires org-wide read-write key)
 		if createComponentIfMissing {
@@ -865,6 +868,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&versionSchema, "pin", "", "Version pin if creating new branch")
 	getVersionCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
 	getVersionCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
+	getVersionCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
 	getVersionCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	getVersionCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id (required to create Source Code Entry for new release)")
 	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")

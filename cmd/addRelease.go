@@ -51,6 +51,7 @@ var (
 	createComponentVersionSchema       string
 	createComponentBranchVersionSchema string
 	rebuildRelease                     bool
+	vcsDisplayName                     string
 )
 
 type Identifier struct {
@@ -412,6 +413,9 @@ var addreleaseCmd = &cobra.Command{
 			if len(repoPath) > 0 {
 				body["repoPath"] = repoPath
 			}
+			if len(vcsDisplayName) > 0 {
+				body["vcsDisplayName"] = vcsDisplayName
+			}
 		}
 		if rebuildRelease {
 			body["rebuildRelease"] = true
@@ -524,6 +528,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID for this release if org-wide key is used")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
 	addreleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
+	addreleaseCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	addreleaseCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id")
 	addreleaseCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
