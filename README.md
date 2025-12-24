@@ -143,6 +143,7 @@ Flags stand for:
 - **--createcomponent** - flag to create component if it doesn't exist (optional). **Requires organization-wide read-write API key.** When set, if the component identified by `--vcsuri` (and optionally `--repo-path`) doesn't exist, it will be automatically created.
 - **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
+- **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
@@ -301,6 +302,7 @@ Sample entry for external storage:
 - **--createcomponent** - flag to create component if it doesn't exist (optional). **Requires organization-wide read-write API key.** When set, if the component identified by `--vcsuri` (and optionally `--repo-path`) doesn't exist, it will be automatically created.
 - **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
+- **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
 
