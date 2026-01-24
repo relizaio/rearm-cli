@@ -144,7 +144,7 @@ func enrichSupplierFunc() {
 	purlToIndices := make(map[string][]int)
 
 	for ind, comp := range *components {
-		if comp.Supplier == nil && comp.PackageURL != "" {
+		if comp.PackageURL != "" && needsSupplierEnrichment(&comp) {
 			purlsToEnrich = append(purlsToEnrich, comp.PackageURL)
 			purlToIndices[comp.PackageURL] = append(purlToIndices[comp.PackageURL], ind)
 		}
@@ -266,7 +266,7 @@ func enrichFunc() {
 			continue
 		}
 
-		compNeedsSupplier := comp.Supplier == nil
+		compNeedsSupplier := needsSupplierEnrichment(&comp)
 		compNeedsLicense := needsLicenseEnrichment(&comp)
 
 		if compNeedsSupplier || compNeedsLicense {
@@ -332,22 +332,41 @@ func enrichFunc() {
 	}
 }
 
+// isUnresolvedValue checks if a string value indicates unresolved/missing data (case-insensitive)
+func isUnresolvedValue(val string) bool {
+	lower := strings.ToLower(val)
+	return lower == "noassertion" || lower == "unresolved" || lower == "undetected" || lower == "other"
+}
+
+// needsSupplierEnrichment checks if a component needs supplier enrichment
+func needsSupplierEnrichment(comp *cdx.Component) bool {
+	if comp.Supplier == nil {
+		return true
+	}
+	if isUnresolvedValue(comp.Supplier.Name) {
+		return true
+	}
+	return false
+}
+
 func needsLicenseEnrichment(comp *cdx.Component) bool {
 	// Missing license
 	if comp.Licenses == nil || len(*comp.Licenses) == 0 {
 		return true
 	}
 
-	// Check if any license contains LicenseRef-scancode
+	// Check if any license contains LicenseRef-scancode or unresolved values
 	for _, lic := range *comp.Licenses {
-		if lic.Expression != "" && strings.Contains(lic.Expression, "LicenseRef-scancode") {
-			return true
-		}
-		if lic.License != nil {
-			if strings.Contains(lic.License.ID, "LicenseRef-scancode") {
+		if lic.Expression != "" {
+			if strings.Contains(lic.Expression, "LicenseRef-scancode") || isUnresolvedValue(lic.Expression) {
 				return true
 			}
-			if strings.Contains(lic.License.Name, "LicenseRef-scancode") {
+		}
+		if lic.License != nil {
+			if strings.Contains(lic.License.ID, "LicenseRef-scancode") || isUnresolvedValue(lic.License.ID) {
+				return true
+			}
+			if strings.Contains(lic.License.Name, "LicenseRef-scancode") || isUnresolvedValue(lic.License.Name) {
 				return true
 			}
 		}
