@@ -497,6 +497,18 @@ func convertBearSupplierToCdx(supplier *BearSupplier) *cdx.OrganizationalEntity 
 	return entity
 }
 
+// isInvalidBearLicense checks if a license value from BEAR should not override existing license
+func isInvalidBearLicense(val string) bool {
+	upper := strings.ToUpper(val)
+	if upper == "UNLICENSED" {
+		return true
+	}
+	if strings.HasPrefix(upper, "SEE LICENSE IN") {
+		return true
+	}
+	return false
+}
+
 func convertBearLicensesToCdx(licenses []BearLicenseChoice) *cdx.Licenses {
 	if len(licenses) == 0 {
 		return nil
@@ -504,6 +516,16 @@ func convertBearLicensesToCdx(licenses []BearLicenseChoice) *cdx.Licenses {
 
 	var cdxLicenses cdx.Licenses
 	for _, lic := range licenses {
+		// Skip invalid license values that should not override existing licenses
+		if lic.Expression != "" && isInvalidBearLicense(lic.Expression) {
+			continue
+		}
+		if lic.License != nil && lic.License.ID != "" && isInvalidBearLicense(lic.License.ID) {
+			continue
+		}
+		if lic.License != nil && lic.License.Name != "" && isInvalidBearLicense(lic.License.Name) {
+			continue
+		}
 		if lic.Expression != "" {
 			// Validate expression - only use if all IDs are valid SPDX IDs
 			if validateLicenseExpressionIds(lic.Expression) {
