@@ -31,8 +31,9 @@ import (
 )
 
 var (
-	bearUri    string
-	bearApiKey string
+	bearUri      string
+	bearApiKey   string
+	skipPatterns []string
 )
 
 const bearBatchSize = 20
@@ -75,6 +76,7 @@ func init() {
 
 	enrichCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
 	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichCmd.PersistentFlags().StringArrayVar(&skipPatterns, "skipPattern", []string{}, "Skip components whose purl contains this pattern (can be specified multiple times)")
 	bomUtils.AddCommand(enrichCmd)
 }
 
@@ -266,6 +268,11 @@ func enrichFunc() {
 			continue
 		}
 
+		// Skip components matching any skip pattern
+		if shouldSkipPurl(comp.PackageURL) {
+			continue
+		}
+
 		compNeedsSupplier := needsSupplierEnrichment(&comp)
 		compNeedsLicense := needsLicenseEnrichment(&comp)
 
@@ -330,6 +337,17 @@ func enrichFunc() {
 		fmt.Println(outErr)
 		os.Exit(1)
 	}
+}
+
+// shouldSkipPurl checks if a purl matches any of the skip patterns (case-insensitive)
+func shouldSkipPurl(purl string) bool {
+	lowerPurl := strings.ToLower(purl)
+	for _, pattern := range skipPatterns {
+		if strings.Contains(lowerPurl, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
 }
 
 // isUnresolvedValue checks if a string value indicates unresolved/missing data (case-insensitive)

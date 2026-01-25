@@ -78,10 +78,24 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     -o output-bom.json
 ```
 
+Skip specific components by purl pattern:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    bomutils enrich \
+    --bearUri https://mybear.com \
+    --bearApiKey mykey \
+    --skipPattern "pkg:npm/" \
+    --skipPattern "pkg:pypi/" \
+    -f input-bom.json \
+    -o output-bom.json
+```
+
 ### Flags
 
 - **--bearUri** - URI of BEAR service to use, defaults to https://beardemo.rearmhq.com
 - **--bearApiKey** - API Key for BEAR service authentication
+- **--skipPattern** - Skip components whose purl contains this pattern (can be specified multiple times, only for `enrich` command)
 - **--infile (-f)** - input cyclonedx sbom json file (optional - reads from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json (optional - writes to stdout when not specified)
 - **--debug (-d)** - set to "true" to print enrichment statistics
