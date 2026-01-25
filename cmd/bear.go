@@ -505,15 +505,30 @@ func convertBearLicensesToCdx(licenses []BearLicenseChoice) *cdx.Licenses {
 	var cdxLicenses cdx.Licenses
 	for _, lic := range licenses {
 		if lic.Expression != "" {
-			cdxLicenses = append(cdxLicenses, cdx.LicenseChoice{
-				Expression: lic.Expression,
-			})
+			// Validate expression - only use if all IDs are valid SPDX IDs
+			if validateLicenseExpressionIds(lic.Expression) {
+				cdxLicenses = append(cdxLicenses, cdx.LicenseChoice{
+					Expression: lic.Expression,
+				})
+			} else {
+				// Invalid expression, use as name instead
+				cdxLicenses = append(cdxLicenses, cdx.LicenseChoice{
+					License: &cdx.License{
+						Name: lic.Expression,
+					},
+				})
+			}
 		} else if lic.License != nil {
 			cdxLicense := &cdx.License{}
-			if lic.License.ID != "" {
+			// Only put valid SPDX license IDs in the ID field
+			if lic.License.ID != "" && validSpdxLicenses[lic.License.ID] {
 				cdxLicense.ID = lic.License.ID
+			} else if lic.License.ID != "" {
+				// Not a valid SPDX ID, use as name instead
+				cdxLicense.Name = lic.License.ID
 			}
-			if lic.License.Name != "" {
+			// If name is provided and we haven't set it from invalid ID
+			if lic.License.Name != "" && cdxLicense.Name == "" {
 				cdxLicense.Name = lic.License.Name
 			}
 			if lic.License.URL != "" {
