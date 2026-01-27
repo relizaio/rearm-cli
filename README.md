@@ -43,27 +43,28 @@ It is possible to set authentication data via explicit flags, login command (see
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
-9. [xBOM Utilities](docs/bomutils.md)
+9. [Add Artifacts to Existing Release](#9-use-case-add-artifacts-to-existing-release)
+10. [xBOM Utilities](docs/bomutils.md)
     1. [Fix incorrect OCI purl generated via cdxgen](docs/bomutils.md#91-fix-incorrect-oci-purl-generated-via-cdxgen)
     2. [BOM supplier enrichment with BEAR](docs/bomutils.md#92-bom-supplier-enrichment-with-bear)
     3. [Convert SPDX to CycloneDX](docs/bomutils.md#93-convert-spdx-to-cyclonedx)
     4. [Merge Multiple BOMs](docs/bomutils.md#94-merge-multiple-boms)
-10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
-11. [Transparency Exchange API (TEA) Commands](docs/tea.md)
+11. [Finalize Release After CI Completion](#11-use-case-finalize-release-after-ci-completion)
+12. [Transparency Exchange API (TEA) Commands](docs/tea.md)
     1. [Transparency Exchange API (TEA) Discovery](docs/tea.md#111-transparency-exchange-api-tea-discovery)
     2. [Complete TEA Flow - Product and Component Details](docs/tea.md#112-complete-tea-flow---product-and-component-details)
-12. [Oolong TEA Server Content Management Commands](docs/oolong.md)
+13. [Oolong TEA Server Content Management Commands](docs/oolong.md)
     1. [Add Product](docs/oolong.md#121-add-product)
     2. [Add Component](docs/oolong.md#122-add-component)
     3. [Add Component Release](docs/oolong.md#123-add-component-release)
     4. [Add Product Release](docs/oolong.md#124-add-product-release)
     5. [Add Artifact](docs/oolong.md#125-add-artifact)
     6. [Add Artifact to Releases](docs/oolong.md#126-add-artifact-to-releases)
-13. [VCS-based Component Resolution](#13-use-case-vcs-based-component-resolution)
-    1. [Creating Components](#131-creating-components)
-    2. [Getting Versions](#132-getting-versions)
-    3. [Adding Releases](#133-adding-releases)
-    4. [Monorepo Support](#134-monorepo-support)
+14. [VCS-based Component Resolution](#14-use-case-vcs-based-component-resolution)
+    1. [Creating Components](#141-creating-components)
+    2. [Getting Versions](#142-getting-versions)
+    3. [Adding Releases](#143-adding-releases)
+    4. [Monorepo Support](#144-monorepo-support)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -524,10 +525,177 @@ Flags stand for:
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
 
-## 9. Use Case: xBOM Utilities
+## 9. Use Case: Add Artifacts to Existing Release
+
+This use case adds artifacts to an existing release, deliverable, or source code entry (SCE) after the release has been created. This is useful when artifacts become available after the initial release creation, or when you need to add additional SBOMs, attestations, or other artifacts to existing entities.
+
+**Key Difference from addrelease:**
+- `addrelease` creates a new release with artifacts
+- `addartifact` adds artifacts to an **existing** release, deliverable, or SCE
+
+### Simple Mode: Add Artifacts to Release
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addartifact    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
+    --version 1.0.5    \
+    --artifacts '[{
+      "filePath": "./release-sbom.json",
+      "type": "BOM",
+      "bomFormat": "CYCLONEDX",
+      "storedIn": "REARM",
+      "inventoryTypes": ["SOFTWARE"],
+      "displayIdentifier": "release-sbom"
+    }]'
+```
+
+### Advanced Mode: Add Multiple Artifact Types
+
+Add artifacts to release, deliverable, and SCE in a single command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addartifact    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
+    --version 1.0.5    \
+    --releasearts '[{
+      "filePath": "./release-sbom.json",
+      "type": "BOM",
+      "bomFormat": "CYCLONEDX",
+      "storedIn": "REARM",
+      "inventoryTypes": ["SOFTWARE"],
+      "displayIdentifier": "release-sbom"
+    }]'    \
+    --deliverablearts '[{
+      "deliverable": "035ad637-190b-40ba-a0ac-d7779ccc2c55",
+      "artifacts": [{
+        "filePath": "./container-sbom.json",
+        "type": "BOM",
+        "bomFormat": "CYCLONEDX",
+        "storedIn": "REARM",
+        "inventoryTypes": ["SOFTWARE"],
+        "displayIdentifier": "container-sbom"
+      }]
+    }]'    \
+    --scearts '[{
+      "sce": "892baa07-2492-4231-b9cc-06e4b5487342",
+      "artifacts": [{
+        "filePath": "./source-sbom.json",
+        "type": "BOM",
+        "bomFormat": "CYCLONEDX",
+        "storedIn": "REARM",
+        "inventoryTypes": ["SOFTWARE"],
+        "displayIdentifier": "source-sbom"
+      }]
+    }]'
+```
+
+### Add Artifacts to Deliverable Only
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addartifact    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
+    --version 1.0.5    \
+    --deliverablearts '[{
+      "deliverable": "035ad637-190b-40ba-a0ac-d7779ccc2c55",
+      "artifacts": [{
+        "filePath": "./attestation.json",
+        "type": "ATTESTATION",
+        "storedIn": "REARM",
+        "displayIdentifier": "build-attestation"
+      }]
+    }]'
+```
+
+### Add Artifacts to Source Code Entry Only
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addartifact    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
+    --version 1.0.5    \
+    --scearts '[{
+      "sce": "892baa07-2492-4231-b9cc-06e4b5487342",
+      "artifacts": [{
+        "filePath": "./source-analysis.json",
+        "type": "USER_DOCUMENT",
+        "storedIn": "REARM",
+        "displayIdentifier": "static-analysis-report"
+      }]
+    }]'
+```
+
+**Flags:**
+
+- **addartifact** - command that denotes we are adding artifacts to an existing release, deliverable, or SCE
+- **-i** - flag for component api id or organization-wide read-write api id (required)
+- **-k** - flag for component api key or organization-wide read-write api key (required)
+- **--component** - flag to denote component uuid (optional). Required if organization-wide read-write key is used, ignored if component specific api key is used
+- **--version** - release version to add artifacts to (either version+component or release uuid must be provided)
+- **--release** - release UUID to add artifacts to (alternative to version+component)
+- **--artifacts** - artifacts JSON array for simple mode (optional). Defaults to release artifacts. Mutually exclusive with specific artifact type flags
+- **--releasearts** - release artifacts JSON array (optional). Artifacts attached directly to the release
+- **--deliverablearts** - deliverable artifacts JSON array (optional). Each entry must specify deliverable UUID and artifacts. Format:
+```json
+[{
+  "deliverable": "uuid-of-deliverable",
+  "artifacts": [{ artifact object }]
+}]
+```
+- **--scearts** - source code entry artifacts JSON array (optional). Each entry must specify SCE UUID and artifacts. Format:
+```json
+[{
+  "sce": "uuid-of-sce",
+  "artifacts": [{ artifact object }]
+}]
+```
+
+**Artifact Object Format:**
+
+All artifact objects follow the same format as in `addrelease`:
+
+```json
+{
+  "filePath": "./path/to/file",
+  "type": "BOM",
+  "bomFormat": "CYCLONEDX",
+  "storedIn": "REARM",
+  "inventoryTypes": ["SOFTWARE"],
+  "displayIdentifier": "unique-identifier",
+  "tags": [{"key": "category", "value": "security"}]
+}
+```
+
+**Common Use Cases:**
+
+1. **Add SBOM after release creation**: When SBOM generation happens in a separate pipeline step
+2. **Add attestations**: Add build attestations or signatures after the build completes
+3. **Add security reports**: Attach vulnerability scans or compliance reports to deliverables
+4. **Add documentation**: Attach release notes or user documentation to releases
+5. **Update existing artifacts**: Add new versions of SBOMs with updated vulnerability data
+
+**Important Notes:**
+
+- At least one of `--artifacts`, `--releasearts`, `--deliverablearts`, or `--scearts` must be provided
+- Deliverable and SCE UUIDs can be obtained from the release details in ReARM UI or API response
+- All artifacts are processed through rebom service for deduplication
+- REARM digests are generated for all BOM artifacts
+- Merged SBOM is automatically reconciled after artifacts are added
+
+## 10. Use Case: xBOM Utilities
 See [bomutils documentation](docs/bomutils.md)
 
-### 10. Use Case: Finalize Release After CI Completion
+## 11. Use Case: Finalize Release After CI Completion
 
 The `releasefinalizer` command is used to run a release finalizer, which can be executed after submitting a release or after adding a new deliverable to a release. This command signals the completion of the CI process for a release in ReARM, ensuring all post-release or post-deliverable actions are triggered.
 
@@ -558,7 +726,7 @@ See [tea documentation](docs/tea.md)
 Base Command: `oolong`
 See [oolong documentation](docs/oolong.md)
 
-## 13. Use Case: VCS-based Component Resolution
+## 14. Use Case: VCS-based Component Resolution
 
 ReARM supports identifying components by VCS repository URI in addition to component UUID:
 
@@ -581,7 +749,7 @@ getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
 
 ---
 
-### 13.1: Creating Components
+### 14.1: Creating Components
 
 **Single Repository:**
 ```bash
@@ -602,7 +770,7 @@ createcomponent --name "myapp-frontend" --type "component" \
 
 ---
 
-### 13.2: Getting Versions
+### 14.2: Getting Versions
 
 **Single Repository:**
 ```bash
@@ -616,7 +784,7 @@ getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
 
 ---
 
-### 13.3: Adding Releases
+### 14.3: Adding Releases
 
 **Single Repository:**
 ```bash
@@ -630,7 +798,7 @@ addrelease --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main" -
 
 ---
 
-### 13.4: Monorepo Support
+### 14.4: Monorepo Support
 
 For repositories with multiple components, use `--repo-path` to specify the subdirectory:
 
