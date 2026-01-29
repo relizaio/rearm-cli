@@ -352,8 +352,11 @@ func shouldSkipPurl(purl string) bool {
 
 // isUnresolvedValue checks if a string value indicates unresolved/missing data (case-insensitive)
 func isUnresolvedValue(val string) bool {
+	if val == "" {
+		return true
+	}
 	lower := strings.ToLower(val)
-	return lower == "noassertion" || lower == "unresolved" || lower == "undetected" || lower == "other"
+	return strings.Contains(lower, "noassertion") || strings.Contains(lower, "unresolved") || strings.Contains(lower, "undetected") || strings.Contains(lower, "other")
 }
 
 // needsSupplierEnrichment checks if a component needs supplier enrichment
