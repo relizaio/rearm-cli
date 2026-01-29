@@ -43,28 +43,28 @@ It is possible to set authentication data via explicit flags, login command (see
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
 7. [Synchronize Live Git Branches with ReARM](#7-use-case-synchronize-live-git-branches-with-rearm)
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
-9. [Add Artifacts to Existing Release](#9-use-case-add-artifacts-to-existing-release)
-10. [xBOM Utilities](docs/bomutils.md)
+9. [xBOM Utilities](docs/bomutils.md)
     1. [Fix incorrect OCI purl generated via cdxgen](docs/bomutils.md#91-fix-incorrect-oci-purl-generated-via-cdxgen)
     2. [BOM supplier enrichment with BEAR](docs/bomutils.md#92-bom-supplier-enrichment-with-bear)
     3. [Convert SPDX to CycloneDX](docs/bomutils.md#93-convert-spdx-to-cyclonedx)
     4. [Merge Multiple BOMs](docs/bomutils.md#94-merge-multiple-boms)
-11. [Finalize Release After CI Completion](#11-use-case-finalize-release-after-ci-completion)
-12. [Transparency Exchange API (TEA) Commands](docs/tea.md)
+10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
+11. [Transparency Exchange API (TEA) Commands](docs/tea.md)
     1. [Transparency Exchange API (TEA) Discovery](docs/tea.md#111-transparency-exchange-api-tea-discovery)
     2. [Complete TEA Flow - Product and Component Details](docs/tea.md#112-complete-tea-flow---product-and-component-details)
-13. [Oolong TEA Server Content Management Commands](docs/oolong.md)
+12. [Oolong TEA Server Content Management Commands](docs/oolong.md)
     1. [Add Product](docs/oolong.md#121-add-product)
     2. [Add Component](docs/oolong.md#122-add-component)
     3. [Add Component Release](docs/oolong.md#123-add-component-release)
     4. [Add Product Release](docs/oolong.md#124-add-product-release)
     5. [Add Artifact](docs/oolong.md#125-add-artifact)
     6. [Add Artifact to Releases](docs/oolong.md#126-add-artifact-to-releases)
-14. [VCS-based Component Resolution](#14-use-case-vcs-based-component-resolution)
+13. [VCS-based Component Resolution](#13-use-case-vcs-based-component-resolution)
     1. [Creating Components](#141-creating-components)
     2. [Getting Versions](#142-getting-versions)
     3. [Adding Releases](#143-adding-releases)
     4. [Monorepo Support](#144-monorepo-support)
+14. [Add Artifacts to Existing Release](#14-use-case-add-artifacts-to-existing-release)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -525,7 +525,125 @@ Flags stand for:
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
 
-## 9. Use Case: Add Artifacts to Existing Release
+## 9. Use Case: xBOM Utilities
+See [bomutils documentation](docs/bomutils.md)
+
+## 10. Use Case: Finalize Release After CI Completion
+
+The `releasefinalizer` command is used to run a release finalizer, which can be executed after submitting a release or after adding a new deliverable to a release. This command signals the completion of the CI process for a release in ReARM, ensuring all post-release or post-deliverable actions are triggered.
+
+Typical workflow:
+
+Submit a release or add a new deliverable to a release
+Run the release finalizer to complete the CI process
+
+Sample command (Docker):
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    releasefinalizer \
+    -i <component_or_org_wide_api_id> \
+    -k <component_or_org_wide_api_key> \
+    --releaseid <release_uuid>
+```
+
+Flags stand for :
+- **--releaseid** - UUID of the release to finalize (required)
+
+This command can be integrated into CI/CD workflows to signal the end of the release process, ensuring that all finalization hooks and actions are called in ReARM.
+
+## 11. Use Case: Transparency Exchange API (TEA) Commands
+Base Command: `tea`
+See [tea documentation](docs/tea.md)
+
+## 12. Use Case: Oolong TEA Server Content Management Commands
+Base Command: `oolong`
+See [oolong documentation](docs/oolong.md)
+
+## 13. Use Case: VCS-based Component Resolution
+
+ReARM supports identifying components by VCS repository URI in addition to component UUID:
+
+**Traditional (UUID-based):**
+```bash
+getversion --component "4b272da8-2fea-4f13-a6a4-8e6e746c6e86" -b "main"
+```
+
+**VCS-based (Recommended for CI/CD):**
+```bash
+getversion --vcsuri "github.com/myorg/myapp" -b "main"
+```
+
+**Benefits**: Eliminates UUID management, uses repository context already available in CI/CD pipelines.
+
+**For Monorepos**: Add `--repo-path` when multiple components share one repository:
+```bash
+getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
+```
+
+---
+
+### 13.1: Creating Components
+
+**Single Repository:**
+```bash
+createcomponent --name "myapp" --type "component" \
+  --vcsuri "github.com/myorg/myapp" --versionschema "semver"
+```
+
+**Monorepo (add --repo-path):**
+```bash
+createcomponent --name "myapp-frontend" --type "component" \
+  --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" --versionschema "semver"
+```
+
+**Key Flags:**
+- `--vcsuri` - Repository URI for VCS-based resolution
+- `--versionschema "semver"` - **Required** for version generation
+- `--repo-path` - Optional, only for monorepos
+
+---
+
+### 13.2: Getting Versions
+
+**Single Repository:**
+```bash
+getversion --vcsuri "github.com/myorg/myapp" -b "main"
+```
+
+**Monorepo:**
+```bash
+getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
+```
+
+---
+
+### 13.3: Adding Releases
+
+**Single Repository:**
+```bash
+addrelease --vcsuri "github.com/myorg/myapp" -b "main" -v "1.0.0"
+```
+
+**Monorepo:**
+```bash
+addrelease --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main" -v "1.0.0"
+```
+
+---
+
+### 13.4: Monorepo Support
+
+For repositories with multiple components, use `--repo-path` to specify the subdirectory:
+
+```bash
+--vcsuri "github.com/myorg/myrepo" --repo-path "frontend"
+--vcsuri "github.com/myorg/myrepo" --repo-path "backend"
+--vcsuri "github.com/myorg/myrepo" --repo-path "services/auth"
+```
+
+---
+
+## 14. Use Case: Add Artifacts to Existing Release
 
 This use case adds artifacts to an existing release, deliverable, or source code entry (SCE) after the release has been created. This is useful when artifacts become available after the initial release creation, or when you need to add additional SBOMs, attestations, or other artifacts to existing entities.
 
@@ -691,122 +809,6 @@ All artifact objects follow the same format as in `addrelease`:
 - All artifacts are processed through rebom service for deduplication
 - REARM digests are generated for all BOM artifacts
 - Merged SBOM is automatically reconciled after artifacts are added
-
-## 10. Use Case: xBOM Utilities
-See [bomutils documentation](docs/bomutils.md)
-
-## 11. Use Case: Finalize Release After CI Completion
-
-The `releasefinalizer` command is used to run a release finalizer, which can be executed after submitting a release or after adding a new deliverable to a release. This command signals the completion of the CI process for a release in ReARM, ensuring all post-release or post-deliverable actions are triggered.
-
-Typical workflow:
-
-Submit a release or add a new deliverable to a release
-Run the release finalizer to complete the CI process
-
-Sample command (Docker):
-```bash
-docker run --rm registry.relizahub.com/library/rearm-cli \
-    releasefinalizer \
-    -i <component_or_org_wide_api_id> \
-    -k <component_or_org_wide_api_key> \
-    --releaseid <release_uuid>
-```
-
-Flags stand for :
-- **--releaseid** - UUID of the release to finalize (required)
-
-This command can be integrated into CI/CD workflows to signal the end of the release process, ensuring that all finalization hooks and actions are called in ReARM.
-
-## 11. Use Case: Transparency Exchange API (TEA) Commands
-Base Command: `tea`
-See [tea documentation](docs/tea.md)
-
-## 12. Use Case: Oolong TEA Server Content Management Commands
-Base Command: `oolong`
-See [oolong documentation](docs/oolong.md)
-
-## 14. Use Case: VCS-based Component Resolution
-
-ReARM supports identifying components by VCS repository URI in addition to component UUID:
-
-**Traditional (UUID-based):**
-```bash
-getversion --component "4b272da8-2fea-4f13-a6a4-8e6e746c6e86" -b "main"
-```
-
-**VCS-based (Recommended for CI/CD):**
-```bash
-getversion --vcsuri "github.com/myorg/myapp" -b "main"
-```
-
-**Benefits**: Eliminates UUID management, uses repository context already available in CI/CD pipelines.
-
-**For Monorepos**: Add `--repo-path` when multiple components share one repository:
-```bash
-getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
-```
-
----
-
-### 14.1: Creating Components
-
-**Single Repository:**
-```bash
-createcomponent --name "myapp" --type "component" \
-  --vcsuri "github.com/myorg/myapp" --versionschema "semver"
-```
-
-**Monorepo (add --repo-path):**
-```bash
-createcomponent --name "myapp-frontend" --type "component" \
-  --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" --versionschema "semver"
-```
-
-**Key Flags:**
-- `--vcsuri` - Repository URI for VCS-based resolution
-- `--versionschema "semver"` - **Required** for version generation
-- `--repo-path` - Optional, only for monorepos
-
----
-
-### 14.2: Getting Versions
-
-**Single Repository:**
-```bash
-getversion --vcsuri "github.com/myorg/myapp" -b "main"
-```
-
-**Monorepo:**
-```bash
-getversion --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main"
-```
-
----
-
-### 14.3: Adding Releases
-
-**Single Repository:**
-```bash
-addrelease --vcsuri "github.com/myorg/myapp" -b "main" -v "1.0.0"
-```
-
-**Monorepo:**
-```bash
-addrelease --vcsuri "github.com/myorg/myrepo" --repo-path "frontend" -b "main" -v "1.0.0"
-```
-
----
-
-### 14.4: Monorepo Support
-
-For repositories with multiple components, use `--repo-path` to specify the subdirectory:
-
-```bash
---vcsuri "github.com/myorg/myrepo" --repo-path "frontend"
---vcsuri "github.com/myorg/myrepo" --repo-path "backend"
---vcsuri "github.com/myorg/myrepo" --repo-path "services/auth"
-```
 
 ---
 
