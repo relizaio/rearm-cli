@@ -258,7 +258,7 @@ type Commit struct {
 	CommitMessage string     `json:"commitMessage"`
 	CommitAuthor  string     `json:"commitAuthor,omitempty"`
 	CommitEmail   string     `json:"commitEmail,omitempty"`
-	DateActual    string     `json:"dateActual"`
+	DateActual    string     `json:"dateActual,omitempty"`
 	Uri           string     `json:"uri"`
 	Type          string     `json:"type"` // vcs type
 	VcsTag        string     `json:"vcsTag,omitempty"`
