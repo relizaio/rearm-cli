@@ -1,7 +1,7 @@
 {
     "bomFormat": "CycloneDX",
     "specVersion": "1.6",
-    "serialNumber": "urn:uuid:cccfede3-86b4-4463-9f7b-aaaa77b11ae2",
+    "serialNumber": "urn:uuid:cccfede3-86b4-4463-9f7b-aaaa45b23ae2",
     "version": 1,
     "metadata": {
         "timestamp": "2025-04-30T08:50:03Z",
@@ -40,8 +40,8 @@
             "name": "registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend",
             "version": "latest",
             "type": "container",
-            "purl": "pkg:oci/registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b",
-            "bom-ref": "pkg:oci/registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b"
+            "purl": "pkg:oci/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b",
+            "bom-ref": "pkg:oci/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b"
         },
         "properties": [
             {
@@ -6525,7 +6525,7 @@
     "services": [],
     "dependencies": [
         {
-            "ref": "pkg:oci/registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b",
+            "ref": "pkg:oci/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b",
             "dependsOn": [
                 "pkg:apk/alpine/alpine-baselayout-data@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
                 "pkg:apk/alpine/alpine-baselayout@3.6.5-r0?arch=x86_64&distro=alpine-3.20.5&distro_name=alpine-3.20",
@@ -7091,7 +7091,7 @@
         {
             "bom-ref": "metadata-annotations",
             "subjects": [
-                "pkg:oci/registry.test.relizahub.com/487604fa-22eb-4b89-8e43-f55db4bbcf6e-public/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b"
+                "pkg:oci/rebom-frontend@sha256:08092b7d839a1bd9adc997b7321c5bff3f16e5d838eb9f69315d9d960d8d8b8b"
             ],
             "annotator": {
                 "component": {
