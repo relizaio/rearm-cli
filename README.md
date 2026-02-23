@@ -306,6 +306,7 @@ Sample entry for external storage:
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
+- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts in this release (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. This tags all artifacts with a `COVERAGE_TYPE` key, indicating the type of dependencies included. These tags can be used to filter artifacts during BOM export. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
@@ -524,6 +525,7 @@ Flags stand for:
 - **--version** - Release version (either releaseid or component, branch, and version must be set)
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
+- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 ## 9. Use Case: xBOM Utilities
 See [bomutils documentation](docs/bomutils.md)
@@ -777,6 +779,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
   "artifacts": [{ artifact object }]
 }]
 ```
+- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. This tags all artifacts with a `COVERAGE_TYPE` key, indicating the type of dependencies included. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 **Artifact Object Format:**
 

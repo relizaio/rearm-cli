@@ -245,6 +245,7 @@ func buildOutboundDeliverables(filesCounter *int, locationMap *map[string][]stri
 				fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 				os.Exit(1)
 			} else {
+				injectCoverageTypeTags(&artifactsInput, artCoverageType)
 				indexPrefix := "variables.releaseInputProg.outboundDeliverables." + strconv.Itoa(i) + ".artifacts."
 				outboundDeliverables[i]["artifacts"] = *processArtifactsInput(&artifactsInput, indexPrefix, filesCounter, locationMap, filesMap)
 			}
@@ -322,6 +323,7 @@ func buildCommitMap(filesCounter *int, locationMap *map[string][]string, filesMa
 			fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 			os.Exit(1)
 		} else {
+			injectCoverageTypeTags(&sceArtifacts, artCoverageType)
 			indexPrefix := "variables.releaseInputProg.sourceCodeEntry.artifacts."
 			artifactsObject := *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 			commitObj.Artifacts = artifactsObject
@@ -363,6 +365,7 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 		fmt.Println("Error parsing Release Artifact Input: ", err)
 		os.Exit(1)
 	} else {
+		injectCoverageTypeTags(&releaseArtifacts, artCoverageType)
 		indexPrefix := "variables.releaseInputProg.artifacts."
 		artifactsObject = *processArtifactsInput(&releaseArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 	}
@@ -378,6 +381,7 @@ func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap 
 		fmt.Println("Error parsing SCE Artifact Input: ", err)
 		os.Exit(1)
 	} else {
+		injectCoverageTypeTags(&sceArtifacts, artCoverageType)
 		indexPrefix := "variables.releaseInputProg.sceArts."
 		artifactsObject = *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
 	}
@@ -561,5 +565,6 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().BoolVar(&rebuildRelease, "rebuild", false, "(Optional) Allow rebuilding release on repeated CI reruns. Default is false.")
+	addreleaseCmd.PersistentFlags().StringVar(&artCoverageType, "artcoveragetype", "", "(Optional) Comma-separated artifact coverage types to apply to all artifacts (e.g., 'DEV', 'TEST', 'BUILD_TIME', or 'DEV,BUILD_TIME')")
 	rootCmd.AddCommand(addreleaseCmd)
 }
