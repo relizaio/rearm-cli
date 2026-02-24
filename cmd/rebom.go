@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/machinebox/graphql"
@@ -86,28 +85,6 @@ func sanitizeFilename(filename string) string {
 		return "file"
 	}
 	return string(result)
-}
-
-// injectCoverageTypeTags adds COVERAGE_TYPE tags to all artifacts in the slice based on the artCoverageType flag.
-// artCoverageType is a comma-separated string of types (e.g., "DEV,BUILD_TIME").
-func injectCoverageTypeTags(artifacts *[]Artifact, artCoverageTypeVal string) {
-	if artCoverageTypeVal == "" || artifacts == nil {
-		return
-	}
-	phases := strings.Split(artCoverageTypeVal, ",")
-	var coverageTypeTags []TagInput
-	for _, phase := range phases {
-		trimmed := strings.TrimSpace(strings.ToUpper(phase))
-		if trimmed != "" {
-			coverageTypeTags = append(coverageTypeTags, TagInput{Key: "COVERAGE_TYPE", Value: trimmed})
-		}
-	}
-	if len(coverageTypeTags) == 0 {
-		return
-	}
-	for i := range *artifacts {
-		(*artifacts)[i].Tags = append((*artifacts)[i].Tags, coverageTypeTags...)
-	}
 }
 
 func init() {

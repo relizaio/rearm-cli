@@ -233,6 +233,22 @@ Example with nested artifacts (artifacts within artifacts) with tags:
 --odelartsjson '[{"displayIdentifier":"main-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","filePath":"./main-sbom.json","tags":[{"key":"primary","value":"true"}],"artifacts":[{"displayIdentifier":"nested-vex","type":"VEX","storedIn":"REARM","filePath":"./vex.json","tags":[{"key":"type","value":"openvex"}]}]}]'
 ```
 
+**Artifact Coverage Type Tags:**
+
+To tag artifacts with coverage types (e.g., DEV, TEST, BUILD_TIME), include `COVERAGE_TYPE` tags in the artifact JSON `tags` field. These tags indicate the type of dependencies included in the artifact and can be used to filter artifacts during BOM export.
+
+Supported coverage type values: `DEV`, `TEST`, `BUILD_TIME`.
+
+Example with a single coverage type:
+```bash
+--odelartsjson '[{"displayIdentifier":"dev-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","filePath":"./sbom.json","tags":[{"key":"COVERAGE_TYPE","value":"DEV"}]}]'
+```
+
+Example with multiple coverage types on the same artifact:
+```bash
+--releasearts '[{"displayIdentifier":"build-sbom","type":"BOM","bomFormat":"CYCLONEDX","storedIn":"REARM","filePath":"./sbom.json","tags":[{"key":"COVERAGE_TYPE","value":"DEV"},{"key":"COVERAGE_TYPE","value":"BUILD_TIME"}]}]'
+```
+
 Sample command using VCS-based component resolution:
 
 ```bash
@@ -306,7 +322,6 @@ Sample entry for external storage:
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
-- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts in this release (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. This tags all artifacts with a `COVERAGE_TYPE` key, indicating the type of dependencies included. These tags can be used to filter artifacts during BOM export. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
@@ -525,7 +540,6 @@ Flags stand for:
 - **--version** - Release version (either releaseid or component, branch, and version must be set)
 - **--branch** - Release branch (either releaseid or component, branch, and version must be set)
 - **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional - can). Default is true. Supported values: true|false.
-- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 ## 9. Use Case: xBOM Utilities
 See [bomutils documentation](docs/bomutils.md)
@@ -779,7 +793,6 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
   "artifacts": [{ artifact object }]
 }]
 ```
-- **--artcoveragetype** - comma-separated artifact coverage types to apply to all artifacts (optional). Supported values: `DEV`, `TEST`, `BUILD_TIME`. This tags all artifacts with a `COVERAGE_TYPE` key, indicating the type of dependencies included. Examples: `--artcoveragetype "DEV"`, `--artcoveragetype "DEV,BUILD_TIME"`.
 
 **Artifact Object Format:**
 

@@ -80,7 +80,6 @@ var tagKey string
 var tagVal string
 
 var tagsArr []string
-var artCoverageType string
 var version string
 var versionSchema string
 var vcsName string
@@ -476,7 +475,6 @@ var addODeliverableCmd = &cobra.Command{
 					if err != nil {
 						fmt.Fprintln(os.Stderr, "Error parsing Artifact Input: ", err)
 					} else {
-						injectCoverageTypeTags(&artifactsInput, artCoverageType)
 						indexPrefix := "variables.addODeliverableInput.deliverables." + strconv.Itoa(i) + ".artifacts."
 						artifactsObject := processODelArtifactsInput(&artifactsInput, indexPrefix, &filesCounter, &locationMap, &filesMap)
 						outboundDeliverables[i]["artifacts"] = *artifactsObject
@@ -841,7 +839,6 @@ func init() {
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
-	addODeliverableCmd.PersistentFlags().StringVar(&artCoverageType, "artcoveragetype", "", "(Optional) Comma-separated artifact coverage types to apply to all artifacts (e.g., 'DEV', 'TEST', 'BUILD_TIME', or 'DEV,BUILD_TIME')")
 
 	releasecompletionfinalizerCmd.Flags().StringVar(&releaseId, "releaseid", "", "UUID of release to finalize (required)")
 	releasecompletionfinalizerCmd.MarkFlagRequired("releaseid")

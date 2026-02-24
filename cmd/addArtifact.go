@@ -121,7 +121,6 @@ Examples:
 				os.Exit(1)
 			}
 
-			injectCoverageTypeTags(&releaseArtsList, artCoverageType)
 			indexPrefix := "variables.artifactInput.releaseArtifacts."
 			processedArts := processArtifactsInput(&releaseArtsList, indexPrefix, &filesCounter, &locationMap, &filesMap)
 			artifactInput["releaseArtifacts"] = processedArts
@@ -137,7 +136,6 @@ Examples:
 
 			// Process each deliverable artifact group
 			for i := range deliverableArtsList {
-				injectCoverageTypeTags(&deliverableArtsList[i].Artifacts, artCoverageType)
 				indexPrefix := fmt.Sprintf("variables.artifactInput.deliverableArtifacts.%d.artifacts.", i)
 				processedArts := processArtifactsInput(&deliverableArtsList[i].Artifacts, indexPrefix, &filesCounter, &locationMap, &filesMap)
 				deliverableArtsList[i].Artifacts = *processedArts
@@ -156,7 +154,6 @@ Examples:
 
 			// Process each SCE artifact group
 			for i := range sceArtsList {
-				injectCoverageTypeTags(&sceArtsList[i].Artifacts, artCoverageType)
 				indexPrefix := fmt.Sprintf("variables.artifactInput.sceArtifacts.%d.artifacts.", i)
 				processedArts := processArtifactsInput(&sceArtsList[i].Artifacts, indexPrefix, &filesCounter, &locationMap, &filesMap)
 				sceArtsList[i].Artifacts = *processedArts
@@ -286,5 +283,4 @@ func init() {
 	addArtifactCmd.Flags().StringVar(&addArtifactReleaseArts, "releasearts", "", "Release artifacts JSON array")
 	addArtifactCmd.Flags().StringVar(&addArtifactDeliverableArts, "deliverablearts", "", "Deliverable artifacts JSON array")
 	addArtifactCmd.Flags().StringVar(&addArtifactSceArts, "scearts", "", "SCE artifacts JSON array")
-	addArtifactCmd.Flags().StringVar(&artCoverageType, "artcoveragetype", "", "(Optional) Comma-separated artifact coverage types to apply to all artifacts (e.g., 'DEV', 'TEST', 'BUILD_TIME', or 'DEV,BUILD_TIME')")
 }
