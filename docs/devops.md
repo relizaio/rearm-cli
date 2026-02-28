@@ -228,13 +228,13 @@ docker run --rm \
     -i api_id \
     -k api_key \
     --instance "instance-uuid" \
-    --artdigest "sha256:abc123..."
+    --deldigest "sha256:abc123..."
 ```
 
 **Flags:**
 - **--instance** - UUID of instance for which to generate (either this, or instanceuri must be provided).
 - **--instanceuri** - URI of instance for which to generate (either this, or instanceuri must be provided).
-- **--artdigest** - Digest or hash of the deliverable to resolve secrets for (required).
+- **--deldigest** - Digest or hash of the deliverable to resolve secrets for (required).
 - **--namespace** - Namespace to use for secrets (optional, defaults to default namespace).
 
 ## 15.7 Check if Instance Has Sealed Secret Certificate

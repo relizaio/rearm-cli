@@ -34,9 +34,9 @@ var deliverableDigest string
 func init() {
 	deliverableGetSecrets.PersistentFlags().StringVar(&instance, "instance", "", "UUID of instance for which to generate (either this, or instanceuri must be provided)")
 	deliverableGetSecrets.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "URI of instance for which to generate (either this, or instanceuri must be provided)")
-	deliverableGetSecrets.PersistentFlags().StringVar(&deliverableDigest, "deliverableDigest", "", "Digest or hash of the deliverable to resolve secrets for")
+	deliverableGetSecrets.PersistentFlags().StringVar(&deliverableDigest, "deldigest", "", "Digest or hash of the deliverable to resolve secrets for")
 	deliverableGetSecrets.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace to use for secrets (optional, defaults to default namespace)")
-	deliverableGetSecrets.MarkPersistentFlagRequired("deliverableDigest")
+	deliverableGetSecrets.MarkPersistentFlagRequired("deldigest")
 
 	devopsCmd.AddCommand(deliverableGetSecrets)
 
