@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	unnamedComponentPlaceholder = "<unnamed>"
+)
+
 var (
 	MergeStructure         string
 	MergeGroup             string
@@ -25,12 +29,26 @@ var mergeBomsCmd = &cobra.Command{
 	Use:   "merge-boms",
 	Short: "Merge multiple CycloneDX BOMs into a single BOM",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Validate required flags
+		if len(MergeInputFiles) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: --input-files is required")
+			os.Exit(1)
+		}
+		if MergeName == "" {
+			fmt.Fprintln(os.Stderr, "Error: --name is required")
+			os.Exit(1)
+		}
+		if MergeVersion == "" {
+			fmt.Fprintln(os.Stderr, "Error: --version is required")
+			os.Exit(1)
+		}
+
 		// 1. Read all BOM objects from input files
 		var boms []*cdx.BOM
 		for _, path := range MergeInputFiles {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				fmt.Printf("Error reading file %s: %v\n", path, err)
+				fmt.Fprintf(os.Stderr, "Error reading file %s: %v\n", path, err)
 				os.Exit(1)
 			}
 			bom := readBomFromBytes(data)
@@ -59,11 +77,48 @@ var mergeBomsCmd = &cobra.Command{
 		}
 
 		// Prepare deduplication map for FLAT mode
-		componentMap := make(map[string]*cdx.Component) // key: bom-ref
-		for _, comp := range allComponents {
-			if comp.BOMRef != "" {
-				componentMap[comp.BOMRef] = comp
+		componentMap := make(map[string]*cdx.Component) // key: purl or bom-ref
+
+		// Add root components to the map first (they may be referenced in dependencies)
+		for _, root := range roots {
+			if root != nil {
+				key := root.PackageURL
+				if key == "" && root.BOMRef != "" {
+					key = root.BOMRef
+				}
+				if key != "" {
+					componentMap[key] = root
+				}
 			}
+		}
+
+		droppedCount := 0
+		for _, comp := range allComponents {
+			// Prefer PackageURL over BOMRef for consistent deduplication
+			key := comp.PackageURL
+			if key == "" && comp.BOMRef != "" {
+				key = comp.BOMRef
+			}
+			if key != "" {
+				if existing, exists := componentMap[key]; exists {
+					// Merge metadata from duplicate component
+					mergeComponentMetadata(existing, comp)
+				} else {
+					componentMap[key] = comp
+				}
+			} else {
+				// Warn about components without identifiers
+				droppedCount++
+				compName := comp.Name
+				if compName == "" {
+					compName = unnamedComponentPlaceholder
+				}
+				fmt.Fprintf(os.Stderr, "Warning: Dropping component '%s' (type: %s) - missing both PackageURL and BOMRef\n",
+					compName, comp.Type)
+			}
+		}
+		if droppedCount > 0 {
+			fmt.Fprintf(os.Stderr, "Warning: Dropped %d component(s) without identifiers\n", droppedCount)
 		}
 
 		// 3. Merge logic
@@ -107,7 +162,7 @@ var mergeBomsCmd = &cobra.Command{
 		case "FLATTEN_UNDER_NEW_ROOT":
 			mergedDependencies = mergeDependenciesFlatten(roots, allDependencies, mergedRootRef)
 		default:
-			fmt.Printf("Unknown MergeRootComponentMode: %s\n", MergeRootComponentMode)
+			fmt.Fprintf(os.Stderr, "Error: Unknown MergeRootComponentMode: %s\n", MergeRootComponentMode)
 			os.Exit(1)
 		}
 		if len(mergedDependencies) > 0 {
@@ -117,18 +172,18 @@ var mergeBomsCmd = &cobra.Command{
 		// 4. Output
 		buf := new(bytes.Buffer)
 		if err := cdx.NewBOMEncoder(buf, cdx.BOMFileFormatJSON).Encode(mergedBOM); err != nil {
-			fmt.Printf("Error encoding merged BOM: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error encoding merged BOM: %v\n", err)
 			os.Exit(1)
 		}
 		if MergeOutfile == "" || MergeOutfile == "-" {
 			_, err := os.Stdout.Write(buf.Bytes())
 			if err != nil {
-				fmt.Printf("Error writing to stdout: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error writing to stdout: %v\n", err)
 				os.Exit(1)
 			}
 		} else {
 			if err := os.WriteFile(MergeOutfile, buf.Bytes(), 0644); err != nil {
-				fmt.Printf("Error writing to file %s: %v\n", MergeOutfile, err)
+				fmt.Fprintf(os.Stderr, "Error writing to file %s: %v\n", MergeOutfile, err)
 				os.Exit(1)
 			}
 		}
