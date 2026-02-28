@@ -255,3 +255,27 @@ docker run --rm \
 **Flags:**
 - **--instance** - UUID of instance for which to check (optional, either this or instanceuri must be provided).
 - **--instanceuri** - URI of instance for which to check (optional, either this or instance must be provided).
+
+## 15.8 Send Deployment Metadata From Instance
+
+The `devops instdata` command sends digests of active deployments from an instance to ReARM. The API key must be generated for the instance from ReARM.
+
+Sample command:
+
+```bash
+docker run --rm \
+    registry.relizahub.com/library/rearm-cli \
+    devops instdata \
+    -i instance_api_id \
+    -k instance_api_key \
+    --images "sha256:c10779b369c6f2638e4c7483a3ab06f13b3f57497154b092c87e1b15088027a5 sha256:e6c2bcd817beeb94f05eaca2ca2fce5c9a24dc29bde89fbf839b652824304703" \
+    --namespace default \
+    --sender sender1
+```
+
+**Flags:**
+- **--images** - Whitespace-separated sha256 digests of images sent from the instance (optional, either images or imagefile must be provided). Sending full docker image URIs with digests is also accepted, e.g. `relizaio/reliza-cli:latest@sha256:ebe68a0427bf88d748a4cad0a419392c75c867a216b70d4cd9ef68e8031fe7af`.
+- **--imagefile** - Absolute path to file with image string or image k8s json (optional, either images or imagefile must be provided). Default value: `/resources/images`. Use `kubectl get po -o json | jq "[.items[] | {namespace:.metadata.namespace, pod:.metadata.name, status:.status.containerStatuses[]}]"` to obtain k8s json.
+- **--imagestyle** - Set to "k8s" for k8s json image format (optional).
+- **--namespace** - Namespace where images are being sent (optional, defaults to "default"). Namespaces are useful to separate different products deployed on the same instance.
+- **--sender** - Unique sender within a single namespace (optional). Useful when different nodes stream only part of application deployment data — nodes should use the same namespace but different senders so their data does not overwrite each other.
