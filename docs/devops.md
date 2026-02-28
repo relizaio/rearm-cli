@@ -70,3 +70,26 @@ On success, the command outputs the full CycloneDX JSON BOM for the instance rev
 ```
 
 On failure, an error message is displayed.
+
+## 15.2 Set Sealed Secret Certificate on Instance
+
+The `devops setsecretcert` command sets the Bitnami Sealed Certificate property on an instance. This certificate is used to encrypt secrets for the instance. Only supports instance's own API Key.
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops setsecretcert \
+    -i instance_api_id \
+    -k instance_api_key \
+    --cert "sealed-certificate-value"
+```
+
+**Flags:**
+- **--cert** - Sealed certificate used by the instance (required)
+
+**Output:**
+
+On success, the command outputs the JSON response from the mutation.
+
+On failure, an error message is displayed.

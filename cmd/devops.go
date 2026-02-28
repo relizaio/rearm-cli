@@ -20,6 +20,7 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -28,6 +29,12 @@ import (
 	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
+
+var sealedCert string
+
+type SetCertRHResp struct {
+	Responsewrapper interface{} `json:"setInstanceSealedSecretCert"`
+}
 
 var devopsCmd = &cobra.Command{
 	Use:   "devops",
@@ -51,8 +58,50 @@ func init() {
 	exportInstCmd.PersistentFlags().StringVar(&revision, "revision", "", "Revision of instance for which to export from (optional, default is -1)")
 	exportInstCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Use to define specific namespace for instance export (optional)")
 
+	setInstSecretCertCmd.PersistentFlags().StringVar(&sealedCert, "cert", "", "Sealed certificate used by the instance (required)")
+
 	devopsCmd.AddCommand(exportInstCmd)
+	devopsCmd.AddCommand(setInstSecretCertCmd)
 	rootCmd.AddCommand(devopsCmd)
+}
+
+var setInstSecretCertCmd = &cobra.Command{
+	Use:   "setsecretcert",
+	Short: "Use to to set sealed cert property on the instance",
+	Long: `Bitnami Sealed Certificate property is used to encrypt secrets for instance.
+	This command sets this certificate for the particular instance.
+	Only supports instance own API Key.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		var respData SetCertRHResp
+		client := graphql.NewClient(rearmUri + "/graphql")
+		req := graphql.NewRequest(`
+			mutation ($sealedCert: String!) {
+				setInstanceSealedSecretCert(sealedCert: $sealedCert)
+			}
+		`)
+		req.Var("sealedCert", sealedCert)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "ReARM CLI")
+		req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+		if len(apiKeyId) > 0 && len(apiKey) > 0 {
+			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+			req.Header.Add("Authorization", "Basic "+auth)
+		}
+
+		session, _ := getSession()
+		if session != nil {
+			req.Header.Set("X-CSRF-Token", session.Token)
+			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
+		}
+		if err := client.Run(context.Background(), req, &respData); err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+
+		jsonResp, _ := json.Marshal(respData.Responsewrapper)
+		fmt.Println(string(jsonResp))
+	},
 }
 
 func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instance string, revision string, instanceURI string, namespace string) []byte {
