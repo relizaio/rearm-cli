@@ -114,7 +114,7 @@ docker run --rm \
     --outfile /output_dir/output_values.yaml
 ```
 
-### Using Bundle and Version
+### Using Product and Version
 
 ```bash
 docker run --rm \
@@ -124,8 +124,8 @@ docker run --rm \
     devops replacetags \
     -i api_id \
     -k api_key \
-    --bundle <bundle_name> \
-    --version <bundle_version> \
+    --product <product_name> \
+    --version <product_version> \
     --infile /values.yaml \
     --outfile /output_dir/output_values.yaml
 ```
@@ -150,21 +150,21 @@ docker run --rm \
 - **--outfile** - Output file with parsed values (optional, if not supplied - outputs to stdout)
 - **--indirectory** - Path to directory of input files to parse (either infile or indirectory is required)
 - **--outdirectory** - Path to directory of output files (required if indirectory is used)
-- **--tagsource** - Source file with tags (optional, specify either source file or instance/bundle/environment)
+- **--tagsource** - Source file with tags (optional, specify either source file or instance/product/environment)
 - **--env** - Environment for which to generate tags (optional)
 - **--instance** - Instance UUID for which to generate tags (optional)
 - **--instanceuri** - Instance URI for which to generate tags (optional)
 - **--revision** - Instance revision for which to generate tags (optional)
 - **--namespace** - Specific namespace for replace tagging (optional)
-- **--bundle** - UUID or Name of bundle for which to generate tags (optional)
-- **--version** - Bundle version for which to generate tags (optional, required when using bundle)
+- **--product** - UUID or Name of product for which to generate tags (optional)
+- **--version** - Product version for which to generate tags (optional, required when using product)
 - **--defsource** - Source file for definitions, e.g. output of helm template command (optional)
 - **--type** - Type of source tags file: cyclonedx (default) or text
 - **--provenance** - Enable/disable adding provenance metadata to beginning of outfile (optional, default true)
 - **--parsemode** - Parse mode: extended (default), simple (only image tags), or strict (fail if artifact not found)
 - **--fordiff** - Resolve secrets by timestamp instead of sealed value; disables provenance (optional, default false)
 - **--resolveprops** - Resolve instance properties and secrets from ReARM (optional, default false)
-- **--usenamespacebundle** - Use namespace and bundle for prop resolution (optional, default false)
+- **--usenamespaceproduct** - Use namespace and product for prop resolution (optional, default false)
 
 **Property and Secret Resolution:**
 
@@ -190,8 +190,8 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
 - **--instanceuri** - URI of the instance (optional, either instanceuri or instance flag or instance API key must be used).
 - **--revision** - Revision number for the instance to use as a source for properties (optional, defaults to -1 which represents latest).
 - **--namespace** - Specific namespace of the instance to use to retrieve sealed secrets - as secrets are returned sealed with namespace scope (optional, default to "default").
-- **--bundle** - UUID or name of specific bundle (optional)
-- **--usenamespacebundle** - Use namespace and bundle for prop resolution (optional, default false)
+- **--product** - UUID or name of specific product (optional)
+- **--usenamespaceproduct** - Use namespace and product for prop resolution (optional, default false)
 - **--property** - Specifies name of the property to retrieve. For multiple properties, use multiple --property flags.
 - **--secret** - Specifies name of the secret to retrieve. For multiple secrets, use multiple --secret flags.
 

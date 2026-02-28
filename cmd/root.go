@@ -95,7 +95,6 @@ var inDirectory string
 var tagSourceFile string
 var definitionReferenceFile string
 var typeVal string
-var bundle string
 var parseMode string
 var project string
 var provenance bool

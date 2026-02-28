@@ -43,9 +43,9 @@ func init() {
 	replaceTagsCmd.PersistentFlags().StringVar(&revision, "revision", "", "Instance revision for which to generate tags (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&definitionReferenceFile, "defsource", "", "Source file for definitions (optional). For helm, should be output of helm template command")
 	replaceTagsCmd.PersistentFlags().StringVar(&typeVal, "type", "cyclonedx", "Type of source tags file: cyclonedx (default) or text")
-	replaceTagsCmd.PersistentFlags().StringVar(&version, "version", "", "Bundle version for which to generate tags (optional - required when using bundle)")
-	replaceTagsCmd.PersistentFlags().StringVar(&bundle, "bundle", "", "UUID or Name of bundle for which to generate tags when replacing by bundle and version (optional)")
-	replaceTagsCmd.PersistentFlags().BoolVar(&bundleSpecificProps, "usenamespacebundle", false, "Set to true for new behavior where namespace and bundle are used for prop resolution (optional, default is 'false')")
+	replaceTagsCmd.PersistentFlags().StringVar(&version, "version", "", "Product version for which to generate tags (optional - required when using product)")
+	replaceTagsCmd.PersistentFlags().StringVar(&product, "product", "", "UUID or Name of product for which to generate tags when replacing by product and version (optional)")
+	replaceTagsCmd.PersistentFlags().BoolVar(&productSpecificProps, "usenamespaceproduct", false, "Set to true for new behavior where namespace and product are used for prop resolution (optional, default is 'false')")
 	replaceTagsCmd.PersistentFlags().BoolVar(&provenance, "provenance", true, "Set --provenance=[true|false] flag to enable/disable adding provenance (metadata) to beginning of outfile. (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&parseMode, "parsemode", "extended", "Use to set the parse mode to either extended, simple, or strict (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Use to define specific namespace for replace tagging (optional)")
@@ -69,7 +69,7 @@ var replaceTagsCmd = &cobra.Command{
 		replaceTagsVars.Instance = instance
 		replaceTagsVars.Revision = revision
 		replaceTagsVars.InstanceURI = instanceURI
-		replaceTagsVars.Bundle = bundle
+		replaceTagsVars.Product = product
 		replaceTagsVars.Version = version
 		replaceTagsVars.Environment = environment
 		replaceTagsVars.Namespace = namespace
@@ -241,7 +241,7 @@ func replaceTagsOnFile(replaceTagsVars *ReplaceTagsVars, substitutionMap *map[st
 
 		// need to add provenance first, because can only write to stdout sequentially
 		if !forDiff && provenance {
-			addProvenanceToReplaceTagsOutput(outFileOpened, apiKeyId, tagSourceFile, environment, instance, instanceURI, revision, version, bundle)
+			addProvenanceToReplaceTagsOutput(outFileOpened, apiKeyId, tagSourceFile, environment, instance, instanceURI, revision, version, product)
 		}
 		for _, line := range parsedLines {
 			if outFileOpened != nil {
@@ -332,7 +332,7 @@ func replaceTagsOnDirectory(indir *string, outdir *string, substitutionMap *map[
 			replaceTagsVars.Instance = instance
 			replaceTagsVars.Revision = revision
 			replaceTagsVars.InstanceURI = instanceURI
-			replaceTagsVars.Bundle = bundle
+			replaceTagsVars.Product = product
 			replaceTagsVars.Version = version
 			replaceTagsVars.Environment = environment
 			replaceTagsVars.Namespace = namespace
@@ -502,7 +502,7 @@ type ReplaceTagsVars struct {
 	Instance      string
 	Revision      string
 	InstanceURI   string
-	Bundle        string
+	Product       string
 	Version       string
 	Environment   string
 	Namespace     string

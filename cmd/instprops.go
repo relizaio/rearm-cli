@@ -31,9 +31,9 @@ import (
 )
 
 var (
-	properties          []string
-	secrets             []string
-	bundleSpecificProps bool
+	properties           []string
+	secrets              []string
+	productSpecificProps bool
 )
 
 func init() {
@@ -41,8 +41,8 @@ func init() {
 	instPropsSecretsCmd.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "URI of instance for which to retrieve props and secrets (optional)")
 	instPropsSecretsCmd.PersistentFlags().StringVar(&revision, "revision", "", "Revision of instance for which to retrieve props and secrets (optional, default is -1)")
 	instPropsSecretsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Use to define specific namespace for retrieve props and secrets (optional, default is 'default')")
-	instPropsSecretsCmd.PersistentFlags().StringVar(&bundle, "bundle", "", "UUID or name of specific bundle to retrieve props and secrets (optional, default is empty - uses namespace wide)")
-	instPropsSecretsCmd.PersistentFlags().BoolVar(&bundleSpecificProps, "usenamespacebundle", false, "Set to true for new behavior where namespace and bundle are used for prop resolution (optional, default is 'false')")
+	instPropsSecretsCmd.PersistentFlags().StringVar(&product, "product", "", "UUID or name of specific product to retrieve props and secrets (optional, default is empty - uses namespace wide)")
+	instPropsSecretsCmd.PersistentFlags().BoolVar(&productSpecificProps, "usenamespaceproduct", false, "Set to true for new behavior where namespace and product are used for prop resolution (optional, default is 'false')")
 	instPropsSecretsCmd.PersistentFlags().StringArrayVar(&properties, "property", []string{}, "Property to resolve (multiple allowed)")
 	instPropsSecretsCmd.PersistentFlags().StringArrayVar(&secrets, "secret", []string{}, "Secret to resolve (multiple allowed)")
 	devopsCmd.AddCommand(instPropsSecretsCmd)
@@ -80,8 +80,8 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 
 		client := graphql.NewClient(rearmUri + "/graphql")
 		req := graphql.NewRequest(`
-			query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String!, $properties: [String], $secrets: [String], $bundle: ID, $bundleSpecificProps: Boolean) {
-				getInstancePropSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, properties: $properties, secrets: $secrets, bundle: $bundle, bundleSpecificProps: $bundleSpecificProps) {
+			query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String!, $properties: [String], $secrets: [String], $product: ID, $productSpecificProps: Boolean) {
+				getInstancePropSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, properties: $properties, secrets: $secrets, product: $product, productSpecificProps: $productSpecificProps) {
 					properties {
 						key
 						value
@@ -102,8 +102,8 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 		req.Var("namespace", namespace)
 		req.Var("properties", props)
 		req.Var("secrets", secrs)
-		req.Var("bundle", bundle)
-		req.Var("bundleSpecificProps", bundleSpecificProps)
+		req.Var("product", product)
+		req.Var("productSpecificProps", productSpecificProps)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "Reliza CLI")
 		req.Header.Set("Accept-Encoding", "gzip, deflate")

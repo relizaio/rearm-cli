@@ -390,7 +390,7 @@ The first line notes the version of reliza-cli that ran the command to generate 
 well as the date the file was generated.
 The second line contains info about where the replaced tags were sourced from.
 */
-func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, tagSourceFile string, environment string, instance string, instanceURI string, revision string, version string, bundle string) {
+func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, tagSourceFile string, environment string, instance string, instanceURI string, revision string, version string, product string) {
 	var provenanceLine1 string
 	var provenanceLine2 string
 
@@ -400,15 +400,15 @@ func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, t
 	provenanceLine1 = "# Tags replaced with Reliza CLI version " + relizaCliCurrentVersion + " on " + currentDateTimeFormatted
 
 	// Second line: where tags come from, either:
-	// (tagsource file) or (environment) or (bundle+version)
+	// (tagsource file) or (environment) or (product+version)
 	// or (instance+revision) or (instanceuri+revision) , revision is optional, otherwise uses latest revision
 	// or (apiKeyId suffix, if using apiKeyId+apiKey pair from instance)
 	if tagSourceFile != "" {
 		provenanceLine2 = "# According to tag source file " + tagSourceFile
 	} else if len(environment) > 0 {
 		provenanceLine2 = "# According to the latest approved images in  " + environment + " environment."
-	} else if len(bundle) > 0 && len(version) > 0 {
-		provenanceLine2 = "# According to bundle " + bundle + " version " + version
+	} else if len(product) > 0 && len(version) > 0 {
+		provenanceLine2 = "# According to product " + product + " version " + version
 	} else if len(instance) > 0 {
 		if len(revision) > 0 {
 			provenanceLine2 = "# According to revision " + revision + " of the instance " + instance
@@ -592,8 +592,8 @@ func scanTags(replaceTagsVars ReplaceTagsVars) map[string]string {
 	tagSourceMap := map[string]string{}
 	if replaceTagsVars.TagSourceFile != "" {
 		tagSourceMap = scanTagFile(replaceTagsVars.TagSourceFile, replaceTagsVars.TypeVal)
-	} else if len(replaceTagsVars.Bundle) > 0 {
-		cycloneBytes := getBundleVersionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.ApiKey, replaceTagsVars.Bundle, replaceTagsVars.Environment, replaceTagsVars.Version)
+	} else if len(replaceTagsVars.Product) > 0 {
+		cycloneBytes := getProductVersionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.ApiKey, replaceTagsVars.Product, replaceTagsVars.Environment, replaceTagsVars.Version)
 		var bomJSON map[string]interface{}
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
@@ -608,29 +608,29 @@ func scanTags(replaceTagsVars ReplaceTagsVars) map[string]string {
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
 	} else {
-		fmt.Println("Scan Tags Failed! specify either tagsource or instance or bundle and version")
+		fmt.Println("Scan Tags Failed! specify either tagsource or instance or product and version")
 		os.Exit(1)
 	}
 	return tagSourceMap
 }
 
-func getBundleVersionCycloneDxExportV1(apiKeyId string, apiKey string, bundle string,
+func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product string,
 	environment string, version string) []byte {
 
-	if len(bundle) <= 0 && (len(version) <= 0 || len(environment) <= 0) {
+	if len(product) <= 0 && (len(version) <= 0 || len(environment) <= 0) {
 		//throw error and exit
-		fmt.Println("Error: Bundle name and either version or environment must be provided!")
+		fmt.Println("Error: Product name and either version or environment must be provided!")
 		os.Exit(1)
 	}
 
 	client := graphql.NewClient(rearmUri + "/graphql")
 	req := graphql.NewRequest(`
-		query ($bundleName: String!, $bundleVersion: String, $environment: String) {
-			exportAsBomProg(bundleName: $bundleName, bundleVersion: $bundleVersion, environment: $environment)
+		query ($productName: String!, $productVersion: String, $environment: String) {
+			exportAsBomProg(productName: $productName, productVersion: $productVersion, environment: $environment)
 		}
 	`)
-	req.Var("bundleName", bundle)
-	req.Var("bundleVersion", version)
+	req.Var("productName", product)
+	req.Var("productVersion", version)
 	req.Var("environment", environment)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Reliza Go Client")
