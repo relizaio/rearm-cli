@@ -65,6 +65,8 @@ It is possible to set authentication data via explicit flags, login command (see
     3. [Adding Releases](#143-adding-releases)
     4. [Monorepo Support](#144-monorepo-support)
 14. [Add Artifacts to Existing Release](#14-use-case-add-artifacts-to-existing-release)
+15. [DevOps Commands](docs/devops.md)
+    1. [Export Instance CycloneDX BOM](docs/devops.md#151-export-instance-cyclonedx-bom)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -825,6 +827,12 @@ All artifact objects follow the same format as in `addrelease`:
 - All artifacts are processed through rebom service for deduplication
 - REARM digests are generated for all BOM artifacts
 - Merged SBOM is automatically reconciled after artifacts are added
+
+---
+
+## 15. Use Case: DevOps Commands
+Base Command: `devops`
+See [devops documentation](docs/devops.md)
 
 ---
 

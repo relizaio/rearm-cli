@@ -58,6 +58,8 @@ var hash string
 var identifiers []string
 var includeApi bool
 var instance string
+var instanceURI string
+var revision string
 var manual bool
 var metadata string
 var modifier string
