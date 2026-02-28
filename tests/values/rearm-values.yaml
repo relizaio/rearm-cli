@@ -1,0 +1,83 @@
+baseUrl: https://dtrackephemeral.rearmhq.com
+dependency-track:
+  apiServer:
+    deploymentType: StatefulSet
+    extraEnv:
+    - name: EXTRA_JAVA_OPTIONS
+      value: -Xmx4g
+    - name: ALPINE_DATABASE_USERNAME
+      value: postgres
+    - name: ALPINE_DATABASE_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: POSTGRES_PASSWORD
+          name: pgpassword
+    - name: ALPINE_DATABASE_MODE
+      value: external
+    - name: ALPINE_DATABASE_DRIVER
+      value: org.postgresql.Driver
+    - name: ALPINE_DATABASE_URL
+      value: jdbc:postgresql://postgres:5432/postgres
+    - name: ALPINE_OIDC_ENABLED
+      value: "true"
+    - name: ALPINE_OIDC_CLIENT_ID
+      value: dependency-track
+    - name: ALPINE_OIDC_ISSUER
+      value: https://ephemeral.rearmhq.com/kauth/realms/Reliza
+    - name: ALPINE_OIDC_USERNAME_CLAIM
+      value: preferred_username
+    - name: ALPINE_OIDC_USER_PROVISIONING
+      value: "true"
+    - name: ALPINE_OIDC_TEAMS_CLAIM
+      value: groups
+    - name: ALPINE_OIDC_TEAM_SYNCHRONIZATION
+      value: "true"
+    image:
+      registry: docker.io
+      repository: dependencytrack/apiserver
+      tag: "latest"
+    persistentVolume:
+      enabled: true
+    resources:
+      limits:
+        cpu: "4"
+        memory: 4Gi
+      requests:
+        cpu: "1"
+        memory: 1Gi
+  common:
+    secretKey:
+      existingSecretName: dtrack-rearm-enc
+  frontend:
+    additionalVolumeMounts:
+    - mountPath: /etc/nginx/templates
+      name: nginx-config
+    additionalVolumes:
+    - configMap:
+        name: nginx-config
+      name: nginx-config
+    apiBaseUrl: https://dtrackephemeral.rearmhq.com
+    extraEnv:
+    - name: DTRACK_API_SERVICE
+      value: dtrack-dependency-track-api-server
+    - name: OIDC_CLIENT_ID
+      value: dependency-track
+    - name: OIDC_ISSUER
+      value: https://ephemeral.rearmhq.com/kauth/realms/Reliza
+    image:
+      repository: dependencytrack/frontend
+images:
+  postgresImage: bitnami/postgresql:17.2.0-debian-12-r10
+  pullPolicy: IfNotPresent
+ingressHost: dtrackephemeral.rearmhq.com
+postgres:
+  create_secret_in_chart: regular
+  postgresStorage: 4G
+  sealed_secrets_scope: namespace-wide
+  secrets:
+    pgpassword: jc8gfyIboVtgcbmPjuTog=
+reliza-watcher:
+  enabled: false
+traefikBehindLb: false
+useDefaultSecret: true
+useTraefikLe: true

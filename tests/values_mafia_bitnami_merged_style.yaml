@@ -1,0 +1,38 @@
+namespace: mafia
+backend:
+  image:
+    debug: false
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+    registry: docker.io
+    repository: taleodor/mafia-express
+    tag: latest
+  replicaCount: 1
+  port: 3000
+  targetPort: 3000
+ui:
+  image:
+    debug: false
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+    registry: docker.io
+    repository: taleodor/mafia-vue
+    tag: latest
+  replicaCount: 1
+  port: 80
+  targetPort: 80
+redis:
+  image:
+    debug: false
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+    registry: docker.io
+    repository: library/redis
+    tag: latest
+ingress:
+  nginxEnabled: false
+  traefikEnabled: false
+  host: mafia.brolia.com

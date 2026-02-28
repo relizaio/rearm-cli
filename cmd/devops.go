@@ -32,10 +32,6 @@ import (
 
 var sealedCert string
 
-type SetCertRHResp struct {
-	Responsewrapper interface{} `json:"setInstanceSealedSecretCert"`
-}
-
 var devopsCmd = &cobra.Command{
 	Use:   "devops",
 	Short: "DevOps commands",

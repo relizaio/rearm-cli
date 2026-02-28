@@ -68,6 +68,8 @@ It is possible to set authentication data via explicit flags, login command (see
 15. [DevOps Commands](docs/devops.md)
     1. [Export Instance CycloneDX BOM](docs/devops.md#151-export-instance-cyclonedx-bom)
     2. [Set Sealed Secret Certificate on Instance](docs/devops.md#152-set-sealed-secret-certificate-on-instance)
+    3. [Replace Tags on Deployment Templates for GitOps](docs/devops.md#153-replace-tags-on-deployment-templates-for-gitops)
+    4. [Retrieve Instance Properties and Secrets](docs/devops.md#154-retrieve-instance-properties-and-secrets)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 

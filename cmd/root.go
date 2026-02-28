@@ -90,6 +90,15 @@ var vcsType string
 var vcsUri string
 var vcsUuid string
 var repoPath string
+var outDirectory string
+var inDirectory string
+var tagSourceFile string
+var definitionReferenceFile string
+var typeVal string
+var bundle string
+var parseMode string
+var project string
+var provenance bool
 
 const (
 	defaultConfigFilename = ".rearm"
