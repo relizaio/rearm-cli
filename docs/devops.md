@@ -215,6 +215,43 @@ docker run --rm \
 - **--outfile | -o** - Output file with merged values (optional, if not supplied - outputs to stdout).
 - **--values | -f** - Specify override values YAML file. Indicate file name only here, path would be resolved according to path to the chart in the command. Can specify multiple value files - in that case and if different values files define same properties, properties in the files that appear later in the command will take precedence - just like helm works.
 
+## 15.6 Get Deliverable Download Secrets
 
+The `devops delsecrets` command retrieves secrets needed to download a specific deliverable. The deliverable must belong to the organization.
 
+Sample command:
 
+```bash
+docker run --rm \
+    registry.relizahub.com/library/rearm-cli \
+    devops delsecrets \
+    -i api_id \
+    -k api_key \
+    --instance "instance-uuid" \
+    --artdigest "sha256:abc123..."
+```
+
+**Flags:**
+- **--instance** - UUID of instance for which to generate (either this, or instanceuri must be provided).
+- **--instanceuri** - URI of instance for which to generate (either this, or instanceuri must be provided).
+- **--artdigest** - Digest or hash of the deliverable to resolve secrets for (required).
+- **--namespace** - Namespace to use for secrets (optional, defaults to default namespace).
+
+## 15.7 Check if Instance Has Sealed Secret Certificate
+
+The `devops iscertinit` command checks whether an instance has a Bitnami Sealed Certificate property configured. This property is used to encrypt secrets for the instance.
+
+Sample command:
+
+```bash
+docker run --rm \
+    registry.relizahub.com/library/rearm-cli \
+    devops iscertinit \
+    -i api_id \
+    -k api_key \
+    --instance "instance-uuid"
+```
+
+**Flags:**
+- **--instance** - UUID of instance for which to check (optional, either this or instanceuri must be provided).
+- **--instanceuri** - URI of instance for which to check (optional, either this or instance must be provided).
