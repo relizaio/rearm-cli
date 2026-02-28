@@ -168,11 +168,17 @@ func deduplicateDependencies(allDependencies []*cdx.Dependency) map[string]*cdx.
 					emptyDeps := []string{}
 					depCopy.Dependencies = &emptyDeps
 				} else {
-					// Sort existing dependencies for deterministic output
-					deps := make([]string, len(*depCopy.Dependencies))
-					copy(deps, *depCopy.Dependencies)
-					sort.Strings(deps)
-					depCopy.Dependencies = &deps
+					// Deduplicate and sort existing dependencies for deterministic output
+					depsMap := make(map[string]bool)
+					for _, d := range *depCopy.Dependencies {
+						depsMap[d] = true
+					}
+					uniqueDeps := make([]string, 0, len(depsMap))
+					for d := range depsMap {
+						uniqueDeps = append(uniqueDeps, d)
+					}
+					sort.Strings(uniqueDeps)
+					depCopy.Dependencies = &uniqueDeps
 				}
 				depMap[dep.Ref] = &depCopy
 			}
