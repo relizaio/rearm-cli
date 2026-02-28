@@ -195,9 +195,25 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
 - **--property** - Specifies name of the property to retrieve. For multiple properties, use multiple --property flags.
 - **--secret** - Specifies name of the secret to retrieve. For multiple secrets, use multiple --secret flags.
 
+## 15.5 Override and Get Merged Helm Chart Values
 
+The `devops helmvalues` command lets you do a helm style override of the default helm chart values and outputs merged helm values.
 
+Sample command:
 
+```bash
+docker run --rm \
+    -v /local/path/to/chart:/chart \
+    registry.relizahub.com/library/rearm-cli \
+    devops helmvalues /chart \
+    -f values-override-1.yaml \
+    -f values-override-2.yaml \
+    -o /chart/output-values.yaml
+```
+
+**Flags:**
+- **--outfile | -o** - Output file with merged values (optional, if not supplied - outputs to stdout).
+- **--values | -f** - Specify override values YAML file. Indicate file name only here, path would be resolved according to path to the chart in the command. Can specify multiple value files - in that case and if different values files define same properties, properties in the files that appear later in the command will take precedence - just like helm works.
 
 
 
