@@ -40,6 +40,23 @@ func TestReplaceTags(t *testing.T) {
 	}
 }
 
+func TestReplaceTagsTraefik(t *testing.T) {
+	var replaceTagsVars cmd.ReplaceTagsVars
+	replaceTagsVars.TagSourceFile = "traefik_tag_source_cdx.json"
+	replaceTagsVars.TypeVal = "cyclonedx"
+	replaceTagsVars.Infile = "traefik_values.yaml"
+
+	replacedTags := cmd.ReplaceTags(replaceTagsVars)
+
+	expectedReplacement, err := os.ReadFile("expected_values_traefik.yaml")
+	if err != nil {
+		t.Fatalf("failed reading expected values file")
+	}
+	if replacedTags != string(expectedReplacement) {
+		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
+	}
+}
+
 func TestGetSubstitutionFromDigestedString1(t *testing.T) {
 	digestedImage := "taleodor/mafia-express:tag@sha256:7205756e730e3c614f30509bdb33770f5816897abb49aa8308364fec1864882d"
 	subst := cmd.GetSubstitutionFromDigestedString(digestedImage)

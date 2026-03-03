@@ -1,0 +1,39 @@
+{
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.6",
+    "version": 1,
+    "metadata": {
+        "timestamp": "2025-12-31T17:03:00Z",
+        "tools": [
+            {
+                "vendor": "Reliza Incorporated",
+                "name": "ReARM"
+            }
+        ],
+        "component": {
+            "name": "Traefik",
+            "version": "3.6.9",
+            "type": "application"
+        }
+    },
+    "components": [
+        {
+            "group": "default---default",
+            "name": "traefik",
+            "version": "3.6.9",
+            "type": "application"
+        },
+        {
+            "group": "default---default",
+            "name": "docker.io/library/traefik",
+            "version": "3.6.9",
+            "hashes": [
+                {
+                    "alg": "SHA-256",
+                    "content": "9004e1cd1e33c5eb0b6ec02bc6cfda61fe9caca36751114b1c9c6662f01b264a"
+                }
+            ],
+            "type": "container"
+        }
+    ]
+}

@@ -1,0 +1,108 @@
+# Default values for Traefik
+# This is a YAML-formatted file.
+# Declare variables to be passed into templates
+
+image:  # @schema additionalProperties: false
+  # -- Traefik image host registry
+  registry: docker.io
+  # -- Traefik image repository
+  repository: library/traefik
+  # -- defaults to appVersion. It's used for version checking, even prefixed with experimental- or latest-.
+  # When a digest is required, `versionOverride` can be used to set the version.
+  tag:  3.6.9@sha256:9004e1cd1e33c5eb0b6ec02bc6cfda61fe9caca36751114b1c9c6662f01b264a
+  # -- Traefik image pull policy
+  pullPolicy: IfNotPresent
+
+# -- Add additional label to all resources
+commonLabels: {}
+
+deployment:
+  # -- Enable deployment
+  enabled: true
+  # -- Deployment or DaemonSet
+  kind: Deployment
+  # -- Number of pods of the deployment (only applies when kind == Deployment)
+  replicas: 1
+  # -- Number of old history to retain to allow rollback (If not set, default Kubernetes value is set to 10)
+  revisionHistoryLimit:  # @schema type:[integer, null];minimum:0
+  # -- Amount of time (in seconds) before Kubernetes will send the SIGKILL signal if Traefik does not shut down
+  terminationGracePeriodSeconds: 60
+  # -- The minimum number of seconds Traefik needs to be up and running before the DaemonSet/Deployment controller considers it available
+  minReadySeconds: 0
+  ## -- Override the liveness/readiness port. This is useful to integrate traefik
+  ## with an external Load Balancer that performs healthchecks.
+  ## Default: ports.traefik.port
+  healthchecksPort:  # @schema type:[integer, null];minimum:0
+  ## -- Override the liveness/readiness host. Useful for getting ping to respond on non-default entryPoint.
+  ## Default: ports.traefik.hostIP if set, otherwise Pod IP
+  healthchecksHost: ""
+  ## -- Override the liveness/readiness scheme. Useful for getting ping to
+  ## respond on websecure entryPoint.
+  healthchecksScheme:   # @schema enum:[HTTP, HTTPS, null]; type:[string, null]; default: HTTP
+  ## -- Override the readiness path.
+  ## Default: /ping
+  readinessPath: ""
+  # -- Override the liveness path.
+  # Default: /ping
+  livenessPath: ""
+  # -- Additional deployment annotations (e.g. for jaeger-operator sidecar injection)
+  annotations: {}
+  # -- Additional deployment labels (e.g. for filtering deployment by custom labels)
+  labels: {}
+  # -- Additional pod annotations (e.g. for mesh injection or prometheus scraping)
+  # It supports templating. One can set it with values like traefik/name: '{{ template "traefik.name" . }}'
+  podAnnotations: {}
+  # -- Additional Pod labels (e.g. for filtering Pod by custom labels)
+  # It supports templating. One can set it with values like traefik/name: '{{ template "traefik.name" . }}'
+  podLabels: {}
+  # -- Additional containers (e.g. for metric offloading sidecars)
+  additionalContainers: []
+  # https://docs.datadoghq.com/developers/dogstatsd/unix_socket/?tab=host
+  # - name: socat-proxy
+  #   image: alpine/socat:1.0.5
+  #   args: ["-s", "-u", "udp-recv:8125", "unix-sendto:/socket/socket"]
+  #   volumeMounts:
+  #     - name: dsdsocket
+  #       mountPath: /socket
+  # -- Additional volumes available for use with initContainers and additionalContainers
+  additionalVolumes: []
+  # - name: dsdsocket
+  #   hostPath:
+  #     path: /var/run/statsd-exporter
+  # -- Additional initContainers (e.g. for setting file permission as shown below)
+  initContainers: []
+  # The "volume-permissions" init container is required if you run into permission issues.
+  # Related issue: https://github.com/traefik/traefik-helm-chart/issues/396
+  # - name: volume-permissions
+  #   image: busybox:latest
+  #   command: ["sh", "-c", "touch /data/acme.json; chmod -v 600 /data/acme.json"]
+  #   volumeMounts:
+  #     - name: data
+  #       mountPath: /data
+  # -- Use process namespace sharing
+  shareProcessNamespace: false
+  # -- Custom pod DNS policy. Apply if `hostNetwork: true`
+  dnsPolicy: ""
+  # -- Custom pod [DNS config](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#poddnsconfig-v1-core)
+  dnsConfig: {}
+  # -- Custom [host aliases](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)
+  hostAliases: []
+  # -- Pull secret for fetching traefik container image
+  imagePullSecrets: []
+  # -- Pod lifecycle actions
+  lifecycle: {}
+  # preStop:
+  #   sleep:
+  #     seconds: 20
+  # postStart:
+  #   httpGet:
+  #     path: /ping
+  #     port: 8080
+  #     host: localhost
+  #     scheme: HTTP
+  # -- Set a runtimeClassName on pod
+  runtimeClassName: ""
+  # -- Percentage of memory limit to set for GOMEMLIMIT
+  # -- set as decimal (0.9 = 90%, 0.95 = 95% etc)
+  # -- only takes effect when resources.limits.memory is set
+  goMemLimitPercentage: 0.9
