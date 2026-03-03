@@ -171,12 +171,29 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 	isBitnami := true
 	isTagAsDigest := true
 
-	if len(*bitnamiLineCache) < 5 {
-		isBitnami = false
+	// First pass: check for presence of required fields
+	hasDigestLine := false
+	hasRegistryLine := false
+	hasRepositoryLine := false
+	for _, line := range *bitnamiLineCache {
+		trimmedLine := strings.Trim(line, " ")
+		if strings.HasPrefix(trimmedLine, "digest: ") {
+			hasDigestLine = true
+		} else if strings.HasPrefix(trimmedLine, "registry: ") {
+			hasRegistryLine = true
+		} else if strings.HasPrefix(trimmedLine, "repository: ") {
+			hasRepositoryLine = true
+		}
 	}
 
-	if len(*bitnamiLineCache) < 4 {
+	// If digest line exists, this is full Bitnami format, not tag-as-digest
+	if hasDigestLine {
 		isTagAsDigest = false
+	}
+
+	// Bitnami format requires registry, repository, tag, and digest lines
+	if !hasRegistryLine || !hasRepositoryLine {
+		isBitnami = false
 	}
 
 	if isBitnami || isTagAsDigest {
@@ -221,21 +238,25 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 			for _, line := range *bitnamiLineCache {
 				trimmedLine := strings.Trim(line, " ")
 				if strings.HasPrefix(trimmedLine, "registry: ") {
-					lineSplit := strings.Split(line, ": ")
-					parsedLines = append(parsedLines, lineSplit[0]+": "+replacedSubst.Registry)
+					colonIndex := strings.Index(line, ":")
+					prefix := line[:colonIndex+1]
+					parsedLines = append(parsedLines, prefix+" "+replacedSubst.Registry)
 				} else if strings.HasPrefix(trimmedLine, "repository: ") {
-					lineSplit := strings.Split(line, ": ")
-					parsedLines = append(parsedLines, lineSplit[0]+": "+replacedSubst.Image)
+					colonIndex := strings.Index(line, ":")
+					prefix := line[:colonIndex+1]
+					parsedLines = append(parsedLines, prefix+" "+replacedSubst.Image)
 				} else if strings.HasPrefix(trimmedLine, "tag: ") {
-					lineSplit := strings.Split(line, ": ")
+					colonIndex := strings.Index(line, ":")
+					prefix := line[:colonIndex+1]
 					if isBitnami {
-						parsedLines = append(parsedLines, lineSplit[0]+": "+replacedSubst.Tag)
+						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag)
 					} else if isTagAsDigest {
-						parsedLines = append(parsedLines, lineSplit[0]+": "+replacedSubst.Digest)
+						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag+"@"+replacedSubst.Digest)
 					}
 				} else if strings.HasPrefix(trimmedLine, "digest: ") {
-					lineSplit := strings.Split(line, ": ")
-					parsedLines = append(parsedLines, lineSplit[0]+": "+replacedSubst.Digest)
+					colonIndex := strings.Index(line, ":")
+					prefix := line[:colonIndex+1]
+					parsedLines = append(parsedLines, prefix+" "+replacedSubst.Digest)
 				} else {
 					parsedLines = append(parsedLines, line)
 				}
@@ -264,7 +285,8 @@ Returns true if is start and returns number of whitespace before image
 */
 func isBitnamiImageStart(line string) (bool, int) {
 	isBitnamiImageStart := false
-	if strings.Trim(line, " ") == "image:" {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "image:" || strings.HasPrefix(trimmed, "image:") {
 		isBitnamiImageStart = true
 	}
 	whiteSpacePrefix := strings.Split(line, "image:")[0]
