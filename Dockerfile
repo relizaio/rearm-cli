@@ -5,6 +5,7 @@ COPY go.mod go.sum ./
 COPY ./internal/imports ./internal/imports
 RUN go build ./internal/imports
 COPY . .
+RUN go test ./tests
 RUN go version
 ARG TARGETOS
 ARG TARGETARCH
