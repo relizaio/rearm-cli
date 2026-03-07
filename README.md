@@ -362,7 +362,7 @@ Flags stand for:
 
 This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Product.
 
-The command returns the latest release as a CycloneDX 1.6 BOM string.
+By default, the command returns the latest release as a JSON object. Use the `--cdx` flag to return the release as a CycloneDX 1.6 BOM string instead.
 
 Sample command:
 
@@ -393,6 +393,7 @@ Flags stand for:
   - **--tagkey** - Tag key to use for picking artifact (optional).
   - **--tagval** - Tag value to use for picking artifact (optional).
   - **--uptoversion** - Upper bound version to filter releases (optional). Returns latest release up to this version.
+  - **--cdx** - Output release in CycloneDX 1.6 format (optional). When set, returns a CycloneDX 1.6 BOM string instead of the default JSON object.
 
 ## 5. Use Case: Persist ReARM Credentials in a Config File
 

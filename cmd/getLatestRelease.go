@@ -20,6 +20,7 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -33,6 +34,7 @@ var (
 	approvalEntries       []string
 	approvalStates        []string
 	upToVersion           string
+	cdxOutput             bool
 )
 
 type ConditionOnReleaseInput struct {
@@ -51,12 +53,12 @@ var getLatestReleaseCmd = &cobra.Command{
 	Long: `This CLI command would connect to ReARM and would obtain latest release for specified Component and Branch
 			or specified Product and Feature Set.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getLatestReleaseFunc(debug, rearmUri, component, product, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle)
+		getLatestReleaseFunc(debug, rearmUri, component, product, branch, tagKey, tagVal, apiKeyId, apiKey, lifecycle, cdxOutput)
 	},
 }
 
 func getLatestReleaseFunc(debug string, rearmUri string, component string, product string, branch string,
-	tagKey string, tagVal string, apiKeyId string, apiKey string, lifecycle string) []byte {
+	tagKey string, tagVal string, apiKeyId string, apiKey string, lifecycle string, cdxOutput bool) []byte {
 	if debug == "true" {
 		fmt.Println("Using ReARM at", rearmUri)
 	}
@@ -115,11 +117,21 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	}
 
 	client := graphql.NewClient(rearmUri + "/graphql")
-	req := graphql.NewRequest(`
-		query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
-			getLatestReleaseProgrammatic(release:$GetLatestReleaseInput)
-		}`,
-	)
+
+	var req *graphql.Request
+	if cdxOutput {
+		req = graphql.NewRequest(`
+			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
+				getLatestReleaseProgrammaticCdx(release:$GetLatestReleaseInput)
+			}`,
+		)
+	} else {
+		req = graphql.NewRequest(`
+			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
+				getLatestReleaseProgrammatic(release:$GetLatestReleaseInput) {` + FULL_RELEASE_GQL_DATA + `}
+			}`,
+		)
+	}
 	req.Var("GetLatestReleaseInput", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "ReARM CLI")
@@ -136,18 +148,31 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
 	}
 
-	var respData struct {
-		GetLatestReleaseProgrammatic *string `json:"getLatestReleaseProgrammatic"`
+	if cdxOutput {
+		var respData struct {
+			GetLatestReleaseProgrammaticCdx *string `json:"getLatestReleaseProgrammaticCdx"`
+		}
+		if err := client.Run(context.Background(), req, &respData); err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		jsonResponse := []byte("null")
+		if respData.GetLatestReleaseProgrammaticCdx != nil {
+			jsonResponse = []byte(*respData.GetLatestReleaseProgrammaticCdx)
+			fmt.Println(*respData.GetLatestReleaseProgrammaticCdx)
+		}
+		return jsonResponse
 	}
+
+	var respData map[string]interface{}
 	if err := client.Run(context.Background(), req, &respData); err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	jsonResponse := []byte("null")
-	if respData.GetLatestReleaseProgrammatic != nil {
-		jsonResponse = []byte(*respData.GetLatestReleaseProgrammatic)
-		fmt.Println(*respData.GetLatestReleaseProgrammatic)
+	jsonResponse, _ := json.Marshal(respData["getLatestReleaseProgrammatic"])
+	if string(jsonResponse) != "null" {
+		fmt.Println(string(jsonResponse))
 	}
 	return jsonResponse
 }
@@ -169,5 +194,6 @@ func init() {
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalEntries, "approvalentry", []string{}, "Approval entry names or ids (optional, multiple allowed)")
 	getLatestReleaseCmd.PersistentFlags().StringSliceVar(&approvalStates, "approvalstate", []string{}, "Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&upToVersion, "uptoversion", "", "Upper bound version to filter releases (optional). Returns latest release up to this version.")
+	getLatestReleaseCmd.PersistentFlags().BoolVar(&cdxOutput, "cdx", false, "Output release in CycloneDX 1.6 format (optional)")
 	rootCmd.AddCommand(getLatestReleaseCmd)
 }
