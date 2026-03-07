@@ -362,6 +362,8 @@ Flags stand for:
 
 This use case is when ReARM is queried either by CI or CD environment or by integration instance to check latest release version available per specific Component or Product.
 
+The command returns the latest release as a CycloneDX 1.6 BOM string.
+
 Sample command:
 
 ```bash
@@ -380,7 +382,7 @@ Flags stand for:
 - **-k** - flag for api key which can be either api key for this component or organization-wide read API (required).
 - **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component api key is used, otherwise required).
   - **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
-  - **--branch** - flag to denote required branch of chosen Component or Product (optional, if not supplied settings from ReARM UI are used).
+  - **--branch** - flag to denote required branch of chosen Component or Product (required).
   - **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
   - **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
   - **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).

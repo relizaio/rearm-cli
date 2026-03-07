@@ -20,7 +20,6 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -118,7 +117,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	client := graphql.NewClient(rearmUri + "/graphql")
 	req := graphql.NewRequest(`
 		query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
-			getLatestReleaseProgrammatic(release:$GetLatestReleaseInput) {` + FULL_RELEASE_GQL_DATA + `}
+			getLatestReleaseProgrammatic(release:$GetLatestReleaseInput)
 		}`,
 	)
 	req.Var("GetLatestReleaseInput", body)
@@ -137,15 +136,18 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
 	}
 
-	var respData map[string]interface{}
+	var respData struct {
+		GetLatestReleaseProgrammatic *string `json:"getLatestReleaseProgrammatic"`
+	}
 	if err := client.Run(context.Background(), req, &respData); err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	jsonResponse, _ := json.Marshal(respData["getLatestReleaseProgrammatic"])
-	if string(jsonResponse) != "null" {
-		fmt.Println(string(jsonResponse))
+	jsonResponse := []byte("null")
+	if respData.GetLatestReleaseProgrammatic != nil {
+		jsonResponse = []byte(*respData.GetLatestReleaseProgrammatic)
+		fmt.Println(*respData.GetLatestReleaseProgrammatic)
 	}
 	return jsonResponse
 }
@@ -153,7 +155,8 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM for which to obtain latest release")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&product, "product", "", "Product UUID from ReARM to condition component release to this product (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of branch or Feature Set from ReARM for which latest release is requested, if not supplied UI mapping is used (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of branch or Feature Set from ReARM for which latest release is requested (required)")
+	getLatestReleaseCmd.MarkPersistentFlagRequired("branch")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&environment, "env", "", "Environment to obtain approvals details from (optional)")
