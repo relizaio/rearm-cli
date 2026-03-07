@@ -733,20 +733,42 @@ var checkReleaseByHashCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
+		client := graphql.NewClient(rearmUri + "/graphql")
 		req := graphql.NewRequest(`
 			query ($hash: String!, $componentId: ID) {
-				getReleaseByHashProgrammatic(hash: $hash, componentId: $componentId) {` + RELEASE_GQL_DATA + `}
+				getReleaseByHashProgrammatic(hash: $hash, componentId: $componentId)
 			}
 		`)
 		req.Var("hash", hash)
 		if len(component) > 0 {
 			req.Var("componentId", component)
 		}
-		resp := sendRequest(req, "getReleaseByHashProgrammatic")
-		if resp == "null" {
-			resp = "{}"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "ReARM CLI")
+		req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+		if len(apiKeyId) > 0 && len(apiKey) > 0 {
+			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+			req.Header.Add("Authorization", "Basic "+auth)
 		}
-		fmt.Println(resp)
+
+		session, _ := getSession()
+		if session != nil {
+			req.Header.Set("X-CSRF-Token", session.Token)
+			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
+		}
+
+		var respData struct {
+			GetReleaseByHashProgrammatic *string `json:"getReleaseByHashProgrammatic"`
+		}
+		if err := client.Run(context.Background(), req, &respData); err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+
+		if respData.GetReleaseByHashProgrammatic != nil {
+			fmt.Println(*respData.GetReleaseByHashProgrammatic)
+		}
 	},
 }
 

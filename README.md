@@ -336,9 +336,9 @@ Note that multiple deliverables per release are supported. In which case deliver
 
 For sample of how to use workflow in CI, refer to the ReARM Add Release GitHub Action [here](https://github.com/relizaio/rearm-add-release).
 
-## 3. Use Case: Check If Artifact Hash Already Present In Some Release
+## 3. Use Case: Check If Deliverable Hash Already Present In Some Release
 
-This is particularly useful for monorepos to see if there was a change in sub-component or not. We supply an artifact hash to ReARM - and if it's present already, we get release details; if not - we get an empty json response {}. Search space is scoped to a single component which is defined by API Id and API Key.
+This is particularly useful for monorepos to see if there was a change in sub-component or not. We supply a deliverable hash to ReARM - and if it's present already, we get release details as a CycloneDX 1.6 BOM string; if not - we get an empty json response {}. Search space is scoped to a single component which is defined by API Id and API Key.
 
 Sample command:
 
