@@ -38,8 +38,8 @@ It is possible to set authentication data via explicit flags, login command (see
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm)
 3. Find Releases by Parameters:
-    a. [Check If Artifact Hash Already Present In Some Release](#3a-use-case-check-if-deliverable-hash-already-present-in-some-release)
-    b. [Get Release By Version](#3b-use-case-get-release-by-version)
+   1. [Check If Artifact Hash Already Present In Some Release](#3a-use-case-check-if-deliverable-hash-already-present-in-some-release)
+   2. [Get Release By Version](#3b-use-case-get-release-by-version)
 4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
 5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-credentials-in-a-config-file)
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
