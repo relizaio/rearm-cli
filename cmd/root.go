@@ -772,6 +772,53 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
+var releaseByVersionCmd = &cobra.Command{
+	Use:   "releasebyversion",
+	Short: "Gets release by version for a particular component",
+	Long: `This CLI command would connect to ReARM which would retrieve release data by version for the current component.
+			Component would be identified by the API key that is used`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if debug == "true" {
+			fmt.Println("Using ReARM at", rearmUri)
+		}
+
+		client := graphql.NewClient(rearmUri + "/graphql")
+		req := graphql.NewRequest(`
+			query ($version: String!, $componentId: ID!) {
+				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
+			}
+		`)
+		req.Var("version", version)
+		req.Var("componentId", component)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "ReARM CLI")
+		req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+		if len(apiKeyId) > 0 && len(apiKey) > 0 {
+			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+			req.Header.Add("Authorization", "Basic "+auth)
+		}
+
+		session, _ := getSession()
+		if session != nil {
+			req.Header.Set("X-CSRF-Token", session.Token)
+			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
+		}
+
+		var respData struct {
+			GetReleaseByReleaseVersionProgrammatic *string `json:"getReleaseByReleaseVersionProgrammatic"`
+		}
+		if err := client.Run(context.Background(), req, &respData); err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+
+		if respData.GetReleaseByReleaseVersionProgrammatic != nil {
+			fmt.Println(*respData.GetReleaseByReleaseVersionProgrammatic)
+		}
+	},
+}
+
 var releasecompletionfinalizerCmd = &cobra.Command{
 	Use:   "releasefinalizer",
 	Short: "this command calls finalizers indicating completion of CI process for a release.",
@@ -916,11 +963,20 @@ func init() {
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to check artifact hash (optional, required for org-wide keys)")
+	checkReleaseByHashCmd.MarkPersistentFlagRequired("hash")
+	checkReleaseByHashCmd.MarkPersistentFlagRequired("component")
+
+	// flags for release by version command
+	releaseByVersionCmd.PersistentFlags().StringVar(&version, "version", "", "Version of release to retrieve (required)")
+	releaseByVersionCmd.MarkPersistentFlagRequired("version")
+	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to retrieve release (required)")
+	releaseByVersionCmd.MarkPersistentFlagRequired("component")
 
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(printversionCmd)
 	rootCmd.AddCommand(addODeliverableCmd)
 	rootCmd.AddCommand(checkReleaseByHashCmd)
+	rootCmd.AddCommand(releaseByVersionCmd)
 	rootCmd.AddCommand(createComponentCmd)
 	rootCmd.AddCommand(getVersionCmd)
 	rootCmd.AddCommand(releasecompletionfinalizerCmd)

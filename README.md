@@ -37,7 +37,9 @@ It is possible to set authentication data via explicit flags, login command (see
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm)
-3. [Check If Artifact Hash Already Present In Some Release](#3-use-case-check-if-artifact-hash-already-present-in-some-release)
+3. Find Releases by Parameters:
+   a. [Check If Artifact Hash Already Present In Some Release](#3a-use-case-check-if-artifact-hash-already-present-in-some-release)
+   b. [Get Release By Version](#3b-use-case-get-release-by-version)
 4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
 5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-credentials-in-a-config-file)
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
@@ -336,8 +338,7 @@ Note that multiple deliverables per release are supported. In which case deliver
 
 For sample of how to use workflow in CI, refer to the ReARM Add Release GitHub Action [here](https://github.com/relizaio/rearm-add-release).
 
-## 3. Use Case: Check If Deliverable Hash Already Present In Some Release
-
+## 3a. Use Case: Check If Deliverable Hash Already Present In Some Release
 This is particularly useful for monorepos to see if there was a change in sub-component or not. We supply a deliverable hash to ReARM - and if it's present already, we get release details as a CycloneDX 1.6 BOM string; if not - we get an empty json response {}. Search space is scoped to a single component which is defined by API Id and API Key.
 
 Sample command:
@@ -356,7 +357,30 @@ Flags stand for:
 - **-i** - flag for component api id (required).
 - **-k** - flag for component api key (required).
 - **--hash** - flag to denote actual hash (required). By convention, hash must include hashing algorithm as its first part, i.e. sha256: or sha512:
-- **--component** - flag to denote UUID of specific Component, UUID must be obtained from ReARM (optional, required if org-wide or user api key is used).
+- **--component** - flag to denote UUID of specific Component, UUID must be obtained from ReARM (required if org-wide or user api key is used).
+
+## 3b. Use Case: Get Release By Version
+
+This command retrieves release data for a specific version of a component. It returns the release details as a CycloneDX 1.6 BOM string.
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    releasebyversion    \
+    -i component_or_org_wide_api_id    \
+    -k component_or_org_wide_api_key    \
+    --component component_uuid    \
+    --version 1.0.0
+```
+
+Flags stand for:
+
+- **releasebyversion** - command that denotes we are retrieving release by version.
+- **-i** - flag for api id (required).
+- **-k** - flag for api key (required).
+- **--component** - flag to denote UUID of specific Component, UUID must be obtained from ReARM (required).
+- **--version** - flag to denote the version of the release to retrieve (required).
 
 ## 4. Use Case: Request Latest Release Per Component Or Product
 
