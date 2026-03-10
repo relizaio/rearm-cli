@@ -58,8 +58,8 @@ var enrichLicenseCmd = &cobra.Command{
 
 var enrichCmd = &cobra.Command{
 	Use:   "enrich",
-	Short: "Enrich Supplier and License on BEAR",
-	Long:  `For each component, enrich supplier (if missing) and license (if missing or contains LicenseRef-scancode) using BEAR`,
+	Short: "Enrich Supplier, License, and Copyright on BEAR",
+	Long:  `For each component, enrich supplier (if missing), license (if missing or contains LicenseRef-scancode), and copyright (if missing) using BEAR`,
 	Run: func(cmd *cobra.Command, args []string) {
 		enrichFunc()
 	},
@@ -118,11 +118,12 @@ type BearSupplier struct {
 }
 
 type BearComponent struct {
-	Type     string              `json:"type,omitempty"`
-	Name     string              `json:"name,omitempty"`
-	Purl     string              `json:"purl,omitempty"`
-	Supplier *BearSupplier       `json:"supplier,omitempty"`
-	Licenses []BearLicenseChoice `json:"licenses,omitempty"`
+	Type      string              `json:"type,omitempty"`
+	Name      string              `json:"name,omitempty"`
+	Purl      string              `json:"purl,omitempty"`
+	Supplier  *BearSupplier       `json:"supplier,omitempty"`
+	Licenses  []BearLicenseChoice `json:"licenses,omitempty"`
+	Copyright string              `json:"copyright,omitempty"`
 }
 
 type BearEnrichBatchResponse struct {
@@ -257,11 +258,12 @@ func enrichFunc() {
 		return
 	}
 
-	// Collect components that need enrichment (supplier OR license)
+	// Collect components that need enrichment (supplier OR license OR copyright)
 	var purlsToEnrich []string
 	purlToIndices := make(map[string][]int)
 	needsSupplier := make(map[string]bool)
 	needsLicense := make(map[string]bool)
+	needsCopyright := make(map[string]bool)
 
 	for ind, comp := range *components {
 		if comp.PackageURL == "" {
@@ -275,8 +277,9 @@ func enrichFunc() {
 
 		compNeedsSupplier := needsSupplierEnrichment(&comp)
 		compNeedsLicense := needsLicenseEnrichment(&comp)
+		compNeedsCopyright := needsCopyrightEnrichment(&comp)
 
-		if compNeedsSupplier || compNeedsLicense {
+		if compNeedsSupplier || compNeedsLicense || compNeedsCopyright {
 			if _, exists := purlToIndices[comp.PackageURL]; !exists {
 				purlsToEnrich = append(purlsToEnrich, comp.PackageURL)
 			}
@@ -286,6 +289,9 @@ func enrichFunc() {
 			}
 			if compNeedsLicense {
 				needsLicense[comp.PackageURL] = true
+			}
+			if compNeedsCopyright {
+				needsCopyright[comp.PackageURL] = true
 			}
 		}
 	}
@@ -304,6 +310,7 @@ func enrichFunc() {
 	// Update components with enriched data
 	suppliersEnriched := 0
 	licensesEnriched := 0
+	copyrightsEnriched := 0
 	for _, enriched := range enrichedComponents {
 		if indices, ok := purlToIndices[enriched.Purl]; ok {
 			for _, idx := range indices {
@@ -323,12 +330,19 @@ func enrichFunc() {
 						licensesEnriched++
 					}
 				}
+				// Only update copyright if it was missing
+				if needsCopyright[enriched.Purl] {
+					if enriched.Copyright != "" {
+						(*components)[idx].Copyright = enriched.Copyright
+						copyrightsEnriched++
+					}
+				}
 			}
 		}
 	}
 
 	if debug == "true" {
-		fmt.Printf("Enrichment statistics: %d suppliers enriched, %d licenses enriched\n", suppliersEnriched, licensesEnriched)
+		fmt.Printf("Enrichment statistics: %d suppliers enriched, %d licenses enriched, %d copyrights enriched\n", suppliersEnriched, licensesEnriched, copyrightsEnriched)
 	}
 
 	bom.Components = components
@@ -396,6 +410,17 @@ func needsLicenseEnrichment(comp *cdx.Component) bool {
 	return false
 }
 
+// needsCopyrightEnrichment checks if a component needs copyright enrichment
+func needsCopyrightEnrichment(comp *cdx.Component) bool {
+	if comp.Copyright == "" {
+		return true
+	}
+	if isUnresolvedValue(comp.Copyright) {
+		return true
+	}
+	return false
+}
+
 func bearEnrichBatch(purls []string) []BearComponent {
 	var allResults []BearComponent
 
@@ -419,7 +444,7 @@ func bearEnrichBatch(purls []string) []BearComponent {
 func bearEnrichBatchRequest(purls []string) []BearComponent {
 	// Build the GraphQL query with purls array
 	purlsJson, _ := json.Marshal(purls)
-	query := fmt.Sprintf(`{"query":"mutation { enrichBatch(purls: %s) { type name purl supplier { name address { country region locality postOfficeBoxNumber postalCode streetAddress } url contact { name email phone } } licenses { license { id name url } expression } } }"}`,
+	query := fmt.Sprintf(`{"query":"mutation { enrichBatch(purls: %s) { type name purl supplier { name address { country region locality postOfficeBoxNumber postalCode streetAddress } url contact { name email phone } } licenses { license { id name url } expression } copyright } }"}`,
 		strings.ReplaceAll(string(purlsJson), `"`, `\"`))
 
 	req, err := http.NewRequest("POST", bearUri+"/graphql", bytes.NewBufferString(query))
