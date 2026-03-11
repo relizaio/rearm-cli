@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/spf13/cobra"
@@ -162,7 +163,11 @@ func enrichSupplierFunc() {
 	fmt.Printf("Found %d components needing supplier enrichment\n", len(purlsToEnrich))
 
 	// Process in batches
-	enrichedComponents := bearEnrichBatch(purlsToEnrich)
+	enrichedComponents, err := bearEnrichBatch(purlsToEnrich)
+	if err != nil {
+		fmt.Printf("Error during enrichment: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Update components with enriched supplier data
 	suppliersEnriched := 0
@@ -220,7 +225,11 @@ func enrichLicenseFunc() {
 	fmt.Printf("Found %d components needing license enrichment\n", len(purlsToEnrich))
 
 	// Process in batches
-	enrichedComponents := bearEnrichBatch(purlsToEnrich)
+	enrichedComponents, err := bearEnrichBatch(purlsToEnrich)
+	if err != nil {
+		fmt.Printf("Error during enrichment: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Update components with enriched license data
 	licensesEnriched := 0
@@ -305,7 +314,11 @@ func enrichFunc() {
 	fmt.Printf("Found %d components needing enrichment\n", len(purlsToEnrich))
 
 	// Process in batches
-	enrichedComponents := bearEnrichBatch(purlsToEnrich)
+	enrichedComponents, err := bearEnrichBatch(purlsToEnrich)
+	if err != nil {
+		fmt.Printf("Error during enrichment: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Update components with enriched data
 	suppliersEnriched := 0
@@ -421,7 +434,7 @@ func needsCopyrightEnrichment(comp *cdx.Component) bool {
 	return false
 }
 
-func bearEnrichBatch(purls []string) []BearComponent {
+func bearEnrichBatch(purls []string) ([]BearComponent, error) {
 	var allResults []BearComponent
 
 	// Process in batches of bearBatchSize
@@ -434,14 +447,17 @@ func bearEnrichBatch(purls []string) []BearComponent {
 
 		fmt.Printf("Processing batch %d-%d of %d\n", i+1, end, len(purls))
 
-		results := bearEnrichBatchRequest(batch)
+		results, err := bearEnrichBatchRequest(batch)
+		if err != nil {
+			return nil, fmt.Errorf("failed to enrich batch %d-%d: %w", i+1, end, err)
+		}
 		allResults = append(allResults, results...)
 	}
 
-	return allResults
+	return allResults, nil
 }
 
-func bearEnrichBatchRequest(purls []string) []BearComponent {
+func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 	// Build the GraphQL query with purls array
 	purlsJson, _ := json.Marshal(purls)
 	query := fmt.Sprintf(`{"query":"mutation { enrichBatch(purls: %s) { type name purl supplier { name address { country region locality postOfficeBoxNumber postalCode streetAddress } url contact { name email phone } } licenses { license { id name url } expression } copyright } }"}`,
@@ -449,8 +465,7 @@ func bearEnrichBatchRequest(purls []string) []BearComponent {
 
 	req, err := http.NewRequest("POST", bearUri+"/graphql", bytes.NewBufferString(query))
 	if err != nil {
-		fmt.Printf("Error creating request: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -458,32 +473,31 @@ func bearEnrichBatchRequest(purls []string) []BearComponent {
 		req.Header.Set("X-API-Key", bearApiKey)
 	}
 
-	client := &http.Client{}
+	// Add timeout to prevent hanging
+	client := &http.Client{
+		Timeout: 300 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("Error making request: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error making request to BEAR: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Error reading response: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error reading response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Error response from BEAR: %s\n", string(body))
-		return nil
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("BEAR API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var response BearEnrichBatchResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		fmt.Printf("Error parsing response: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error parsing response: %w", err)
 	}
 
-	return response.Data.EnrichBatch
+	return response.Data.EnrichBatch, nil
 }
 
 func convertBearSupplierToCdx(supplier *BearSupplier) *cdx.OrganizationalEntity {
