@@ -28,6 +28,7 @@ import (
 	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	purl "github.com/package-url/packageurl-go"
 	"github.com/spf13/cobra"
 )
 
@@ -267,6 +268,9 @@ func enrichFunc() {
 		return
 	}
 
+	// Extract metadata component purl and add its name to skipPatterns
+	addMetadataComponentToSkipPatterns(bom)
+
 	// Collect components that need enrichment (supplier OR license OR copyright)
 	var purlsToEnrich []string
 	purlToIndices := make(map[string][]int)
@@ -498,6 +502,45 @@ func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 	}
 
 	return response.Data.EnrichBatch, nil
+}
+
+// addMetadataComponentToSkipPatterns extracts the metadata->component->purl if present,
+// parses it to get the name, and adds .*<name>.* to skipPatterns
+func addMetadataComponentToSkipPatterns(bom *cdx.BOM) {
+	// Check if metadata exists
+	if bom.Metadata == nil {
+		return
+	}
+
+	// Check if component exists
+	if bom.Metadata.Component == nil {
+		return
+	}
+
+	// Check if purl exists
+	if bom.Metadata.Component.PackageURL == "" {
+		return
+	}
+
+	// Try to parse the purl
+	parsedPurl, err := purl.FromString(bom.Metadata.Component.PackageURL)
+	if err != nil {
+		// Silently fail - just don't add skip pattern
+		return
+	}
+
+	// Extract name from parsed purl
+	if parsedPurl.Name == "" {
+		return
+	}
+
+	// Add .*<name>.* pattern to skipPatterns
+	pattern := ".*" + parsedPurl.Name + ".*"
+	skipPatterns = append(skipPatterns, pattern)
+
+	if debug == "true" {
+		fmt.Printf("Auto-added skip pattern from metadata component: %s\n", pattern)
+	}
 }
 
 func convertBearSupplierToCdx(supplier *BearSupplier) *cdx.OrganizationalEntity {
