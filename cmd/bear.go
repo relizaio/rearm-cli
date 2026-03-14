@@ -464,6 +464,11 @@ func bearEnrichBatch(purls []string) ([]BearComponent, error) {
 func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 	// Build the GraphQL query with purls array
 	purlsJson, _ := json.Marshal(purls)
+
+	if debug == "true" {
+		fmt.Printf("Sending purls to BEAR: %s\n", string(purlsJson))
+	}
+
 	query := fmt.Sprintf(`{"query":"mutation { enrichBatch(purls: %s) { type name purl supplier { name address { country region locality postOfficeBoxNumber postalCode streetAddress } url contact { name email phone } } licenses { license { id name url } expression } copyright } }"}`,
 		strings.ReplaceAll(string(purlsJson), `"`, `\"`))
 
@@ -490,6 +495,15 @@ func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response: %w", err)
+	}
+
+	if debug == "true" {
+		fmt.Printf("BEAR API response (status %d): %s\n", resp.StatusCode, string(body))
+	}
+
+	// Check for invalid API key error
+	if strings.Contains(string(body), `"message":"Invalid API key"`) {
+		return nil, fmt.Errorf("BEAR API authentication failed: Invalid API key")
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
