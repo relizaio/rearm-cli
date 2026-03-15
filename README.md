@@ -10,23 +10,23 @@ Container image URI: registry.relizahub.com/library/rearm-cli.
 
 ## Download Rearm CLI
 
-Below are the available downloads for the latest version of the Rearm CLI (26.03.8). Please download the proper package for your operating system and architecture.
+Below are the available downloads for the latest version of the Rearm CLI (26.03.10). Please download the proper package for your operating system and architecture.
 
 The CLI is distributed as a single binary. Install by unzipping it and moving it to a directory included in your system's PATH.
 
-[SHA256 checksums](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/sha256sums.txt)
+[SHA256 checksums](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/sha256sums.txt)
 
-macOS: [AMD64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-darwin-amd64.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-darwin-arm64.zip)
+macOS: [AMD64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-darwin-amd64.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-darwin-arm64.zip)
 
-FreeBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-freebsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-freebsd-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-freebsd-arm.zip)
+FreeBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-arm.zip)
 
-Linux: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-linux-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-linux-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-linux-arm.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-linux-arm64.zip)
+Linux: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-arm.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-arm64.zip)
 
-OpenBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-openbsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-openbsd-amd64.zip)
+OpenBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-openbsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-openbsd-amd64.zip)
 
-Solaris: [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-solaris-amd64.zip)
+Solaris: [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-solaris-amd64.zip)
 
-Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-windows-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.8/rearm-26.03.8-windows-amd64.zip)
+Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-windows-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-windows-amd64.zip)
 
 It is possible to set authentication data via explicit flags, login command (see below) or following environment variables:
 
