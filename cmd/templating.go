@@ -261,10 +261,16 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 						// No separate digest/sha field - combine tag@digest
 						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag+"@"+replacedSubst.Digest)
 					}
-				} else if strings.HasPrefix(trimmedLine, "digest: ") || strings.HasPrefix(trimmedLine, "sha: ") {
+				} else if strings.HasPrefix(trimmedLine, "digest: ") {
 					colonIndex := strings.Index(line, ":")
 					prefix := line[:colonIndex+1]
 					parsedLines = append(parsedLines, prefix+" "+replacedSubst.Digest)
+				} else if strings.HasPrefix(trimmedLine, "sha: ") {
+					colonIndex := strings.Index(line, ":")
+					prefix := line[:colonIndex+1]
+					// For sha field, strip the "sha256:" prefix
+					shaValue := strings.TrimPrefix(replacedSubst.Digest, "sha256:")
+					parsedLines = append(parsedLines, prefix+" "+shaValue)
 				} else {
 					parsedLines = append(parsedLines, line)
 				}
