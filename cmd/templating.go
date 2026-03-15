@@ -173,12 +173,15 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 
 	// First pass: check for presence of required fields
 	hasDigestLine := false
+	hasShaLine := false
 	hasRegistryLine := false
 	hasRepositoryLine := false
 	for _, line := range *bitnamiLineCache {
 		trimmedLine := strings.Trim(line, " ")
 		if strings.HasPrefix(trimmedLine, "digest: ") {
 			hasDigestLine = true
+		} else if strings.HasPrefix(trimmedLine, "sha: ") {
+			hasShaLine = true
 		} else if strings.HasPrefix(trimmedLine, "registry: ") {
 			hasRegistryLine = true
 		} else if strings.HasPrefix(trimmedLine, "repository: ") {
@@ -186,8 +189,8 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 		}
 	}
 
-	// If digest line exists, this is full Bitnami format, not tag-as-digest
-	if hasDigestLine {
+	// If digest or sha line exists, this is full Bitnami format, not tag-as-digest
+	if hasDigestLine || hasShaLine {
 		isTagAsDigest = false
 	}
 
@@ -211,6 +214,9 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 			} else if strings.HasPrefix(trimmedLine, "digest: ") {
 				bitnamiCheckMap["digest"] = true
 				bitnamiSubst.Digest = strings.ReplaceAll(trimmedLine, "digest: ", "")
+			} else if strings.HasPrefix(trimmedLine, "sha: ") {
+				bitnamiCheckMap["sha"] = true
+				bitnamiSubst.Digest = strings.ReplaceAll(trimmedLine, "sha: ", "")
 			}
 		}
 	}
@@ -249,11 +255,13 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 					colonIndex := strings.Index(line, ":")
 					prefix := line[:colonIndex+1]
 					if isBitnami {
+						// Full Bitnami format with separate digest/sha field - tag only
 						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag)
 					} else if isTagAsDigest {
+						// No separate digest/sha field - combine tag@digest
 						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag+"@"+replacedSubst.Digest)
 					}
-				} else if strings.HasPrefix(trimmedLine, "digest: ") {
+				} else if strings.HasPrefix(trimmedLine, "digest: ") || strings.HasPrefix(trimmedLine, "sha: ") {
 					colonIndex := strings.Index(line, ":")
 					prefix := line[:colonIndex+1]
 					parsedLines = append(parsedLines, prefix+" "+replacedSubst.Digest)

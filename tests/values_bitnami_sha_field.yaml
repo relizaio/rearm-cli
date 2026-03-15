@@ -1,0 +1,8 @@
+namespace: prometheus
+alertmanager:
+  image:
+    registry: quay.io
+    repository: prometheus/alertmanager
+    tag: v0.31.1
+    sha: ""
+    pullPolicy: IfNotPresent

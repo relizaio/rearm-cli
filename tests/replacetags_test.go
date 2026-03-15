@@ -147,3 +147,20 @@ func TestReplaceTagsBitnamiStyleMerged(t *testing.T) {
 		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
 	}
 }
+
+func TestReplaceTagsBitnamiShaField(t *testing.T) {
+	var replaceTagsVars cmd.ReplaceTagsVars
+	replaceTagsVars.TagSourceFile = "alertmanager_tag_source_cdx.json"
+	replaceTagsVars.TypeVal = "cyclonedx"
+	replaceTagsVars.Infile = "values_bitnami_sha_field.yaml"
+
+	replacedTags := cmd.ReplaceTags(replaceTagsVars)
+	expectedReplacement, err := os.ReadFile("expected_values_bitnami_sha_field.yaml")
+
+	if err != nil {
+		t.Fatalf("failed reading expected values file")
+	}
+	if replacedTags != string(expectedReplacement) {
+		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
+	}
+}
