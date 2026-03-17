@@ -1,38 +1,26 @@
 ![Docker Image CI](https://github.com/relizaio/rearm-cli/actions/workflows/github_actions.yml/badge.svg?branch=main)
 [![Go Report Card](https://goreportcard.com/badge/github.com/relizaio/rearm-cli)](https://goreportcard.com/report/github.com/relizaio/rearm-cli)
-# Rearm CLI
 
-This tool allows for command-line interactions with [ReARM](https://github.com/relizaio/rearm) (currently in Public Beta). ReARM is a system to manage software and (in the future) hardware releases with their Metadata, including SBOMs / xBOMs and other artifacts. We mainly support [CycloneDX](https://cyclonedx.org/) standard.
+# ReARM CLI
+This tool allows for command-line interactions with [ReARM](https://github.com/relizaio/rearm), website at [https://rearmhq.com](https://rearmhq.com). ReARM is a Release-Level Supply Chain Evidence Platform. It allows to manage software and hardware releases with their Metadata, including SBOMs / xBOMs and other security artifacts. It supports BOMs in [CycloneDX](https://cyclonedx.org/) (primarily) and [SPDX](https://spdx.org/) standards.
 
 Community forum and support is available via [Discord](https://discord.com/invite/UTxjBf9juQ) - use #rearm channel.
 
 Container image URI: registry.relizahub.com/library/rearm-cli.
 
-## Download Rearm CLI
+## Download ReARM CLI
+We're now using GitHub Releases for distribution. You can find the latest releases at https://github.com/relizaio/rearm-cli/releases.
 
-Below are the available downloads for the latest version of the Rearm CLI (26.03.10). Please download the proper package for your operating system and architecture.
 
-The CLI is distributed as a single binary. Install by unzipping it and moving it to a directory included in your system's PATH.
+## Authentication
+It is possible to set authentication data via:
+1. explicit flags (`-i` for API Key ID, `-k` for API Key, `-u` for ReARM Uri)
+2. [login command](#5-use-case-persist-rearm-credentials-in-a-config-file) 
+3. or following environment variables:
 
-[SHA256 checksums](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/sha256sums.txt)
-
-macOS: [AMD64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-darwin-amd64.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-darwin-arm64.zip)
-
-FreeBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-freebsd-arm.zip)
-
-Linux: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-amd64.zip) | [Arm](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-arm.zip) | [Arm64](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-linux-arm64.zip)
-
-OpenBSD: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-openbsd-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-openbsd-amd64.zip)
-
-Solaris: [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-solaris-amd64.zip)
-
-Windows: [32-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-windows-386.zip) | [64-bit](https://d7ge14utcyki8.cloudfront.net/rearm-download/26.03.10/rearm-26.03.10-windows-amd64.zip)
-
-It is possible to set authentication data via explicit flags, login command (see below) or following environment variables:
-
-- REARM_APIKEYID - for API Key ID
-- REARM_APIKEY - for API Key itself
-- REARM_URI - for ReARM Uri
+- `REARM_APIKEYID` - for API Key ID
+- `REARM_APIKEY` - for API Key itself
+- `REARM_URI` - for ReARM Uri
 
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
