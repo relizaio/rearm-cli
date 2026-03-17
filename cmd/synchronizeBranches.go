@@ -24,7 +24,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -73,13 +72,13 @@ var synchronizeBranchesCmd = &cobra.Command{
 			fmt.Println("Request body = ", string(jsonBody))
 		}
 
-		req := graphql.NewRequest(`
+		query := `
 			mutation synchronizeLiveBranches($synchronizeBranchInput: SynchronizeBranchInput!) {
 				synchronizeLiveBranches(synchronizeBranchInput: $synchronizeBranchInput)
 			}
-		`)
-		req.Var("synchronizeBranchInput", sbi)
-		fmt.Println(sendRequest(req, "approveReleaseProgrammatic"))
+		`
+		variables := map[string]interface{}{"synchronizeBranchInput": sbi}
+		fmt.Println(sendRequest(query, variables, "synchronizeLiveBranches"))
 	},
 }
 

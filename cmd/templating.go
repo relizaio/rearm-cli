@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,8 +12,6 @@ import (
 	"time"
 
 	"io"
-
-	"github.com/machinebox/graphql"
 )
 
 /*
@@ -659,32 +655,27 @@ func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product 
 		os.Exit(1)
 	}
 
-	client := graphql.NewClient(rearmUri + "/graphql")
-	req := graphql.NewRequest(`
+	query := `
 		query ($productName: String!, $productVersion: String, $environment: String) {
 			exportAsBomProg(productName: $productName, productVersion: $productVersion, environment: $environment)
 		}
-	`)
-	req.Var("productName", product)
-	req.Var("productVersion", version)
-	req.Var("environment", environment)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Reliza Go Client")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		req.Header.Add("Authorization", "Basic "+auth)
+	`
+	variables := map[string]interface{}{
+		"productName":    product,
+		"productVersion": version,
+		"environment":    environment,
 	}
-	applySessionToGqlRequest(req)
 
-	var respData map[string]string
-	if err := client.Run(context.Background(), req, &respData); err != nil {
+	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	return []byte(respData["exportAsBomProg"])
+	if result, ok := data["exportAsBomProg"].(string); ok {
+		return []byte(result)
+	}
+	return []byte("")
 }
 
 func getEnvironmentCycloneDxExportV1(apiKeyId string, apiKey string, environment string) []byte {
@@ -695,30 +686,23 @@ func getEnvironmentCycloneDxExportV1(apiKeyId string, apiKey string, environment
 		os.Exit(1)
 	}
 
-	client := graphql.NewClient(rearmUri + "/graphql")
-	req := graphql.NewRequest(`
+	query := `
 		query ($environment: String!) {
 			exportAsBomProgByEnv(environment: $environment)
 		}
-	`)
-	req.Var("environment", environment)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Reliza Go Client")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	`
+	variables := map[string]interface{}{"environment": environment}
 
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		req.Header.Add("Authorization", "Basic "+auth)
-	}
-	applySessionToGqlRequest(req)
-
-	var respData map[string]string
-	if err := client.Run(context.Background(), req, &respData); err != nil {
+	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	return []byte(respData["exportAsBomProgByEnv"])
+	if result, ok := data["exportAsBomProgByEnv"].(string); ok {
+		return []byte(result)
+	}
+	return []byte("")
 }
 
 type KeyValueSorted struct {

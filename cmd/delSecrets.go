@@ -18,14 +18,11 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -62,8 +59,7 @@ var deliverableGetSecrets = &cobra.Command{
 			namespace = "default"
 		}
 
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			query ($instanceUuid: ID, $instanceUri: String, $deliverableDigest: String!, $namespace: String) {
 				deliverableDownloadSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, deliverableDigest: $deliverableDigest, namespace: $namespace) {
 					login
@@ -71,22 +67,24 @@ var deliverableGetSecrets = &cobra.Command{
 					type
 				}
 			}
-		`)
-		req.Var("instanceUuid", instance)
-		req.Var("instanceUri", instanceURI)
-		req.Var("deliverableDigest", deliverableDigest)
-		req.Var("namespace", namespace)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "ReARM CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
+		`
+		variables := map[string]interface{}{
+			"instanceUuid":      instance,
+			"instanceUri":       instanceURI,
+			"deliverableDigest": deliverableDigest,
+			"namespace":         namespace,
 		}
-		applySessionToGqlRequest(req)
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
+		}
+
+		if secretData, ok := data["deliverableDownloadSecrets"].(map[string]interface{}); ok {
+			respData.Responsewrapper.Login, _ = secretData["login"].(string)
+			respData.Responsewrapper.Password, _ = secretData["password"].(string)
+			respData.Responsewrapper.Type, _ = secretData["type"].(string)
 		}
 
 		respJson, err := json.Marshal(respData)
@@ -104,28 +102,25 @@ var isInstHasSecretCertCmd = &cobra.Command{
 	Long: `Bitnami Sealed Certificate property is used to encrypt secrets for instance.
 	This command checks whether this property is configured for the particular instance.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		var respData IsHasCertRHResp
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			query ($instanceUuid: ID, $instanceUri: String) {
 				isInstanceHasSealedSecretCert(instanceUuid: $instanceUuid, instanceUri: $instanceUri)
 			}
-		`)
-		req.Var("instanceUuid", instance)
-		req.Var("instanceUri", instanceURI)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "ReARM CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
+		`
+		variables := map[string]interface{}{
+			"instanceUuid": instance,
+			"instanceUri":  instanceURI,
 		}
-		applySessionToGqlRequest(req)
 
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
+		}
+
+		var respData IsHasCertRHResp
+		if val, ok := data["isInstanceHasSealedSecretCert"].(bool); ok {
+			respData.Responsewrapper = val
 		}
 
 		jsonResp, _ := json.Marshal(respData.Responsewrapper)

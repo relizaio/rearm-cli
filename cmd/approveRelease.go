@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -68,13 +67,13 @@ var approveReleaseCmd = &cobra.Command{
 			fmt.Println("Request body = ", string(jsonBody))
 		}
 
-		req := graphql.NewRequest(`
+		query := `
 			mutation approveReleaseProgrammatic($releaseApprovals: ReleaseApprovalProgrammaticInput!) {
 				approveReleaseProgrammatic(releaseApprovals:$releaseApprovals) {` + RELEASE_GQL_DATA + `}
 			}
-		`)
-		req.Var("releaseApprovals", body)
-		fmt.Println(sendRequest(req, "approveReleaseProgrammatic"))
+		`
+		variables := map[string]interface{}{"releaseApprovals": body}
+		fmt.Println(sendRequest(query, variables, "approveReleaseProgrammatic"))
 	},
 }
 

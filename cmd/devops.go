@@ -18,15 +18,12 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -68,27 +65,25 @@ var setInstSecretCertCmd = &cobra.Command{
 	This command sets this certificate for the particular instance.
 	Only supports instance own API Key.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		var respData SetCertRHResp
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			mutation ($sealedCert: String!) {
 				setInstanceSealedSecretCert(sealedCert: $sealedCert)
 			}
-		`)
-		req.Var("sealedCert", sealedCert)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "ReARM CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
+		`
+		variables := map[string]interface{}{"sealedCert": sealedCert}
 
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
-		}
-
-		applySessionToGqlRequest(req)
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
+		}
+
+		type SetCertRHResp struct {
+			Responsewrapper bool `json:"setInstanceSealedSecretCert"`
+		}
+		var respData SetCertRHResp
+		if val, ok := data["setInstanceSealedSecretCert"].(bool); ok {
+			respData.Responsewrapper = val
 		}
 
 		jsonResp, _ := json.Marshal(respData.Responsewrapper)
@@ -110,31 +105,27 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instan
 		namespace = ""
 	}
 
-	client := graphql.NewClient(rearmUri + "/graphql")
-	req := graphql.NewRequest(`
+	query := `
 		query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String) {
 			getInstanceRevisionCycloneDxExportProg(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace)
 		}
-	`)
-	req.Var("instanceUuid", instance)
-	req.Var("instanceUri", instanceURI)
+	`
 	intRevision, _ := strconv.Atoi(revision)
-	req.Var("revision", intRevision)
-	req.Var("namespace", namespace)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ReARM CLI")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		req.Header.Add("Authorization", "Basic "+auth)
+	variables := map[string]interface{}{
+		"instanceUuid": instance,
+		"instanceUri":  instanceURI,
+		"revision":     intRevision,
+		"namespace":    namespace,
 	}
-	applySessionToGqlRequest(req)
 
-	var respData map[string]string
-	if err := client.Run(context.Background(), req, &respData); err != nil {
+	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
-	return []byte(respData["getInstanceRevisionCycloneDxExportProg"])
+
+	if result, ok := data["getInstanceRevisionCycloneDxExportProg"].(string); ok {
+		return []byte(result)
+	}
+	return []byte("")
 }

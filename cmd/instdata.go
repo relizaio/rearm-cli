@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -90,12 +89,12 @@ var instDataCmd = &cobra.Command{
 			fmt.Println(body)
 		}
 
-		req := graphql.NewRequest(`
+		query := `
 			mutation ($InstanceDataInput: InstanceDataInput!) {
 				instData(instance:$InstanceDataInput)
 			}
-		`)
-		req.Var("InstanceDataInput", body)
-		fmt.Println(sendRequest(req, "instData"))
+		`
+		variables := map[string]interface{}{"InstanceDataInput": body}
+		fmt.Println(sendRequest(query, variables, "instData"))
 	},
 }

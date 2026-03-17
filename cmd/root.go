@@ -17,7 +17,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -27,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/machinebox/graphql"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -585,13 +583,13 @@ var createComponentCmd = &cobra.Command{
 
 		body["includeApi"] = includeApi
 
-		req := graphql.NewRequest(`
+		query := `
 			mutation ($CreateComponentInput: CreateComponentInput!) {
 				createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
 			}
-		`)
-		req.Var("CreateComponentInput", body)
-		fmt.Println(sendRequest(req, "createComponentProgrammatic"))
+		`
+		variables := map[string]interface{}{"CreateComponentInput": body}
+		fmt.Println(sendRequest(query, variables, "createComponentProgrammatic"))
 	},
 }
 
@@ -704,7 +702,7 @@ var getVersionCmd = &cobra.Command{
 
 		body["onlyVersion"] = onlyVersion
 
-		req := graphql.NewRequest(`
+		query := `
 			mutation ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
@@ -712,9 +710,9 @@ var getVersionCmd = &cobra.Command{
 					releaseAlreadyExists
 				}
 			}
-		`)
-		req.Var("GetNewVersionInput", body)
-		fmt.Println(sendRequest(req, "getNewVersionProgrammatic"))
+		`
+		variables := map[string]interface{}{"GetNewVersionInput": body}
+		fmt.Println(sendRequest(query, variables, "getNewVersionProgrammatic"))
 	},
 }
 
@@ -729,37 +727,24 @@ var checkReleaseByHashCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			query ($hash: String!, $componentId: ID) {
 				getReleaseByHashProgrammatic(hash: $hash, componentId: $componentId)
 			}
-		`)
-		req.Var("hash", hash)
+		`
+		variables := map[string]interface{}{"hash": hash}
 		if len(component) > 0 {
-			req.Var("componentId", component)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "ReARM CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
+			variables["componentId"] = component
 		}
 
-		applySessionToGqlRequest(req)
-
-		var respData struct {
-			GetReleaseByHashProgrammatic *string `json:"getReleaseByHashProgrammatic"`
-		}
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
 		}
 
-		if respData.GetReleaseByHashProgrammatic != nil {
-			fmt.Println(*respData.GetReleaseByHashProgrammatic)
+		if result, ok := data["getReleaseByHashProgrammatic"].(string); ok {
+			fmt.Println(result)
 		}
 	},
 }
@@ -774,35 +759,24 @@ var releaseByVersionCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			query ($version: String!, $componentId: ID!) {
 				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
 			}
-		`)
-		req.Var("version", version)
-		req.Var("componentId", component)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "ReARM CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
+		`
+		variables := map[string]interface{}{
+			"version":     version,
+			"componentId": component,
 		}
 
-		applySessionToGqlRequest(req)
-
-		var respData struct {
-			GetReleaseByReleaseVersionProgrammatic *string `json:"getReleaseByReleaseVersionProgrammatic"`
-		}
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
 		}
 
-		if respData.GetReleaseByReleaseVersionProgrammatic != nil {
-			fmt.Println(*respData.GetReleaseByReleaseVersionProgrammatic)
+		if result, ok := data["getReleaseByReleaseVersionProgrammatic"].(string); ok {
+			fmt.Println(result)
 		}
 	},
 }
@@ -816,10 +790,10 @@ var releasecompletionfinalizerCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		req := graphql.NewRequest(`mutation releasecompletionfinalizerProgrammatic($release: ID!) { releasecompletionfinalizerProgrammatic(release: $release) }`)
-		req.Var("release", releaseId)
+		query := `mutation releasecompletionfinalizerProgrammatic($release: ID!) { releasecompletionfinalizerProgrammatic(release: $release) }`
+		variables := map[string]interface{}{"release": releaseId}
 
-		fmt.Println(sendRequest(req, "releasecompletionfinalizerProgrammatic"))
+		fmt.Println(sendRequest(query, variables, "releasecompletionfinalizerProgrammatic"))
 	},
 }
 
@@ -972,28 +946,18 @@ func init() {
 	rootCmd.AddCommand(oolongCmd)
 }
 
-func sendRequest(req *graphql.Request, endpoint string) string {
-	return sendRequestWithUri(req, endpoint, rearmUri+"/graphql")
+func sendRequest(query string, variables map[string]interface{}, endpoint string) string {
+	return sendRequestWithUri(query, variables, endpoint, rearmUri+"/graphql")
 }
 
-func sendRequestWithUri(req *graphql.Request, endpoint string, uri string) string {
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ReARM CLI")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
-	applySessionToGqlRequest(req)
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		req.Header.Add("Authorization", "Basic "+auth)
-	}
-
-	var respData map[string]interface{}
-	client := graphql.NewClient(uri)
-	if err := client.Run(context.Background(), req, &respData); err != nil {
+func sendRequestWithUri(query string, variables map[string]interface{}, endpoint string, uri string) string {
+	data, err := sendGraphQLRequest(query, variables, uri)
+	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	jsonResponse, _ := json.Marshal(respData[endpoint])
+	jsonResponse, _ := json.Marshal(data[endpoint])
 	return string(jsonResponse)
 }
 
@@ -1105,12 +1069,54 @@ func printGqlError(err error) {
 	fmt.Println("Error: ", splitError[len(splitError)-1])
 }
 
-func applySessionToGqlRequest(req *graphql.Request) {
-	session, _ := getSession()
-	if session != nil {
-		req.Header.Set("X-XSRF-TOKEN", session.XsrfToken)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId+"; XSRF-TOKEN="+session.XsrfToken)
+// GraphQLRequest represents a GraphQL request with query and variables
+type GraphQLRequest struct {
+	Query     string                 `json:"query"`
+	Variables map[string]interface{} `json:"variables"`
+}
+
+// sendGraphQLRequest sends a GraphQL request using resty and returns the response data
+func sendGraphQLRequest(query string, variables map[string]interface{}, endpoint string) (map[string]interface{}, error) {
+	gqlReq := GraphQLRequest{
+		Query:     query,
+		Variables: variables,
 	}
+
+	client := resty.New()
+	applySessionToRestyClient(client)
+	if len(apiKeyId) > 0 && len(apiKey) > 0 {
+		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+		client.SetHeader("Authorization", "Basic "+auth)
+	}
+
+	var result map[string]interface{}
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("User-Agent", "ReARM CLI").
+		SetHeader("Accept-Encoding", "gzip, deflate").
+		SetBody(gqlReq).
+		SetResult(&result).
+		Post(endpoint)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode() != 200 {
+		return nil, fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	// Check for GraphQL errors
+	if errors, ok := result["errors"]; ok {
+		errorsJSON, _ := json.Marshal(errors)
+		return nil, fmt.Errorf("GraphQL errors: %s", string(errorsJSON))
+	}
+
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+
+	return result, nil
 }
 
 func applySessionToRestyClient(client *resty.Client) {

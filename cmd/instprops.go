@@ -18,15 +18,12 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -78,8 +75,7 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 			namespace = "default"
 		}
 
-		client := graphql.NewClient(rearmUri + "/graphql")
-		req := graphql.NewRequest(`
+		query := `
 			query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String!, $properties: [String], $secrets: [String], $product: ID, $productSpecificProps: Boolean) {
 				getInstancePropSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, properties: $properties, secrets: $secrets, product: $product, productSpecificProps: $productSpecificProps) {
 					properties {
@@ -93,30 +89,56 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 					}
 				}
 			}
-		`)
+		`
 
-		req.Var("instanceUuid", instance)
-		req.Var("instanceUri", instanceURI)
 		intRevision, _ := strconv.Atoi(revision)
-		req.Var("revision", intRevision)
-		req.Var("namespace", namespace)
-		req.Var("properties", props)
-		req.Var("secrets", secrs)
-		req.Var("product", product)
-		req.Var("productSpecificProps", productSpecificProps)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "Reliza CLI")
-		req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			req.Header.Add("Authorization", "Basic "+auth)
+		variables := map[string]interface{}{
+			"instanceUuid":         instance,
+			"instanceUri":          instanceURI,
+			"revision":             intRevision,
+			"namespace":            namespace,
+			"properties":           props,
+			"secrets":              secrs,
+			"product":              product,
+			"productSpecificProps": productSpecificProps,
 		}
-		applySessionToGqlRequest(req)
 
-		if err := client.Run(context.Background(), req, &respData); err != nil {
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
+		}
+
+		if propSecrets, ok := data["getInstancePropSecrets"].(map[string]interface{}); ok {
+			if properties, ok := propSecrets["properties"].([]interface{}); ok {
+				for _, prop := range properties {
+					if p, ok := prop.(map[string]interface{}); ok {
+						key, _ := p["key"].(string)
+						value, _ := p["value"].(string)
+						respData.Responsewrapper.Properties = append(respData.Responsewrapper.Properties, ResolvedProperty{
+							Key:   key,
+							Value: value,
+						})
+					}
+				}
+			}
+			if secrets, ok := propSecrets["secrets"].([]interface{}); ok {
+				for _, secret := range secrets {
+					if s, ok := secret.(map[string]interface{}); ok {
+						key, _ := s["key"].(string)
+						value, _ := s["value"].(string)
+						var timestamp int64
+						if ts, ok := s["lastUpdated"].(float64); ok {
+							timestamp = int64(ts)
+						}
+						respData.Responsewrapper.Secrets = append(respData.Responsewrapper.Secrets, ResolvedSecret{
+							Key:       key,
+							Secret:    value,
+							Timestamp: timestamp,
+						})
+					}
+				}
+			}
 		}
 	}
 

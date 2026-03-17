@@ -18,14 +18,11 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -113,60 +110,43 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		}
 		conditionGroup.Conditions = conditions
 		body["conditions"] = conditionGroup
-
 	}
 
-	client := graphql.NewClient(rearmUri + "/graphql")
-
-	var req *graphql.Request
+	var query string
+	var endpoint string
 	if cdxOutput {
-		req = graphql.NewRequest(`
+		query = `
 			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
 				getLatestReleaseProgrammaticCdx(release:$GetLatestReleaseInput)
-			}`,
-		)
+			}
+		`
+		endpoint = "getLatestReleaseProgrammaticCdx"
 	} else {
-		req = graphql.NewRequest(`
+		query = `
 			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
 				getLatestReleaseProgrammatic(release:$GetLatestReleaseInput) {` + FULL_RELEASE_GQL_DATA + `}
-			}`,
-		)
-	}
-	req.Var("GetLatestReleaseInput", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ReARM CLI")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		req.Header.Add("Authorization", "Basic "+auth)
+			}
+		`
+		endpoint = "getLatestReleaseProgrammatic"
 	}
 
-	applySessionToGqlRequest(req)
+	variables := map[string]interface{}{"GetLatestReleaseInput": body}
 
-	if cdxOutput {
-		var respData struct {
-			GetLatestReleaseProgrammaticCdx *string `json:"getLatestReleaseProgrammaticCdx"`
-		}
-		if err := client.Run(context.Background(), req, &respData); err != nil {
-			printGqlError(err)
-			os.Exit(1)
-		}
-		jsonResponse := []byte("null")
-		if respData.GetLatestReleaseProgrammaticCdx != nil {
-			jsonResponse = []byte(*respData.GetLatestReleaseProgrammaticCdx)
-			fmt.Println(*respData.GetLatestReleaseProgrammaticCdx)
-		}
-		return jsonResponse
-	}
-
-	var respData map[string]interface{}
-	if err := client.Run(context.Background(), req, &respData); err != nil {
+	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 
-	jsonResponse, _ := json.Marshal(respData["getLatestReleaseProgrammatic"])
+	if cdxOutput {
+		if result, ok := data[endpoint].(string); ok {
+			fmt.Println(result)
+			return []byte(result)
+		}
+		return []byte("null")
+	}
+
+	jsonResponse, _ := json.Marshal(data[endpoint])
 	if string(jsonResponse) != "null" {
 		fmt.Println(string(jsonResponse))
 	}

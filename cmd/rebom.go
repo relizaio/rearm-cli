@@ -23,7 +23,6 @@ import (
 	"os"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/machinebox/graphql"
 	"github.com/spf13/cobra"
 )
 
@@ -201,17 +200,13 @@ func addBomToRebomFunc() {
 	bomInput.Meta = "sent from rearm cli"
 	bomInput.Bom = ReadBomJsonFromFile(infile)
 
-	// fmt.Println(bomInput)
-
-	req := graphql.NewRequest(`
+	query := `
 		mutation addBom ($bomInput: BomInput) {
 			addBom(bomInput: $bomInput) {
 				uuid
-				meta
 			}
 		}
-	`)
-	req.Var("bomInput", bomInput)
-	fmt.Println("adding bom...")
-	fmt.Println(sendRequestWithUri(req, "addBom", rebomUri+"/graphql"))
+	`
+	variables := map[string]interface{}{"bomInput": bomInput}
+	fmt.Println(sendRequestWithUri(query, variables, "addBom", rebomUri+"/graphql"))
 }
