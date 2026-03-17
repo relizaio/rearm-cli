@@ -112,11 +112,7 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 			req.Header.Add("Authorization", "Basic "+auth)
 		}
-		session, _ := getSession()
-		if session != nil {
-			req.Header.Set("X-CSRF-Token", session.Token)
-			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToGqlRequest(req)
 
 		if err := client.Run(context.Background(), req, &respData); err != nil {
 			printGqlError(err)

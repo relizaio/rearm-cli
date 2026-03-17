@@ -85,11 +85,7 @@ var setInstSecretCertCmd = &cobra.Command{
 			req.Header.Add("Authorization", "Basic "+auth)
 		}
 
-		session, _ := getSession()
-		if session != nil {
-			req.Header.Set("X-CSRF-Token", session.Token)
-			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToGqlRequest(req)
 		if err := client.Run(context.Background(), req, &respData); err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -133,11 +129,7 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instan
 		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 		req.Header.Add("Authorization", "Basic "+auth)
 	}
-	session, _ := getSession()
-	if session != nil {
-		req.Header.Set("X-CSRF-Token", session.Token)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToGqlRequest(req)
 
 	var respData map[string]string
 	if err := client.Run(context.Background(), req, &respData); err != nil {

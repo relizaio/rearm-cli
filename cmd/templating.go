@@ -676,11 +676,7 @@ func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product 
 		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 		req.Header.Add("Authorization", "Basic "+auth)
 	}
-	session, _ := getSession()
-	if session != nil {
-		req.Header.Set("X-CSRF-Token", session.Token)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToGqlRequest(req)
 
 	var respData map[string]string
 	if err := client.Run(context.Background(), req, &respData); err != nil {
@@ -714,11 +710,7 @@ func getEnvironmentCycloneDxExportV1(apiKeyId string, apiKey string, environment
 		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 		req.Header.Add("Authorization", "Basic "+auth)
 	}
-	session, _ := getSession()
-	if session != nil {
-		req.Header.Set("X-CSRF-Token", session.Token)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToGqlRequest(req)
 
 	var respData map[string]string
 	if err := client.Run(context.Background(), req, &respData); err != nil {

@@ -511,11 +511,7 @@ var addODeliverableCmd = &cobra.Command{
 		fileMapFd := map[string]string{"map": string(fileMapJson)}
 		// write a wrapper to send the gql upload request via post form data
 		client := resty.New()
-		session, _ := getSession()
-		if session != nil {
-			client.SetHeader("X-CSRF-Token", session.Token)
-			client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToRestyClient(client)
 		if len(apiKeyId) > 0 && len(apiKey) > 0 {
 			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 			client.SetHeader("Authorization", "Basic "+auth)
@@ -752,11 +748,7 @@ var checkReleaseByHashCmd = &cobra.Command{
 			req.Header.Add("Authorization", "Basic "+auth)
 		}
 
-		session, _ := getSession()
-		if session != nil {
-			req.Header.Set("X-CSRF-Token", session.Token)
-			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToGqlRequest(req)
 
 		var respData struct {
 			GetReleaseByHashProgrammatic *string `json:"getReleaseByHashProgrammatic"`
@@ -799,11 +791,7 @@ var releaseByVersionCmd = &cobra.Command{
 			req.Header.Add("Authorization", "Basic "+auth)
 		}
 
-		session, _ := getSession()
-		if session != nil {
-			req.Header.Set("X-CSRF-Token", session.Token)
-			req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToGqlRequest(req)
 
 		var respData struct {
 			GetReleaseByReleaseVersionProgrammatic *string `json:"getReleaseByReleaseVersionProgrammatic"`
@@ -989,19 +977,10 @@ func sendRequest(req *graphql.Request, endpoint string) string {
 }
 
 func sendRequestWithUri(req *graphql.Request, endpoint string, uri string) string {
-	session, _ := getSession()
-	// if err != nil {
-	// 	fmt.Printf("Error making API request: %s\n", err)
-	// 	os.Exit(1)
-	// }
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "ReARM CLI")
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
-	if session != nil {
-		req.Header.Set("X-CSRF-Token", session.Token)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToGqlRequest(req)
 	if len(apiKeyId) > 0 && len(apiKey) > 0 {
 		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 		req.Header.Add("Authorization", "Basic "+auth)
@@ -1126,21 +1105,35 @@ func printGqlError(err error) {
 	fmt.Println("Error: ", splitError[len(splitError)-1])
 }
 
+func applySessionToGqlRequest(req *graphql.Request) {
+	session, _ := getSession()
+	if session != nil {
+		req.Header.Set("X-XSRF-TOKEN", session.XsrfToken)
+		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId+"; XSRF-TOKEN="+session.XsrfToken)
+	}
+}
+
+func applySessionToRestyClient(client *resty.Client) {
+	session, _ := getSession()
+	if session != nil {
+		client.SetHeader("X-XSRF-TOKEN", session.XsrfToken)
+		client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId+"; XSRF-TOKEN="+session.XsrfToken)
+	}
+}
+
 func getSession() (*RequestSession, error) {
 	client := resty.New()
-	var result map[string]string
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("User-Agent", "ReARM CLI").
 		SetHeader("Accept-Encoding", "gzip, deflate").
-		SetResult(&result).
 		Get(rearmUri + "/api/manual/v1/fetchCsrf")
 
 	if err != nil {
 		return nil, err
 	}
 	// Extract cookies
-	session, err := getJSessionIDCookieAndToken(resp)
+	session, err := extractSessionCookies(resp)
 
 	if err != nil {
 		return nil, err
@@ -1149,37 +1142,26 @@ func getSession() (*RequestSession, error) {
 	return session, err
 }
 
-func getJSessionIDCookieAndToken(resp *resty.Response) (*RequestSession, error) {
-	// Extract cookies
+func extractSessionCookies(resp *resty.Response) (*RequestSession, error) {
 	cookies := resp.Cookies()
 	var jsessionid string
+	var xsrfToken string
 	for _, cookie := range cookies {
 		if cookie.Name == "JSESSIONID" {
 			jsessionid = cookie.Value
-			break
+		} else if cookie.Name == "XSRF-TOKEN" {
+			xsrfToken = cookie.Value
 		}
 	}
 
-	if jsessionid == "" {
-		return nil, fmt.Errorf("JSESSIONID cookie not found")
+	if xsrfToken == "" {
+		return nil, fmt.Errorf("XSRF-TOKEN cookie not found")
 	}
 
-	// Assume the token is returned in the response body as a JSON object
-	var result map[string]interface{}
-	err := json.Unmarshal(resp.Body(), &result)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling JSON: %s", err)
-	}
-
-	token, ok := result["token"].(string)
-	if !ok {
-		return nil, fmt.Errorf("token not found in the response body")
-	}
-
-	return &RequestSession{JSessionId: jsessionid, Token: token}, nil
+	return &RequestSession{JSessionId: jsessionid, XsrfToken: xsrfToken}, nil
 }
 
 type RequestSession struct {
 	JSessionId string
-	Token      string
+	XsrfToken  string
 }

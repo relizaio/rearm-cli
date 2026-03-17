@@ -142,11 +142,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 		req.Header.Add("Authorization", "Basic "+auth)
 	}
 
-	session, _ := getSession()
-	if session != nil {
-		req.Header.Set("X-CSRF-Token", session.Token)
-		req.Header.Set("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToGqlRequest(req)
 
 	if cdxOutput {
 		var respData struct {

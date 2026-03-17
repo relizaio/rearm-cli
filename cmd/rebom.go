@@ -156,11 +156,7 @@ func attachToRebomFunc() {
 	}
 
 	client := resty.New()
-	session, _ := getSession()
-	if session != nil {
-		client.SetHeader("X-CSRF-Token", session.Token)
-		client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId)
-	}
+	applySessionToRestyClient(client)
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("User-Agent", "ReARM CLI").

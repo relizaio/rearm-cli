@@ -208,11 +208,7 @@ Examples:
 
 		// Send request using resty
 		client := resty.New()
-		session, _ := getSession()
-		if session != nil {
-			client.SetHeader("X-CSRF-Token", session.Token)
-			client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId)
-		}
+		applySessionToRestyClient(client)
 		if len(apiKeyId) > 0 && len(apiKey) > 0 {
 			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
 			client.SetHeader("Authorization", "Basic "+auth)
