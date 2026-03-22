@@ -392,20 +392,22 @@ Flags stand for:
 - **getlatestrelease** - command that denotes we are requesting latest release data for Component or Product from ReARM
 - **-i** - flag for api id which can be either api id for this component or organization-wide read API (required).
 - **-k** - flag for api key which can be either api key for this component or organization-wide read API (required).
-- **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component api key is used, otherwise required).
-  - **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
-  - **--branch** - flag to denote required branch of chosen Component or Product (required).
-  - **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
-  - **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
-  - **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).
-  - **--approvalstate** - Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present).
-  - **--env** - Environment to obtain approvals details from (optional).
-  - **--instance** - Instance ID for which to check release (optional).
-  - **--namespace** - Namespace within instance for which to check release, only matters if instance is supplied (optional).
-  - **--tagkey** - Tag key to use for picking artifact (optional).
-  - **--tagval** - Tag value to use for picking artifact (optional).
-  - **--uptoversion** - Upper bound version to filter releases (optional). Returns latest release up to this version.
-  - **--cdx** - Output release in CycloneDX 1.6 format (optional). When set, returns a CycloneDX 1.6 BOM string instead of the default JSON object.
+- **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component API key is used, either this or combination of vcsuri and repo-path must be set).
+- **vcsuri** - flag to denote uri of vcs repository for the component (used if component API key is not used and explicit component UUID is not provided).
+- **--repo-path** - Repository path for monorepo components (optional, used in combination with vcsuri for component resolution).
+- **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
+- **--branch** - flag to denote required branch of chosen Component or Product (required).
+- **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
+- **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
+- **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).
+- **--approvalstate** - Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present).
+- **--env** - Environment to obtain approvals details from (optional).
+- **--instance** - Instance ID for which to check release (optional).
+- **--namespace** - Namespace within instance for which to check release, only matters if instance is supplied (optional).
+- **--tagkey** - Tag key to use for picking artifact (optional).
+- **--tagval** - Tag value to use for picking artifact (optional).
+- **--uptoversion** - Upper bound version to filter releases (optional). Returns latest release up to this version.
+- **--cdx** - Output release in CycloneDX 1.6 format (optional). When set, returns a CycloneDX 1.6 BOM string instead of the default JSON object.
 
 ## 5. Use Case: Persist ReARM Credentials in a Config File
 
