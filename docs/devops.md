@@ -6,6 +6,12 @@ Base Command: `devops`
 
 The `devops exportinst` command outputs the CycloneDX specification of your instance. It queries ReARM for the instance revision and returns the full CycloneDX BOM in JSON format.
 
+The **--revision** flag is what defines the type of the state (present, past, expected). It behaves is following:
+- Default value is *-1*, which means *expected* state - this will output all product and component releases that *are approved* for the specific instance.
+- The value set to *-2* means *present* state - this would output component releases currently deployed on the specific instance.
+- The value set to an actual revision obtained from Reliza Hub would output component releases deployed on that specific revision.
+
+
 Sample command using instance UUID:
 
 ```bash
