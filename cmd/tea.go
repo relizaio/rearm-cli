@@ -106,10 +106,35 @@ type TEAServerInfo struct {
 }
 
 // TEA API response structures
+
+type TEAIdentifier struct {
+	IdType  string `json:"idType"`
+	IdValue string `json:"idValue"`
+}
+
+type TEAChecksum struct {
+	AlgType  string `json:"algType"`
+	AlgValue string `json:"algValue"`
+}
+
+type TEAReleaseDistribution struct {
+	DistributionId string          `json:"distributionId"`
+	Description    string          `json:"description,omitempty"`
+	Identifiers    []TEAIdentifier `json:"identifiers,omitempty"`
+	URL            string          `json:"url,omitempty"`
+	SignatureURL   string          `json:"signatureUrl,omitempty"`
+	Checksums      []TEAChecksum   `json:"checksums,omitempty"`
+}
+
 type TEAProductRelease struct {
 	UUID        string            `json:"uuid"`
-	ProductName string            `json:"productName"`
+	Product     string            `json:"product,omitempty"`
+	ProductName string            `json:"productName,omitempty"`
 	Version     string            `json:"version"`
+	CreatedDate string            `json:"createdDate,omitempty"`
+	ReleaseDate string            `json:"releaseDate,omitempty"`
+	PreRelease  bool              `json:"preRelease,omitempty"`
+	Identifiers []TEAIdentifier   `json:"identifiers,omitempty"`
 	Components  []TEAComponentRef `json:"components"`
 }
 
@@ -119,8 +144,9 @@ type TEAComponentRef struct {
 }
 
 type TEAComponent struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
+	UUID        string          `json:"uuid"`
+	Name        string          `json:"name"`
+	Identifiers []TEAIdentifier `json:"identifiers,omitempty"`
 }
 
 type TEAComponentRelease struct {
@@ -129,29 +155,51 @@ type TEAComponentRelease struct {
 }
 
 type TEAReleaseInfo struct {
-	UUID          string `json:"uuid"`
-	ComponentName string `json:"componentName"`
-	Version       string `json:"version"`
+	UUID          string                   `json:"uuid"`
+	Component     string                   `json:"component,omitempty"`
+	ComponentName string                   `json:"componentName,omitempty"`
+	Version       string                   `json:"version"`
+	CreatedDate   string                   `json:"createdDate,omitempty"`
+	ReleaseDate   string                   `json:"releaseDate,omitempty"`
+	PreRelease    bool                     `json:"preRelease,omitempty"`
+	Identifiers   []TEAIdentifier          `json:"identifiers,omitempty"`
+	Distributions []TEAReleaseDistribution `json:"distributions,omitempty"`
 }
 
 type TEARelease struct {
 	UUID string `json:"uuid"`
 }
 
+type TEACollectionUpdateReason struct {
+	Type    string `json:"type"`
+	Comment string `json:"comment,omitempty"`
+}
+
 type TEACollection struct {
-	Artifacts []TEAArtifact `json:"artifacts"`
+	UUID         string                     `json:"uuid,omitempty"`
+	Version      int                        `json:"version,omitempty"`
+	Date         string                     `json:"date,omitempty"`
+	BelongsTo    string                     `json:"belongsTo,omitempty"`
+	UpdateReason *TEACollectionUpdateReason `json:"updateReason,omitempty"`
+	Artifacts    []TEAArtifact              `json:"artifacts"`
 }
 
 type TEAArtifact struct {
-	Type    string              `json:"type"`
-	Formats []TEAArtifactFormat `json:"formats"`
+	UUID            string              `json:"uuid"`
+	Version         int                 `json:"version,omitempty"`
+	Name            string              `json:"name,omitempty"`
+	Type            string              `json:"type"`
+	CreatedDate     string              `json:"createdDate,omitempty"`
+	DistributionIds []string            `json:"distributionIds,omitempty"`
+	Formats         []TEAArtifactFormat `json:"formats"`
 }
 
 type TEAArtifactFormat struct {
-	Description  string `json:"description,omitempty"`
-	MimeType     string `json:"mimeType"`
-	URL          string `json:"url"`
-	SignatureURL string `json:"signatureUrl,omitempty"`
+	MediaType    string        `json:"mediaType"`
+	Description  string        `json:"description,omitempty"`
+	URL          string        `json:"url,omitempty"`
+	SignatureURL string        `json:"signatureUrl,omitempty"`
+	Checksums    []TEAChecksum `json:"checksums,omitempty"`
 }
 
 // fullTeaFlowCmd represents the full_tea_flow command
@@ -746,10 +794,14 @@ func executeFullTeaFlow(tei string) error {
 		// Process artifacts in latest collection
 		if componentRelease.LatestCollection != nil {
 			for _, artifact := range componentRelease.LatestCollection.Artifacts {
-				fmt.Printf("\n  Artifact Type: %s\n", artifact.Type)
+				artifactLabel := artifact.Type
+				if artifact.Name != "" {
+					artifactLabel = fmt.Sprintf("%s (%s)", artifact.Name, artifact.Type)
+				}
+				fmt.Printf("\n  Artifact: %s\n", artifactLabel)
 				for _, format := range artifact.Formats {
 					fmt.Printf("    - Description: %s\n", format.Description)
-					fmt.Printf("      Media Type: %s\n", format.MimeType)
+					fmt.Printf("      Media Type: %s\n", format.MediaType)
 					fmt.Printf("      URL: %s\n", format.URL)
 					if format.SignatureURL != "" {
 						fmt.Printf("      Signature URL: %s\n", format.SignatureURL)
