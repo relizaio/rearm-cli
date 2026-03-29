@@ -170,6 +170,45 @@ type TEARelease struct {
 	UUID string `json:"uuid"`
 }
 
+// CLE (Common Lifecycle Enumeration) types
+
+type TEACLEVersionSpecifier struct {
+	Version string `json:"version,omitempty"`
+	Range   string `json:"range,omitempty"`
+}
+
+type TEACLEEvent struct {
+	Id                  int                      `json:"id"`
+	Type                string                   `json:"type"`
+	Effective           string                   `json:"effective"`
+	Published           string                   `json:"published"`
+	Version             string                   `json:"version,omitempty"`
+	Versions            []TEACLEVersionSpecifier `json:"versions,omitempty"`
+	SupportId           string                   `json:"supportId,omitempty"`
+	License             string                   `json:"license,omitempty"`
+	SupersededByVersion string                   `json:"supersededByVersion,omitempty"`
+	Identifiers         []TEAIdentifier          `json:"identifiers,omitempty"`
+	EventId             *int                     `json:"eventId,omitempty"`
+	Reason              string                   `json:"reason,omitempty"`
+	Description         string                   `json:"description,omitempty"`
+	References          []string                 `json:"references,omitempty"`
+}
+
+type TEACLESupportDefinition struct {
+	Id          string `json:"id"`
+	Description string `json:"description"`
+	URL         string `json:"url,omitempty"`
+}
+
+type TEACLEDefinitions struct {
+	Support []TEACLESupportDefinition `json:"support,omitempty"`
+}
+
+type TEACLE struct {
+	Events      []TEACLEEvent      `json:"events"`
+	Definitions *TEACLEDefinitions `json:"definitions,omitempty"`
+}
+
 type TEACollectionUpdateReason struct {
 	Type    string `json:"type"`
 	Comment string `json:"comment,omitempty"`
@@ -747,6 +786,11 @@ func executeFullTeaFlow(tei string) error {
 	fmt.Printf("\n=== Product Information ===\n")
 	fmt.Printf("Product Name: %s\n", productRelease.ProductName)
 	fmt.Printf("Version: %s\n", productRelease.Version)
+
+	// Fetch and display product release CLE
+	if cle, err := getCle(baseURL + "/productRelease/" + productReleaseUuid + "/cle"); err == nil && cle != nil {
+		printCLE(cle)
+	}
 	fmt.Printf("\n")
 
 	// Step 3: Process each component
@@ -791,6 +835,11 @@ func executeFullTeaFlow(tei string) error {
 		fmt.Printf("\n--- Component: %s ---\n", componentRelease.Release.ComponentName)
 		fmt.Printf("Version: %s\n", componentRelease.Release.Version)
 
+		// Fetch and display component release CLE
+		if cle, err := getCle(baseURL + "/componentRelease/" + releaseUUID + "/cle"); err == nil && cle != nil {
+			printCLE(cle)
+		}
+
 		// Process artifacts in latest collection
 		if componentRelease.LatestCollection != nil {
 			for _, artifact := range componentRelease.LatestCollection.Artifacts {
@@ -814,6 +863,73 @@ func executeFullTeaFlow(tei string) error {
 	}
 
 	return nil
+}
+
+// getCle fetches CLE data from a /cle endpoint, returning nil if unavailable or empty
+func getCle(url string) (*TEACLE, error) {
+	if debug == "true" {
+		fmt.Printf("API Call: %s\n", url)
+	}
+	client := createHTTPClient()
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var cle TEACLE
+	if err := json.NewDecoder(resp.Body).Decode(&cle); err != nil {
+		return nil, err
+	}
+	if len(cle.Events) == 0 {
+		return nil, nil
+	}
+	return &cle, nil
+}
+
+// printCLE prints CLE lifecycle events, omitting null/empty fields
+func printCLE(cle *TEACLE) {
+	fmt.Printf("  Lifecycle Events (CLE):\n")
+	for _, event := range cle.Events {
+		fmt.Printf("    [%d] type=%s effective=%s published=%s", event.Id, event.Type, event.Effective, event.Published)
+		if event.Version != "" {
+			fmt.Printf(" version=%s", event.Version)
+		}
+		if len(event.Versions) > 0 {
+			parts := []string{}
+			for _, v := range event.Versions {
+				if v.Version != "" {
+					parts = append(parts, v.Version)
+				} else if v.Range != "" {
+					parts = append(parts, v.Range)
+				}
+			}
+			if len(parts) > 0 {
+				fmt.Printf(" versions=%s", strings.Join(parts, ","))
+			}
+		}
+		if event.License != "" {
+			fmt.Printf(" license=%s", event.License)
+		}
+		if event.SupportId != "" {
+			fmt.Printf(" supportId=%s", event.SupportId)
+		}
+		if event.SupersededByVersion != "" {
+			fmt.Printf(" supersededBy=%s", event.SupersededByVersion)
+		}
+		if event.Description != "" {
+			fmt.Printf(" description=%q", event.Description)
+		}
+		if event.Reason != "" {
+			fmt.Printf(" reason=%q", event.Reason)
+		}
+		if len(event.References) > 0 {
+			fmt.Printf(" references=%s", strings.Join(event.References, ","))
+		}
+		fmt.Println()
+	}
 }
 
 // getProductRelease retrieves product release details from TEA API
