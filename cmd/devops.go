@@ -40,7 +40,7 @@ var exportInstCmd = &cobra.Command{
 	Short: "Outputs the Cyclone DX spec of your instance",
 	Long:  `Outputs the Cyclone DX spec of your instance`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cycloneBytes := getInstanceRevisionCycloneDxExportV1(apiKeyId, apiKey, instance, revision, instanceURI, namespace)
+		cycloneBytes := getInstanceRevisionCycloneDxExportV1(apiKeyId, instance, revision, instanceURI, namespace, stateType)
 		fmt.Println(string(cycloneBytes))
 	},
 }
@@ -48,7 +48,8 @@ var exportInstCmd = &cobra.Command{
 func init() {
 	exportInstCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of instance for which export from (optional)")
 	exportInstCmd.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "URI of instance for which to export from (optional)")
-	exportInstCmd.PersistentFlags().StringVar(&revision, "revision", "", "Revision of instance for which to export from (optional, default is -1)")
+	exportInstCmd.PersistentFlags().StringVar(&revision, "revision", "", "Revision of instance for which to export from (optional, default is -1 meaning current approved state)")
+	exportInstCmd.PersistentFlags().StringVar(&stateType, "statetype", "", "Instance state type: PLAN (approved/expected) or ACTUAL (currently deployed). Overrides revision-based state selection when set (optional)")
 	exportInstCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Use to define specific namespace for instance export (optional)")
 
 	setInstSecretCertCmd.PersistentFlags().StringVar(&sealedCert, "cert", "", "Sealed certificate used by the instance (required)")
@@ -91,7 +92,7 @@ var setInstSecretCertCmd = &cobra.Command{
 	},
 }
 
-func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instance string, revision string, instanceURI string, namespace string) []byte {
+func getInstanceRevisionCycloneDxExportV1(apiKeyId string, instance string, revision string, instanceURI string, namespace string, stateType string) []byte {
 	if len(instance) <= 0 && len(instanceURI) <= 0 && !strings.HasPrefix(apiKeyId, "INSTANCE__") && !strings.HasPrefix(apiKeyId, "CLUSTER__") {
 		fmt.Println("instance or instanceURI not specified!")
 		os.Exit(1)
@@ -105,9 +106,13 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instan
 		namespace = ""
 	}
 
+	if len(stateType) == 0 {
+		stateType = "PLAN"
+	}
+
 	query := `
-		query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String) {
-			getInstanceRevisionCycloneDxExportProg(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace)
+		query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String, $stateType: InstanceStateType) {
+			getInstanceRevisionCycloneDxExportProg(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, stateType: $stateType)
 		}
 	`
 	intRevision, _ := strconv.Atoi(revision)
@@ -116,6 +121,7 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, apiKey string, instan
 		"instanceUri":  instanceURI,
 		"revision":     intRevision,
 		"namespace":    namespace,
+		"stateType":    stateType,
 	}
 
 	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")

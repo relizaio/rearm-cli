@@ -41,6 +41,7 @@ func init() {
 	replaceTagsCmd.PersistentFlags().StringVar(&instance, "instance", "", "Instance UUID for which to generate tags (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "Instance URI for which to generate tags (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&revision, "revision", "", "Instance revision for which to generate tags (optional)")
+	replaceTagsCmd.PersistentFlags().StringVar(&stateType, "statetype", "", "Instance state type: PLAN (approved/expected) or ACTUAL (currently deployed). Overrides revision-based state selection when set (optional, defaults to PLAN on backend)")
 	replaceTagsCmd.PersistentFlags().StringVar(&definitionReferenceFile, "defsource", "", "Source file for definitions (optional). For helm, should be output of helm template command")
 	replaceTagsCmd.PersistentFlags().StringVar(&typeVal, "type", "cyclonedx", "Type of source tags file: cyclonedx (default) or text")
 	replaceTagsCmd.PersistentFlags().StringVar(&version, "version", "", "Product version for which to generate tags (optional - required when using product)")
@@ -68,6 +69,7 @@ var replaceTagsCmd = &cobra.Command{
 		replaceTagsVars.ApiKey = apiKey
 		replaceTagsVars.Instance = instance
 		replaceTagsVars.Revision = revision
+		replaceTagsVars.StateType = stateType
 		replaceTagsVars.InstanceURI = instanceURI
 		replaceTagsVars.Product = product
 		replaceTagsVars.Version = version
@@ -241,7 +243,7 @@ func replaceTagsOnFile(replaceTagsVars *ReplaceTagsVars, substitutionMap *map[st
 
 		// need to add provenance first, because can only write to stdout sequentially
 		if !forDiff && provenance {
-			addProvenanceToReplaceTagsOutput(outFileOpened, apiKeyId, tagSourceFile, environment, instance, instanceURI, revision, version, product)
+			addProvenanceToReplaceTagsOutput(outFileOpened, apiKeyId, tagSourceFile, environment, instance, instanceURI, revision, stateType, version, product)
 		}
 		for _, line := range parsedLines {
 			if outFileOpened != nil {
@@ -331,6 +333,7 @@ func replaceTagsOnDirectory(indir *string, outdir *string, substitutionMap *map[
 			replaceTagsVars.ApiKey = apiKey
 			replaceTagsVars.Instance = instance
 			replaceTagsVars.Revision = revision
+			replaceTagsVars.StateType = stateType
 			replaceTagsVars.InstanceURI = instanceURI
 			replaceTagsVars.Product = product
 			replaceTagsVars.Version = version
@@ -501,6 +504,7 @@ type ReplaceTagsVars struct {
 	ApiKey        string
 	Instance      string
 	Revision      string
+	StateType     string
 	InstanceURI   string
 	Product       string
 	Version       string

@@ -422,7 +422,7 @@ The first line notes the version of reliza-cli that ran the command to generate 
 well as the date the file was generated.
 The second line contains info about where the replaced tags were sourced from.
 */
-func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, tagSourceFile string, environment string, instance string, instanceURI string, revision string, version string, product string) {
+func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, tagSourceFile string, environment string, instance string, instanceURI string, revision string, stateType string, version string, product string) {
 	var provenanceLine1 string
 	var provenanceLine2 string
 
@@ -433,8 +433,11 @@ func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, t
 
 	// Second line: where tags come from, either:
 	// (tagsource file) or (environment) or (product+version)
-	// or (instance+revision) or (instanceuri+revision) , revision is optional, otherwise uses latest revision
+	// or (instance+revision/stateType) or (instanceuri+revision/stateType)
 	// or (apiKeyId suffix, if using apiKeyId+apiKey pair from instance)
+	if len(stateType) == 0 {
+		stateType = "PLAN"
+	}
 	if tagSourceFile != "" {
 		provenanceLine2 = "# According to tag source file " + tagSourceFile
 	} else if len(environment) > 0 {
@@ -443,33 +446,29 @@ func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, t
 		provenanceLine2 = "# According to product " + product + " version " + version
 	} else if len(instance) > 0 {
 		if len(revision) > 0 {
-			provenanceLine2 = "# According to revision " + revision + " of the instance " + instance
+			provenanceLine2 = "# According to " + stateType + " state, revision " + revision + " of the instance " + instance
 		} else {
-			// no revision specified, using latest
-			provenanceLine2 = "# According to latest approved images for the instance " + instance
+			provenanceLine2 = "# According to " + stateType + " state of the instance " + instance
 		}
 	} else if len(instanceURI) > 0 {
 		if len(revision) > 0 {
-			provenanceLine2 = "# According to revision " + revision + " of the instance at " + instanceURI
+			provenanceLine2 = "# According to " + stateType + " state, revision " + revision + " of the instance at " + instanceURI
 		} else {
-			// no revision specified, using latest
-			provenanceLine2 = "# According to latest approved images for the instance at " + instanceURI
+			provenanceLine2 = "# According to " + stateType + " state of the instance at " + instanceURI
 		}
 	} else if strings.HasPrefix(apiKeyId, "INSTANCE__") {
 		instUUIDFromAPIKeyId := apiKeyId[10:37] // remove first 10 chars
 		if len(revision) > 0 {
-			provenanceLine2 = "# According to revision " + revision + " of the instance " + instUUIDFromAPIKeyId
+			provenanceLine2 = "# According to " + stateType + " state, revision " + revision + " of the instance " + instUUIDFromAPIKeyId
 		} else {
-			// no revision specified, using latest
-			provenanceLine2 = "# According to latest approved images for the instance " + instUUIDFromAPIKeyId
+			provenanceLine2 = "# According to " + stateType + " state of the instance " + instUUIDFromAPIKeyId
 		}
 	} else if strings.HasPrefix(apiKeyId, "CLUSTER__") {
 		instUUIDFromAPIKeyId := apiKeyId[9:36] // remove first 9 chars
 		if len(revision) > 0 {
-			provenanceLine2 = "# According to revision " + revision + " of the instance " + instUUIDFromAPIKeyId
+			provenanceLine2 = "# According to " + stateType + " state, revision " + revision + " of the instance " + instUUIDFromAPIKeyId
 		} else {
-			// no revision specified, using latest
-			provenanceLine2 = "# According to latest approved images for the instance " + instUUIDFromAPIKeyId
+			provenanceLine2 = "# According to " + stateType + " state of the instance " + instUUIDFromAPIKeyId
 		}
 	} else {
 		// should have at least one of those things
@@ -635,7 +634,7 @@ func scanTags(replaceTagsVars ReplaceTagsVars) map[string]string {
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
 	} else if len(replaceTagsVars.Instance) > 0 || len(replaceTagsVars.InstanceURI) > 0 || strings.HasPrefix(replaceTagsVars.ApiKeyId, "INSTANCE__") || strings.HasPrefix(replaceTagsVars.ApiKeyId, "CLUSTER__") {
-		cycloneBytes := getInstanceRevisionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.ApiKey, replaceTagsVars.Instance, replaceTagsVars.Revision, replaceTagsVars.InstanceURI, replaceTagsVars.Namespace)
+		cycloneBytes := getInstanceRevisionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.Instance, replaceTagsVars.Revision, replaceTagsVars.InstanceURI, replaceTagsVars.Namespace, replaceTagsVars.StateType)
 		var bomJSON map[string]interface{}
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)

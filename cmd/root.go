@@ -58,6 +58,7 @@ var includeApi bool
 var instance string
 var instanceURI string
 var revision string
+var stateType string
 var manual bool
 var metadata string
 var modifier string

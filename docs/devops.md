@@ -6,10 +6,13 @@ Base Command: `devops`
 
 The `devops exportinst` command outputs the CycloneDX specification of your instance. It queries ReARM for the instance revision and returns the full CycloneDX BOM in JSON format.
 
-The **--revision** flag is what defines the type of the state (present, past, expected). It behaves is following:
-- Default value is *-1*, which means *expected* state - this will output all product and component releases that *are approved* for the specific instance.
-- The value set to *-2* means *present* state - this would output component releases currently deployed on the specific instance.
-- The value set to an actual revision obtained from Reliza Hub would output component releases deployed on that specific revision.
+The **--statetype** flag controls which state of the instance is exported:
+- Default value is *PLAN* - outputs all product and component releases that are *approved* (expected) for the instance.
+- Set to *ACTUAL* to output component releases *currently deployed* on the instance.
+
+The **--revision** flag selects a specific historical revision and can be combined with `--statetype`:
+- Default value is *-1*, which means the current state (latest approved or latest deployed, depending on `--statetype`).
+- Set to a specific revision number obtained from ReARM to retrieve data for that exact revision.
 
 
 Sample command using instance UUID:
@@ -32,6 +35,17 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     --instanceuri "instance-uri"
 ```
 
+Sample command for ACTUAL (currently deployed) state:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops exportinst \
+    -i instance_api_id \
+    -k instance_api_key \
+    --instance "instance-uuid" \
+    --statetype ACTUAL
+```
+
 Sample command with specific revision and namespace:
 
 ```bash
@@ -41,6 +55,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     -k instance_api_key \
     --instance "instance-uuid" \
     --revision 3 \
+    --statetype PLAN \
     --namespace "production"
 ```
 
@@ -58,7 +73,8 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
 **Flags:**
 - **--instance** - Instance UUID (required unless instanceuri is provided or an instance/cluster API key is used)
 - **--instanceuri** - Instance URI, alternative to instance UUID (optional)
-- **--revision** - Instance revision number (optional, defaults to latest revision if not specified)
+- **--revision** - Instance revision number (optional, default is -1 meaning current state)
+- **--statetype** - Instance state type: `PLAN` (approved/expected, default) or `ACTUAL` (currently deployed). Can be combined with `--revision` (optional)
 - **--namespace** - Namespace within the instance (optional)
 
 **Output:**
@@ -160,7 +176,8 @@ docker run --rm \
 - **--env** - Environment for which to generate tags (optional)
 - **--instance** - Instance UUID for which to generate tags (optional)
 - **--instanceuri** - Instance URI for which to generate tags (optional)
-- **--revision** - Instance revision for which to generate tags (optional)
+- **--revision** - Instance revision for which to generate tags (optional, default is -1 meaning current state)
+- **--statetype** - Instance state type: `PLAN` (approved/expected, default) or `ACTUAL` (currently deployed). Can be combined with `--revision` (optional)
 - **--namespace** - Specific namespace for replace tagging (optional)
 - **--product** - UUID or Name of product for which to generate tags (optional)
 - **--version** - Product version for which to generate tags (optional, required when using product)
