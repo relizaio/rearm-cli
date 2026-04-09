@@ -64,6 +64,7 @@ It is possible to set authentication data via:
     6. [Get Deliverable Download Secrets](docs/devops.md#156-get-deliverable-download-secrets)
     7. [Check if Instance Has Sealed Secret Certificate](docs/devops.md#157-check-if-instance-has-sealed-secret-certificate)
     8. [Send Deployment Metadata From Instance](docs/devops.md#158-send-deployment-metadata-from-instance)
+16. [Probe SBOM](#16-use-case-probe-sbom)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -857,6 +858,65 @@ All artifact objects follow the same format as in `addrelease`:
 ## 15. Use Case: DevOps Commands
 Base Command: `devops`
 See [devops documentation](docs/devops.md)
+
+---
+
+## 16. Use Case: Probe SBOM
+
+This use case submits an SBOM file to ReARM for security probing via Dependency-Track. The command is asynchronous: it submits the SBOM, then polls every 10 seconds until probing is complete, displaying a spinner in the meantime.
+
+On completion, integer security metrics are printed as JSON. Use `--debug true` to print the full metrics payload including strings, booleans, and vulnerability/violation/weakness details.
+
+Sample command:
+
+```
+rearm-cli probesbom -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
+  --infile sbom.json
+```
+
+With optional component and branch scope:
+
+```
+rearm-cli probesbom -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
+  --infile sbom.json \
+  --componentuuid $COMPONENT_UUID \
+  --branchuuid $BRANCH_UUID
+```
+
+**Flags:**
+
+- **-i** - API Key ID (required).
+- **-k** - API Key Secret (required).
+- **-u** - ReARM server URI (required).
+- **--infile** - Path to the SBOM file to probe (required). Supports CycloneDX and SPDX formats.
+- **--componentuuid** - Component UUID to scope the probing run (optional).
+- **--branchuuid** - Branch UUID to scope the probing run (optional).
+- **-d** / **--debug** - Set to `true` to print the full metrics JSON including all string, boolean, and nested vulnerability/violation/weakness details (optional, default `false`).
+
+**Normal output** (integer fields only):
+
+```json
+{
+  "critical": 2,
+  "high": 5,
+  "medium": 12,
+  "low": 3,
+  "unassigned": 0,
+  "vulnerabilities": 22,
+  "vulnerableComponents": 8,
+  "components": 134,
+  "suppressed": 1,
+  "findingsTotal": 22,
+  "findingsAudited": 0,
+  "findingsUnaudited": 22,
+  "inheritedRiskScore": 47,
+  "policyViolationsTotal": 0
+}
+```
+
+Fields with `null` values are omitted from the normal output.
+
+**Debug output** includes the complete `DependencyTrackMetrics` object with all fields, including `dependencyTrackFullUri`, submission status, scan timestamps, and full vulnerability/violation/weakness details with aliases and severity sources.
 
 ---
 
