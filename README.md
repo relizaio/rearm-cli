@@ -863,6 +863,8 @@ See [devops documentation](docs/devops.md)
 
 ## 16. Use Case: Probe SBOM
 
+N.B. This use-case is currently in preview (demo-only) mode, not enabled by default in any ReARM distribution.
+
 This use case submits an SBOM file to ReARM for security probing via Dependency-Track. The command is asynchronous: it submits the SBOM, then polls every 10 seconds until probing is complete, displaying a spinner in the meantime.
 
 On completion, integer security metrics are printed as JSON. Use `--debug true` to print the full metrics payload including strings, booleans, and vulnerability/violation/weakness details.
