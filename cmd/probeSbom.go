@@ -21,10 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 )
+
+const maxRetries = 3
+const timeoutPerAttempt = 60 * time.Minute
 
 var (
 	sbomComponentUuid string
@@ -197,7 +201,7 @@ Example:
 }
 
 func probeSbomFunc() {
-	// Read SBOM file
+	// Read SBOM file once — shared across retries
 	sbomBytes, err := os.ReadFile(infile)
 	if err != nil {
 		fmt.Println("Error reading SBOM file:", err)
@@ -210,6 +214,23 @@ func probeSbomFunc() {
 		fmt.Println("Submitting SBOM probe for", infile)
 	}
 
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			fmt.Printf("Retrying (attempt %d of %d)...\n", attempt, maxRetries)
+		}
+		if err := runProbeAttempt(sbomContent); err == nil {
+			return
+		} else {
+			fmt.Println("Error:", err)
+			if attempt == maxRetries {
+				fmt.Println("All retries exhausted.")
+				os.Exit(1)
+			}
+		}
+	}
+}
+
+func runProbeAttempt(sbomContent string) error {
 	// Step 1: Submit SBOM for probing
 	mutation := `
 		mutation probeSbomProgrammatic($sbom: String!, $componentUuid: ID, $branchUuid: ID) {
@@ -231,45 +252,56 @@ func probeSbomFunc() {
 
 	data, err := sendGraphQLRequest(mutation, variables, rearmUri+"/graphql")
 	if err != nil {
-		printGqlError(err)
-		os.Exit(1)
+		return fmt.Errorf("submission failed: %w", err)
 	}
 
-	// Parse the run ID
 	runData, ok := data["probeSbomProgrammatic"]
 	if !ok {
-		fmt.Println("Error: unexpected response from probeSbomProgrammatic")
-		os.Exit(1)
+		return fmt.Errorf("unexpected response from probeSbomProgrammatic")
 	}
 	runBytes, _ := json.Marshal(runData)
 	var probingRun SbomProbingRun
 	if err := json.Unmarshal(runBytes, &probingRun); err != nil {
-		fmt.Println("Error parsing probing run response:", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing probing run response: %w", err)
 	}
 
 	if debug == "true" {
 		fmt.Println("Probing run ID:", probingRun.RunId, "initial status:", probingRun.Status)
 	}
 
-	// Step 2: Spinner goroutine while polling
+	// Step 2: Spinner goroutine with dynamic message
 	done := make(chan struct{})
+	var once sync.Once
+	stopSpinner := func() {
+		once.Do(func() {
+			close(done)
+			time.Sleep(200 * time.Millisecond) // let goroutine clear the line
+		})
+	}
+	defer stopSpinner()
+
+	var spinnerMsg = "Analyzing..."
+	var spinnerMu sync.Mutex
+
 	go func() {
 		symbols := []string{"|", "/", "-", "\\"}
 		i := 0
 		for {
 			select {
 			case <-done:
-				fmt.Print("\r                                          \r") // clear spinner line
+				fmt.Print("\r                                                    \r")
 				return
 			case <-time.After(1 * time.Second):
-				fmt.Printf("\rWaiting for SBOM probing result... %s", symbols[i%4])
+				spinnerMu.Lock()
+				msg := spinnerMsg
+				spinnerMu.Unlock()
+				fmt.Printf("\r%-50s %s", msg, symbols[i%4])
 				i++
 			}
 		}
 	}()
 
-	// Step 3: Poll every 10 seconds
+	// Step 3: Poll every 10 seconds with 60-minute deadline
 	pollQuery := `
 		query getSbomProbingResult($runId: String!) {
 			getSbomProbingResult(runId: $runId) {
@@ -331,43 +363,53 @@ func probeSbomFunc() {
 		"runId": probingRun.RunId,
 	}
 
+	deadline := time.After(timeoutPerAttempt)
+
 	for {
+		// Check deadline before sleeping
+		select {
+		case <-deadline:
+			stopSpinner()
+			return fmt.Errorf("timed out after 60 minutes waiting for probing result")
+		default:
+		}
+
 		time.Sleep(10 * time.Second)
+
+		// Check deadline again after sleep
+		select {
+		case <-deadline:
+			stopSpinner()
+			return fmt.Errorf("timed out after 60 minutes waiting for probing result")
+		default:
+		}
 
 		pollData, err := sendGraphQLRequest(pollQuery, pollVars, rearmUri+"/graphql")
 		if err != nil {
-			close(done)
-			time.Sleep(200 * time.Millisecond) // let spinner clear
-			printGqlError(err)
-			os.Exit(1)
+			stopSpinner()
+			return fmt.Errorf("poll failed: %w", err)
 		}
 
 		resultRaw, ok := pollData["getSbomProbingResult"]
 		if !ok {
-			close(done)
-			time.Sleep(200 * time.Millisecond)
-			fmt.Println("Error: unexpected response from getSbomProbingResult")
-			os.Exit(1)
+			stopSpinner()
+			return fmt.Errorf("unexpected response from getSbomProbingResult")
 		}
 
 		resultBytes, _ := json.Marshal(resultRaw)
 		var probingResult SbomProbingResult
 		if err := json.Unmarshal(resultBytes, &probingResult); err != nil {
-			close(done)
-			time.Sleep(200 * time.Millisecond)
-			fmt.Println("Error parsing probing result:", err)
-			os.Exit(1)
+			stopSpinner()
+			return fmt.Errorf("error parsing probing result: %w", err)
 		}
 
-		if probingResult.Status == "DONE" {
-			close(done)
-			time.Sleep(200 * time.Millisecond) // let spinner goroutine clear the line
-
+		switch probingResult.Status {
+		case "DONE":
+			stopSpinner()
 			if probingResult.Metrics == nil {
 				fmt.Println("{}")
-				return
+				return nil
 			}
-
 			if debug == "true" {
 				metricsJSON, _ := json.MarshalIndent(probingResult.Metrics, "", "  ")
 				fmt.Println(string(metricsJSON))
@@ -406,8 +448,18 @@ func probeSbomFunc() {
 				outJSON, _ := json.Marshal(out)
 				fmt.Println(string(outJSON))
 			}
-			return
+			return nil
+		case "FAILED":
+			stopSpinner()
+			return fmt.Errorf("probing run failed (status: FAILED)")
+		case "ENRICHING":
+			spinnerMu.Lock()
+			spinnerMsg = "Enriching..."
+			spinnerMu.Unlock()
+		default: // PENDING or unknown
+			spinnerMu.Lock()
+			spinnerMsg = "Analyzing..."
+			spinnerMu.Unlock()
 		}
-		// Still PENDING — continue polling
 	}
 }
