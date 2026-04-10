@@ -38,7 +38,7 @@ var (
 	skipPatterns []string
 )
 
-const bearBatchSize = 3
+const bearBatchSize = 10
 
 var enrichSupplierCmd = &cobra.Command{
 	Use:   "enrichsupplier",
