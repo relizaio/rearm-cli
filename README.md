@@ -65,6 +65,7 @@ It is possible to set authentication data via:
     7. [Check if Instance Has Sealed Secret Certificate](docs/devops.md#157-check-if-instance-has-sealed-secret-certificate)
     8. [Send Deployment Metadata From Instance](docs/devops.md#158-send-deployment-metadata-from-instance)
 16. [Probe SBOM](#16-use-case-probe-sbom)
+17. [Download Artifact](#17-use-case-download-artifact)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -919,6 +920,56 @@ rearm-cli probesbom -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
 Fields with `null` values are omitted from the normal output.
 
 **Debug output** includes the complete `DependencyTrackMetrics` object with all fields, including `dependencyTrackFullUri`, submission status, scan timestamps, and full vulnerability/violation/weakness details with aliases and severity sources.
+
+---
+
+## 17. Use Case: Download Artifact
+
+N.B. This use-case is currently in preview (demo-only) mode, not enabled by default in any ReARM distribution.
+
+Download an artifact from ReARM to a local directory. By default downloads the processed BOM artifact; use `--raw` to download the raw (unprocessed) artifact instead.
+
+The output filename is taken from the `Content-Disposition` header returned by the server. Use `--outfile` to override it with a custom filename.
+
+Sample command:
+
+```
+rearm-cli downloadartifact -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
+  --artifactuuid $ARTIFACT_UUID \
+  --outdirectory ./downloads
+```
+
+Download raw artifact with a custom filename:
+
+```
+rearm-cli downloadartifact -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
+  --artifactuuid $ARTIFACT_UUID \
+  --outdirectory ./downloads \
+  --raw --outfile my-sbom.json
+```
+
+Download a specific artifact version:
+
+```
+rearm-cli downloadartifact -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
+  --artifactuuid $ARTIFACT_UUID \
+  --outdirectory ./downloads \
+  --version 2
+```
+
+**Flags:**
+
+- **-i** - API Key ID (required).
+- **-k** - API Key Secret (required).
+- **-u** - ReARM server URI (required).
+- **--artifactuuid** - UUID of the artifact to download (required).
+- **--outdirectory** - Path to the directory where the file will be written (required). Created automatically if it does not exist.
+- **--outfile** - Override the output filename (optional). Default is the filename from the server's `Content-Disposition` header.
+- **--raw** - Download the raw (unprocessed) artifact instead of the processed BOM (optional, default `false`).
+- **--version** - Specific artifact version to download (optional, default is latest).
+- **-d** / **--debug** - Set to `true` to print the resolved URL, `Content-Disposition` header, and filename (optional).
+
+**Output:** Prints the full path of the written file on success.
 
 ---
 
