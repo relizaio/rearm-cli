@@ -50,6 +50,7 @@ var (
 	createComponentIfMissing           bool
 	createComponentVersionSchema       string
 	createComponentBranchVersionSchema string
+	createComponentName                string
 	rebuildRelease                     bool
 	vcsDisplayName                     string
 )
@@ -429,6 +430,9 @@ var addreleaseCmd = &cobra.Command{
 			if len(createComponentBranchVersionSchema) > 0 {
 				body["createComponentFeatureBranchVersionSchema"] = createComponentBranchVersionSchema
 			}
+			if len(createComponentName) > 0 {
+				body["createComponentName"] = createComponentName
+			}
 		}
 		if len(odelId) > 0 {
 			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
@@ -556,6 +560,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
+	addreleaseCmd.PersistentFlags().StringVar(&createComponentName, "createcomponent-name", "", "(Optional) Display name for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().BoolVar(&rebuildRelease, "rebuild", false, "(Optional) Allow rebuilding release on repeated CI reruns. Default is false.")
 	rootCmd.AddCommand(addreleaseCmd)
 }

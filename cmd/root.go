@@ -627,6 +627,9 @@ var getVersionCmd = &cobra.Command{
 			if len(createComponentBranchVersionSchema) > 0 {
 				body["createComponentFeatureBranchVersionSchema"] = createComponentBranchVersionSchema
 			}
+			if len(createComponentName) > 0 {
+				body["createComponentName"] = createComponentName
+			}
 		}
 		if len(modifier) > 0 {
 			body["modifier"] = modifier
@@ -922,6 +925,7 @@ func init() {
 	getVersionCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
+	getVersionCmd.PersistentFlags().StringVar(&createComponentName, "createcomponent-name", "", "(Optional) Display name for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
