@@ -133,7 +133,8 @@ Flags stand for:
 - **--vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. As with vcsuri, this flag is needed if we want to set a commit for the release. However, soon it will be needed only if the vcs uri is not yet set for the component.
 - **--commit** - flag to denote vcs commit id or hash (optional). This is needed to provide source code entry metadata into the release.
 - **--commitmessage** - flag to denote vcs commit message (optional). Alongside *commit* flag this would be used to provide source code entry metadata into the release.
-- **--commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release.
+- **--commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release. Mutually exclusive with *--commitsfile*.
+- **--commitsfile** - path to a file containing the same base64-encoded commits payload as *--commits* (optional). Useful in CI environments where the shell's maximum argument length would be exceeded by passing the full string on the command line. Mutually exclusive with *--commits*.
 - **--date** - flag to denote date time with timezone when commit was made, iso strict formatting with timezone is required, i.e. for git use git log --date=iso-strict (optional).
 - **--vcstag** - flag to denote vcs tag (optional). This is needed to include vcs tag into commit, if present.
 - **--metadata** - flag to set version metadata (optional). This may be semver metadata or custom version schema metadata.
@@ -278,7 +279,8 @@ Flags stand for:
 - **vcsuri** - flag to denote vcs uri (optional). Currently this flag is needed if we want to set a commit for the release. However, soon it will be needed only if the vcs uri is not yet set for the component.
 - **commit** - flag to denote vcs commit id or hash (optional). This is needed to provide source code entry metadata into the release.
 - **commitmessage** - flag to denote vcs commit subject (optional). Alongside *commit* flag this would be used to provide source code entry metadata into the release.
-- **commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release.
+- **commits** - flag to provide base64-encoded list of commits in the format *git log --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' | base64 -w 0* (optional). If *commit* flag is not set, top commit will be used as commit bound to release. Mutually exclusive with *--commitsfile*.
+- **commitsfile** - path to a file containing the same base64-encoded commits payload as *--commits* (optional). Useful in CI environments where the shell's maximum argument length would be exceeded by passing the full string on the command line. Mutually exclusive with *--commits*.
 - **scearts** - flag to denote metadata Artifacts set on Source Code Entry - or commit (optional). Expects JSON Array representation, with Keys for each object: type, bomFormat, filePath. Sample entry:
 ```json
 [{"bomFormat": "CYCLONEDX","type": "BOM","filePath": "./fs.cdx.bom.json"}]
@@ -526,7 +528,8 @@ Flags stand for:
 - **--component** - flag to specify component uuid, which can be obtained from the component settings on ReARM UI (either this flag, vcsuri, or component's API key must be used).
 - **--vcsuri** - URI of VCS repository for VCS-based component resolution (optional, alternative to component UUID).
 - **--repo-path** - Repository path for monorepo components (optional, use with vcsuri when multiple components share one repository).
-- **--livebranches** - base64'd list of git branches, for local branches use `git branch --format=\"%(refname)\" | base64 -w 0` to obtain, for remote branches use `git branch -r --format=\"%(refname)\" | base64 -w 0`. Choose between local and remote branches based on your CI context.
+- **--livebranches** - base64'd list of git branches, for local branches use `git branch --format=\"%(refname)\" | base64 -w 0` to obtain, for remote branches use `git branch -r --format=\"%(refname)\" | base64 -w 0`. Choose between local and remote branches based on your CI context. Mutually exclusive with *--livebranchesfile*.
+- **--livebranchesfile** - path to a file containing the same base64-encoded live branches payload as *--livebranches*. Useful for repositories with many branches where the shell's maximum argument length would be exceeded. Mutually exclusive with *--livebranches*. Example: `git branch -r --format="%(refname)" | base64 -w 0 > branches.b64` then `--livebranchesfile branches.b64`.
 
 
 ## 8. Use Case: Add Outbound Deliverables to Release
