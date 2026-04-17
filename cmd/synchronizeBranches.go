@@ -28,6 +28,7 @@ import (
 )
 
 var rawBranchesBase64 string
+var rawBranchesBase64File string
 
 type SynchronizeBranchInput struct {
 	Component    string   `json:"component,omitempty"`
@@ -44,6 +45,23 @@ var synchronizeBranchesCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM instance at", rearmUri)
+		}
+
+		if rawBranchesBase64File != "" {
+			if rawBranchesBase64 != "" {
+				fmt.Println("Error: --livebranches and --livebranchesfile are mutually exclusive; specify only one.")
+				os.Exit(1)
+			}
+			data, err := os.ReadFile(rawBranchesBase64File)
+			if err != nil {
+				fmt.Printf("Error reading livebranchesfile %s: %v\n", rawBranchesBase64File, err)
+				os.Exit(1)
+			}
+			rawBranchesBase64 = strings.TrimSpace(string(data))
+		}
+		if rawBranchesBase64 == "" {
+			fmt.Println("Error: either --livebranches or --livebranchesfile must be provided.")
+			os.Exit(1)
 		}
 
 		plainBranches, err := base64.StdEncoding.DecodeString(rawBranchesBase64)
@@ -86,7 +104,7 @@ func init() {
 	synchronizeBranchesCmd.PersistentFlags().StringVar(&component, "component", "", "UUID of component for which we are performing synchronization. Either this UUID, vcsuri, or API key belonging to specific component must be provided.")
 	synchronizeBranchesCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository for VCS-based component resolution (optional)")
 	synchronizeBranchesCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
-	synchronizeBranchesCmd.PersistentFlags().StringVar(&rawBranchesBase64, "livebranches", "", "Live branches of components in base64, use `git branch --format=\"%(refname)\" | base64 -w 0` or `git branch -r --format=\"%(refname)\" | base64 -w 0` to obtain")
-	synchronizeBranchesCmd.MarkPersistentFlagRequired("livebranches")
+	synchronizeBranchesCmd.PersistentFlags().StringVar(&rawBranchesBase64, "livebranches", "", "Live branches of components in base64, use `git branch --format=\"%(refname)\" | base64 -w 0` or `git branch -r --format=\"%(refname)\" | base64 -w 0` to obtain. Mutually exclusive with --livebranchesfile.")
+	synchronizeBranchesCmd.PersistentFlags().StringVar(&rawBranchesBase64File, "livebranchesfile", "", "Path to a file containing the same base64-encoded live branches as --livebranches. Useful when the branches payload exceeds the shell's max argument size. Mutually exclusive with --livebranches.")
 	rootCmd.AddCommand(synchronizeBranchesCmd)
 }

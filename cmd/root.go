@@ -43,6 +43,7 @@ var cfgFile string
 var commit string
 var commitMessage string
 var commits string // base64-encoded list of commits obtained with: git log $LATEST_COMMIT..$CURRENT_COMMIT --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0
+var commitsFile string // path to a file containing the base64-encoded commits string (alternative to --commits for large inputs)
 var dateActual string
 var dateStart []string
 var dateEnd []string
@@ -604,6 +605,8 @@ var getVersionCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
+		resolveCommitsInput()
+
 		body := map[string]interface{}{"branch": branch}
 		if len(component) > 0 {
 			body["component"] = component
@@ -917,7 +920,8 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	getVersionCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id (required to create Source Code Entry for new release)")
 	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
-	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional)")
+	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional). Mutually exclusive with --commitsfile.")
+	getVersionCmd.PersistentFlags().StringVar(&commitsFile, "commitsfile", "", "Path to a file containing the same base64-encoded list of commits as --commits. Useful when the commits payload exceeds the shell's max argument size. Mutually exclusive with --commits.")
 	getVersionCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
 	getVersionCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
 	getVersionCmd.PersistentFlags().BoolVar(&manual, "manual", false, "(Optional) Set --manual flag to indicate a manual release.")
@@ -1067,6 +1071,25 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 			cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val))
 		}
 	})
+}
+
+// resolveCommitsInput validates and loads the --commits / --commitsfile inputs.
+// If --commitsfile is set, it reads the file contents into the commits variable.
+// It errors out if both flags are set at once.
+func resolveCommitsInput() {
+	if commitsFile == "" {
+		return
+	}
+	if commits != "" {
+		fmt.Println("Error: --commits and --commitsfile are mutually exclusive; specify only one.")
+		os.Exit(1)
+	}
+	data, err := os.ReadFile(commitsFile)
+	if err != nil {
+		fmt.Printf("Error reading commitsfile %s: %v\n", commitsFile, err)
+		os.Exit(1)
+	}
+	commits = strings.TrimSpace(string(data))
 }
 
 func printGqlError(err error) {

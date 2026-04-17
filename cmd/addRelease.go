@@ -394,6 +394,8 @@ var addreleaseCmd = &cobra.Command{
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
+
+		resolveCommitsInput()
 		locationMap := make(map[string][]string)
 		filesMap := make(map[string]interface{})
 		filesCounter := 0
@@ -532,7 +534,8 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	addreleaseCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id")
 	addreleaseCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
-	addreleaseCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional)")
+	addreleaseCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional). Mutually exclusive with --commitsfile.")
+	addreleaseCmd.PersistentFlags().StringVar(&commitsFile, "commitsfile", "", "Path to a file containing the same base64-encoded list of commits as --commits. Useful when the commits payload exceeds the shell's max argument size. Mutually exclusive with --commits.")
 	addreleaseCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
 	addreleaseCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelId, "odelid", []string{}, "Deliverable ID (multiple allowed)")
