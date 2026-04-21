@@ -72,6 +72,7 @@ var rearmUri string
 var component string
 var componentName string
 var componentType string
+var perspective string
 var lifecycle string
 var stripBom string
 
@@ -585,13 +586,26 @@ var createComponentCmd = &cobra.Command{
 
 		body["includeApi"] = includeApi
 
-		query := `
-			mutation ($CreateComponentInput: CreateComponentInput!) {
-				createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
-			}
-		`
+		var query string
 		variables := map[string]interface{}{"CreateComponentInput": body}
-		fmt.Println(sendRequest(query, variables, "createComponentProgrammatic"))
+		var opName string
+		if len(perspective) > 0 {
+			query = `
+				mutation ($CreateComponentInput: CreateComponentInput!, $perspectiveUuid: ID!) {
+					createComponentInPerspectiveProgrammatic(component:$CreateComponentInput, perspectiveUuid:$perspectiveUuid) {` + COMPONENT_GQL_DATA + `}
+				}
+			`
+			variables["perspectiveUuid"] = perspective
+			opName = "createComponentInPerspectiveProgrammatic"
+		} else {
+			query = `
+				mutation ($CreateComponentInput: CreateComponentInput!) {
+					createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
+				}
+			`
+			opName = "createComponentProgrammatic"
+		}
+		fmt.Println(sendRequest(query, variables, opName))
 	},
 }
 
@@ -905,6 +919,7 @@ func init() {
 	createComponentCmd.PersistentFlags().StringVar(&vcsName, "vcsname", "", "Name of vcs repository (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of vcs type (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().BoolVar(&includeApi, "includeapi", false, "(Optional) Set --includeapi flag to create and return api key and id for created component during command")
+	createComponentCmd.PersistentFlags().StringVar(&perspective, "perspective", "", "(Optional) UUID of perspective to atomically assign the new component to. Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it).")
 
 	// flags for get version command
 	getVersionCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
