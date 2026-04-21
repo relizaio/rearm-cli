@@ -324,6 +324,7 @@ Sample entry for external storage:
 - **--createcomponent-version-schema** - version schema for the new component (optional). Only used with `--createcomponent`. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, custom based on options in Reliza Versioning (see [here](https://github.com/relizaio/versioning?tab=readme-ov-file#25-known-version-elements)). **Requires organization-wide read-write API key.**
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
 - **--createcomponent-name** - display name for the new component (optional). Only used with `--createcomponent`. If not set, ReARM will derive the name from the VCS URI. **Requires organization-wide read-write API key.**
+- **--perspective** - perspective UUID (optional). When supplied together with `--createcomponent` and the component does not yet exist, the auto-created component is assigned to this perspective. Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it). Ignored when the component already exists. FREEFORM keys may also be used without `--perspective` to reach existing components whose scope (organization, perspective, or component) is covered by the key's permissions.
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
@@ -496,6 +497,21 @@ Flags stand for:
 - **vcstype** - flag to denote type of vcs to create for component. Supported values: git, svn, mercurial (required if ReARM cannot parse uri).
 - **includeapi** - boolean flag to return component api key and id of newly created component (optional). Default is false.
 - **--repo-path** - Repository path for monorepo components (optional).
+- **--perspective** - perspective UUID (optional). When supplied, the component is atomically created and assigned to the given perspective via the `createComponentInPerspectiveProgrammatic` mutation. **Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it)** — organization-wide keys are not sufficient for this path.
+
+Sample command to create a component directly under a perspective:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    createcomponent    \
+    -i freeform_api_id    \
+    -k freeform_api_key    \
+    --name myapp    \
+    --type component    \
+    --versionschema semver    \
+    --vcsuri github.com/myorg/myapp    \
+    --perspective 4b272da8-2fea-4f13-a6a4-8e6e746c6e86
+```
 
 ## 7. Use Case: Synchronize Live Git Branches with ReARM
 

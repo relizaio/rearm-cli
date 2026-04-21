@@ -72,6 +72,7 @@ var rearmUri string
 var component string
 var componentName string
 var componentType string
+var perspective string
 var lifecycle string
 var stripBom string
 
@@ -84,6 +85,7 @@ var tagVal string
 var tagsArr []string
 var version string
 var versionSchema string
+var versionPin string
 var vcsName string
 var vcsTag string
 var vcsType string
@@ -585,13 +587,26 @@ var createComponentCmd = &cobra.Command{
 
 		body["includeApi"] = includeApi
 
-		query := `
-			mutation ($CreateComponentInput: CreateComponentInput!) {
-				createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
-			}
-		`
+		var query string
 		variables := map[string]interface{}{"CreateComponentInput": body}
-		fmt.Println(sendRequest(query, variables, "createComponentProgrammatic"))
+		var opName string
+		if len(perspective) > 0 {
+			query = `
+				mutation ($CreateComponentInput: CreateComponentInput!, $perspectiveUuid: ID!) {
+					createComponentInPerspectiveProgrammatic(component:$CreateComponentInput, perspectiveUuid:$perspectiveUuid) {` + COMPONENT_GQL_DATA + `}
+				}
+			`
+			variables["perspectiveUuid"] = perspective
+			opName = "createComponentInPerspectiveProgrammatic"
+		} else {
+			query = `
+				mutation ($CreateComponentInput: CreateComponentInput!) {
+					createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
+				}
+			`
+			opName = "createComponentProgrammatic"
+		}
+		fmt.Println(sendRequest(query, variables, opName))
 	},
 }
 
@@ -644,8 +659,8 @@ var getVersionCmd = &cobra.Command{
 			body["action"] = action
 		}
 
-		if len(versionSchema) > 0 {
-			body["versionSchema"] = versionSchema
+		if len(versionPin) > 0 {
+			body["versionSchema"] = versionPin
 		}
 
 		if commit != "" || commitMessage != "" {
@@ -905,6 +920,7 @@ func init() {
 	createComponentCmd.PersistentFlags().StringVar(&vcsName, "vcsname", "", "Name of vcs repository (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of vcs type (Optional - required if creating new vcs repository and uri cannot be parsed)")
 	createComponentCmd.PersistentFlags().BoolVar(&includeApi, "includeapi", false, "(Optional) Set --includeapi flag to create and return api key and id for created component during command")
+	createComponentCmd.PersistentFlags().StringVar(&perspective, "perspective", "", "(Optional) UUID of perspective to atomically assign the new component to. Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it).")
 
 	// flags for get version command
 	getVersionCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
@@ -913,7 +929,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&action, "action", "", "Bump action name: bump | bumppatch | bumpminor | bumpmajor | bumpdate")
 	getVersionCmd.PersistentFlags().StringVar(&metadata, "metadata", "", "Version metadata")
 	getVersionCmd.PersistentFlags().StringVar(&modifier, "modifier", "", "Version modifier")
-	getVersionCmd.PersistentFlags().StringVar(&versionSchema, "pin", "", "Version pin if creating new branch")
+	getVersionCmd.PersistentFlags().StringVar(&versionPin, "pin", "", "Version pin if creating new branch")
 	getVersionCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
 	getVersionCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
 	getVersionCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
@@ -1093,8 +1109,28 @@ func resolveCommitsInput() {
 }
 
 func printGqlError(err error) {
-	splitError := strings.Split(err.Error(), ":")
-	fmt.Println("Error: ", splitError[len(splitError)-1])
+	raw := err.Error()
+	const prefix = "GraphQL errors: "
+	payload := raw
+	if strings.HasPrefix(raw, prefix) {
+		payload = raw[len(prefix):]
+	}
+	var gqlErrs []struct {
+		Message string `json:"message"`
+	}
+	if jsonErr := json.Unmarshal([]byte(payload), &gqlErrs); jsonErr == nil && len(gqlErrs) > 0 {
+		messages := make([]string, 0, len(gqlErrs))
+		for _, e := range gqlErrs {
+			if e.Message != "" {
+				messages = append(messages, e.Message)
+			}
+		}
+		if len(messages) > 0 {
+			fmt.Println("Error:", strings.Join(messages, "; "))
+			return
+		}
+	}
+	fmt.Println("Error:", raw)
 }
 
 // GraphQLRequest represents a GraphQL request with query and variables
