@@ -85,6 +85,7 @@ var tagVal string
 var tagsArr []string
 var version string
 var versionSchema string
+var versionPin string
 var vcsName string
 var vcsTag string
 var vcsType string
@@ -658,8 +659,8 @@ var getVersionCmd = &cobra.Command{
 			body["action"] = action
 		}
 
-		if len(versionSchema) > 0 {
-			body["versionSchema"] = versionSchema
+		if len(versionPin) > 0 {
+			body["versionSchema"] = versionPin
 		}
 
 		if commit != "" || commitMessage != "" {
@@ -928,7 +929,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&action, "action", "", "Bump action name: bump | bumppatch | bumpminor | bumpmajor | bumpdate")
 	getVersionCmd.PersistentFlags().StringVar(&metadata, "metadata", "", "Version metadata")
 	getVersionCmd.PersistentFlags().StringVar(&modifier, "modifier", "", "Version modifier")
-	getVersionCmd.PersistentFlags().StringVar(&versionSchema, "pin", "", "Version pin if creating new branch")
+	getVersionCmd.PersistentFlags().StringVar(&versionPin, "pin", "", "Version pin if creating new branch")
 	getVersionCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository")
 	getVersionCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components")
 	getVersionCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
@@ -1108,8 +1109,28 @@ func resolveCommitsInput() {
 }
 
 func printGqlError(err error) {
-	splitError := strings.Split(err.Error(), ":")
-	fmt.Println("Error: ", splitError[len(splitError)-1])
+	raw := err.Error()
+	const prefix = "GraphQL errors: "
+	payload := raw
+	if strings.HasPrefix(raw, prefix) {
+		payload = raw[len(prefix):]
+	}
+	var gqlErrs []struct {
+		Message string `json:"message"`
+	}
+	if jsonErr := json.Unmarshal([]byte(payload), &gqlErrs); jsonErr == nil && len(gqlErrs) > 0 {
+		messages := make([]string, 0, len(gqlErrs))
+		for _, e := range gqlErrs {
+			if e.Message != "" {
+				messages = append(messages, e.Message)
+			}
+		}
+		if len(messages) > 0 {
+			fmt.Println("Error:", strings.Join(messages, "; "))
+			return
+		}
+	}
+	fmt.Println("Error:", raw)
 }
 
 // GraphQLRequest represents a GraphQL request with query and variables
