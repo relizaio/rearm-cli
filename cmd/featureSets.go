@@ -36,14 +36,19 @@ var listFeatureSetsCmd = &cobra.Command{
 Returns the product name + uuid, the feature set currently deployed on it,
 and the full list of feature sets the FREEFORM API key could switch the
 deployment to. Requires a FREEFORM API key with DEVOPS_READ permission on
-the instance (or its parent cluster).`,
+the instance (or its parent cluster).
+
+The --namespace flag is required for STANDALONE_INSTANCE and CLUSTER
+instances (deployments are scoped per-namespace). For CLUSTER_INSTANCE
+the server pins the namespace to the instance's own namespace and any
+value passed is ignored.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 		query := `
-			query ($instanceUuid: ID!) {
-				listInstanceProductFeatureSets(instanceUuid: $instanceUuid) {
+			query ($instanceUuid: ID!, $namespace: String) {
+				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, namespace: $namespace) {
 					namespace
 					product { uuid name }
 					currentFeatureSet { uuid name }
@@ -52,6 +57,9 @@ the instance (or its parent cluster).`,
 			}
 		`
 		variables := map[string]interface{}{"instanceUuid": instance}
+		if namespace != "" {
+			variables["namespace"] = namespace
+		}
 		fmt.Println(sendRequest(query, variables, "listInstanceProductFeatureSets"))
 	},
 }
@@ -62,17 +70,24 @@ var switchFeatureSetCmd = &cobra.Command{
 	Long: `Switch the feature set deployed for a particular product on an
 instance plan. The new feature set must be a branch on the same product.
 Requires a FREEFORM API key with DEVOPS_WRITE permission on the instance
-(or its parent cluster).`,
+(or its parent cluster).
+
+The --namespace flag is required for STANDALONE_INSTANCE and CLUSTER
+instances — the (product, namespace) pair uniquely identifies one
+deployment on the plan. For CLUSTER_INSTANCE the server pins the
+namespace to the instance's own namespace and any value passed is
+ignored.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 		query := `
-			mutation ($instanceUuid: ID!, $productUuid: ID!, $featureSetUuid: ID!) {
+			mutation ($instanceUuid: ID!, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String) {
 				switchInstanceProductFeatureSet(
 					instanceUuid: $instanceUuid,
 					productUuid: $productUuid,
-					featureSetUuid: $featureSetUuid
+					featureSetUuid: $featureSetUuid,
+					namespace: $namespace
 				) { uuid name }
 			}
 		`
@@ -80,6 +95,9 @@ Requires a FREEFORM API key with DEVOPS_WRITE permission on the instance
 			"instanceUuid":   instance,
 			"productUuid":    productId,
 			"featureSetUuid": featureSetId,
+		}
+		if namespace != "" {
+			variables["namespace"] = namespace
 		}
 		fmt.Println(sendRequest(query, variables, "switchInstanceProductFeatureSet"))
 	},
@@ -90,11 +108,13 @@ var featureSetId string
 
 func init() {
 	listFeatureSetsCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to inspect (required)")
+	listFeatureSetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace whose deployments to inspect (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE)")
 	listFeatureSetsCmd.MarkPersistentFlagRequired("instance")
 
 	switchFeatureSetCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to mutate (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&productId, "product", "", "UUID of the product (component) whose deployment to switch (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&featureSetId, "featureset", "", "UUID of the feature set (branch) to switch the deployment to (required)")
+	switchFeatureSetCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace of the deployment to switch (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE)")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("instance")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("product")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("featureset")
