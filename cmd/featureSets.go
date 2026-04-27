@@ -18,7 +18,9 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -119,6 +121,55 @@ func init() {
 	switchFeatureSetCmd.MarkPersistentFlagRequired("product")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("featureset")
 
+	versionFeatureSetCmd.PersistentFlags().StringVar(&versionFsProduct, "product", "", "UUID of the PRODUCT component to version (required)")
+	versionFeatureSetCmd.PersistentFlags().StringVar(&overridesJson, "overrides", "", "JSON array of dependency-branch overrides (required); each entry: {\"componentUuid\":\"...\",\"branch\":\"...\"} or {\"vcsUri\":\"...\",\"repoPath\":\"...\",\"branch\":\"...\"}")
+	versionFeatureSetCmd.MarkPersistentFlagRequired("product")
+	versionFeatureSetCmd.MarkPersistentFlagRequired("overrides")
+
 	devopsCmd.AddCommand(listFeatureSetsCmd)
 	devopsCmd.AddCommand(switchFeatureSetCmd)
+	devopsCmd.AddCommand(versionFeatureSetCmd)
+}
+
+var versionFsProduct string
+var overridesJson string
+
+var versionFeatureSetCmd = &cobra.Command{
+	Use:   "versionfeatureset",
+	Short: "Create a new feature set on a PRODUCT with selected dependency-branch overrides",
+	Long: `Spin up a new feature set on a PRODUCT, copying the BASE feature
+set's dependency configuration and re-pointing the listed
+dependencies to the supplied branches. The new feature set is named
+after the first override branch, gets autoIntegrate=ENABLED, and an
+auto-integrate run is triggered before the call returns.
+
+Each override can identify its component either by UUID
+(componentUuid) or by (vcsUri, repoPath). The branch field is the
+NAME of the branch on the resolved component; the override branch
+must already exist (no auto-creation).
+
+Requires a FREEFORM API key with the VERSION_FEATURESET permission
+function on the product.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if debug == "true" {
+			fmt.Println("Using ReARM at", rearmUri)
+		}
+		var overrides []map[string]interface{}
+		if err := json.Unmarshal([]byte(overridesJson), &overrides); err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to parse --overrides JSON:", err)
+			os.Exit(1)
+		}
+		query := `
+			mutation ($productUuid: ID!, $overrides: [VersionFeatureSetOverride!]!) {
+				versionFeatureSet(productUuid: $productUuid, overrides: $overrides) {
+					uuid name component autoIntegrate
+				}
+			}
+		`
+		variables := map[string]interface{}{
+			"productUuid": versionFsProduct,
+			"overrides":   overrides,
+		}
+		fmt.Println(sendRequest(query, variables, "versionFeatureSet"))
+	},
 }
