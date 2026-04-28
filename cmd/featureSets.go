@@ -40,6 +40,9 @@ and the full list of feature sets the FREEFORM API key could switch the
 deployment to. Requires a FREEFORM API key with DEVOPS_READ permission on
 the instance (or its parent cluster).
 
+Identify the instance by UUID via --instance OR by URI via --instanceuri
+(URI is resolved against the FREEFORM key's org).
+
 The --namespace flag is required for STANDALONE_INSTANCE and CLUSTER
 instances (deployments are scoped per-namespace). For CLUSTER_INSTANCE
 the server pins the namespace to the instance's own namespace and any
@@ -48,9 +51,13 @@ value passed is ignored.`,
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
+		if instance == "" && instanceURI == "" {
+			fmt.Fprintln(os.Stderr, "either --instance or --instanceuri must be supplied")
+			os.Exit(1)
+		}
 		query := `
-			query ($instanceUuid: ID!, $namespace: String) {
-				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, namespace: $namespace) {
+			query ($instanceUuid: ID, $instanceUri: String, $namespace: String) {
+				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, namespace: $namespace) {
 					namespace
 					product { uuid name }
 					currentFeatureSet { uuid name }
@@ -58,7 +65,13 @@ value passed is ignored.`,
 				}
 			}
 		`
-		variables := map[string]interface{}{"instanceUuid": instance}
+		variables := map[string]interface{}{}
+		if instance != "" {
+			variables["instanceUuid"] = instance
+		}
+		if instanceURI != "" {
+			variables["instanceUri"] = instanceURI
+		}
 		if namespace != "" {
 			variables["namespace"] = namespace
 		}
@@ -74,6 +87,9 @@ instance plan. The new feature set must be a branch on the same product.
 Requires a FREEFORM API key with DEVOPS_WRITE permission on the instance
 (or its parent cluster).
 
+Identify the instance by UUID via --instance OR by URI via --instanceuri
+(URI is resolved against the FREEFORM key's org).
+
 The --namespace flag is required for STANDALONE_INSTANCE and CLUSTER
 instances — the (product, namespace) pair uniquely identifies one
 deployment on the plan. For CLUSTER_INSTANCE the server pins the
@@ -83,10 +99,15 @@ ignored.`,
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
+		if instance == "" && instanceURI == "" {
+			fmt.Fprintln(os.Stderr, "either --instance or --instanceuri must be supplied")
+			os.Exit(1)
+		}
 		query := `
-			mutation ($instanceUuid: ID!, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String) {
+			mutation ($instanceUuid: ID, $instanceUri: String, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String) {
 				switchInstanceProductFeatureSet(
 					instanceUuid: $instanceUuid,
+					instanceUri: $instanceUri,
 					productUuid: $productUuid,
 					featureSetUuid: $featureSetUuid,
 					namespace: $namespace
@@ -94,9 +115,14 @@ ignored.`,
 			}
 		`
 		variables := map[string]interface{}{
-			"instanceUuid":   instance,
 			"productUuid":    productId,
 			"featureSetUuid": featureSetId,
+		}
+		if instance != "" {
+			variables["instanceUuid"] = instance
+		}
+		if instanceURI != "" {
+			variables["instanceUri"] = instanceURI
 		}
 		if namespace != "" {
 			variables["namespace"] = namespace
@@ -109,15 +135,15 @@ var productId string
 var featureSetId string
 
 func init() {
-	listFeatureSetsCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to inspect (required)")
+	listFeatureSetsCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to inspect (either this or --instanceuri must be supplied)")
+	listFeatureSetsCmd.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "URI of the instance whose plan to inspect; resolved against the FREEFORM key's org (either this or --instance must be supplied)")
 	listFeatureSetsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace whose deployments to inspect (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE)")
-	listFeatureSetsCmd.MarkPersistentFlagRequired("instance")
 
-	switchFeatureSetCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to mutate (required)")
+	switchFeatureSetCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to mutate (either this or --instanceuri must be supplied)")
+	switchFeatureSetCmd.PersistentFlags().StringVar(&instanceURI, "instanceuri", "", "URI of the instance whose plan to mutate; resolved against the FREEFORM key's org (either this or --instance must be supplied)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&productId, "product", "", "UUID of the product (component) whose deployment to switch (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&featureSetId, "featureset", "", "UUID of the feature set (branch) to switch the deployment to (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace of the deployment to switch (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE)")
-	switchFeatureSetCmd.MarkPersistentFlagRequired("instance")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("product")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("featureset")
 

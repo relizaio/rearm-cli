@@ -302,3 +302,123 @@ docker run --rm \
 - **--imagestyle** - Set to "k8s" for k8s json image format (optional).
 - **--namespace** - Namespace where images are being sent (optional, defaults to "default"). Namespaces are useful to separate different products deployed on the same instance.
 - **--sender** - Unique sender within a single namespace (optional). Useful when different nodes stream only part of application deployment data — nodes should use the same namespace but different senders so their data does not overwrite each other.
+
+## 15.9 List Product Feature Sets on an Instance Plan
+
+The `devops listfeaturesets` command returns the per-product feature-set inventory of an instance's plan. For every product currently deployed on the plan, the response includes the product (uuid + name), the feature set currently mapped to it, and the full list of active feature sets the caller could switch that deployment to.
+
+This is the discovery side of the integration with [versionfeatureset](#1511-version-feature-set-on-a-product) and [switchfeatureset](#1510-switch-product-feature-set-on-an-instance) — call `listfeaturesets` first to learn the product UUIDs and current feature-set UUIDs, then use them to drive a versioning or switch.
+
+**FREEFORM-only**: requires a FREEFORM API key with `DEVOPS_READ` on the instance (or its parent cluster, via the cluster→child permission cascade).
+
+Sample command using instance URI:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops listfeaturesets \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --instanceuri "https://my.sandbox.example.com" \
+    --namespace "production"
+```
+
+Sample command using instance UUID:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops listfeaturesets \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --instance "instance-uuid" \
+    --namespace "production"
+```
+
+**Flags:**
+- **--instance** - Instance UUID (either this or `--instanceuri` is required).
+- **--instanceuri** - Instance URI; resolved against the FREEFORM key's org (either this or `--instance` is required).
+- **--namespace** - Namespace whose deployments to inspect (required for STANDALONE_INSTANCE and CLUSTER; ignored for CLUSTER_INSTANCE — the server pins the namespace to the instance's own namespace and any value passed is ignored).
+
+**Output:** JSON array; one entry per product deployed in the namespace. Each entry has `product { uuid, name }`, `currentFeatureSet { uuid, name }`, and `availableFeatureSets [{ uuid, name }]`.
+
+## 15.10 Switch Product Feature Set on an Instance
+
+The `devops switchfeatureset` command changes which feature set is deployed for a given product on an instance plan. The new feature set must be a branch on the same product. ReARM CD picks the change up on its next reconcile, so the sandbox / instance rolls to whatever release is current on the new feature set.
+
+**FREEFORM-only**: requires a FREEFORM API key with `DEVOPS_WRITE` on the instance (or its parent cluster).
+
+Sample command using instance URI:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops switchfeatureset \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --instanceuri "https://my.sandbox.example.com" \
+    --product "product-uuid" \
+    --featureset "feature-set-uuid" \
+    --namespace "production"
+```
+
+**Flags:**
+- **--instance** - Instance UUID (either this or `--instanceuri` is required).
+- **--instanceuri** - Instance URI; resolved against the FREEFORM key's org (either this or `--instance` is required).
+- **--product** - UUID of the PRODUCT component whose deployment to switch (required).
+- **--featureset** - UUID of the new feature set (branch on the same product) to switch the deployment to (required).
+- **--namespace** - Namespace of the deployment to switch (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE).
+
+**Output:** JSON of the updated instance.
+
+## 15.11 Version Feature Set on a Product
+
+The `devops versionfeatureset` command spins up a new feature set on a PRODUCT, copying the BASE feature set's dependency configuration and re-pointing the listed dependencies to the supplied branches. The new feature set is named after the first override branch, gets `autoIntegrate=ENABLED`, and an auto-integrate run is triggered before the call returns — so the new feature set picks up the latest releases from the overridden branches automatically.
+
+A typical flow is: a developer pushes a feature branch on a constituent component (e.g. `backend`) to CI; once the build runs the ReARM `getversion` step the branch is registered. Calling `versionfeatureset` with that component+branch then creates a new product feature set wired to that branch, and `switchfeatureset` points an instance at it for testing.
+
+Each override identifies its component either by `componentUuid` (UUID) or by `(vcsUri, repoPath)` — the latter reuses the same component-by-VCS lookup other commands use. The override `branch` is the **name** of the branch on the resolved component; the branch must already exist (no auto-creation).
+
+**FREEFORM-only**: requires a FREEFORM API key with `VERSION_FEATURESET` permission function granted at scope `COMPONENT` on the product. A `READ_ONLY`-or-stronger key with the function is sufficient; the function is the gate.
+
+Sample command using component UUIDs:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops versionfeatureset \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --product "product-uuid" \
+    --overrides '[{"componentUuid":"backend-component-uuid","branch":"my-feature-branch"}]'
+```
+
+Sample command using VCS URI + repo path:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops versionfeatureset \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --product "product-uuid" \
+    --overrides '[{"vcsUri":"https://github.com/org/repo","repoPath":"backend","branch":"my-feature-branch"}]'
+```
+
+Multiple overrides in the same call:
+
+```bash
+--overrides '[
+  {"componentUuid":"backend-uuid","branch":"my-feature-branch"},
+  {"componentUuid":"rebom-uuid","branch":"my-feature-branch"}
+]'
+```
+
+When multiple overrides are supplied with different branch names, the new feature set is named after the first override's branch arbitrarily.
+
+**Flags:**
+- **--product** - UUID of the PRODUCT component to version (required, always by UUID).
+- **--overrides** - JSON array of dependency-branch overrides (required). Each entry: `{"componentUuid":"...","branch":"..."}` or `{"vcsUri":"...","repoPath":"...","branch":"..."}`.
+
+**Validation:**
+- The product must exist and be of type PRODUCT.
+- Each override must resolve a component (by UUID or `(vcsUri, repoPath)`) and a branch (by name on that component).
+- Every override component must already be a dependency of the product's BASE feature set — overrides are pure branch tweaks, not new dependencies.
+- A feature set with the chosen new name must not already exist on the product.
+
+**Output:** JSON of the newly-created `Branch` (the new feature set), including its UUID for use as the input to a subsequent `switchfeatureset` call.
