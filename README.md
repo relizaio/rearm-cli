@@ -148,6 +148,11 @@ Flags stand for:
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
 - **--createcomponent-name** - display name for the new component (optional). Only used with `--createcomponent`. If not set, ReARM will derive the name from the VCS URI. **Requires organization-wide read-write API key.**
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
+- **--pr-number** - flag to denote upstream Pull Request number (optional). When set, the call also records PR data on the source branch so ReARM tracks open/closed PRs without an inbound SCM webhook. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
+- **--pr-state** - flag to denote PR state (optional, required when `--pr-number` is set). Supported values: `OPEN`, `CLOSED`.
+- **--pr-title** - flag to denote PR title (optional).
+- **--pr-target-branch** - flag to denote PR target branch name on the same component, i.e. the PR base branch such as `main` (optional).
+- **--pr-endpoint** - flag to denote URL of the PR in the upstream SCM (optional).
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
@@ -328,6 +333,11 @@ Sample entry for external storage:
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
+- **--pr-number** - flag to denote upstream Pull Request number (optional). When set, the call also records PR data on the source branch so ReARM tracks open/closed PRs without an inbound SCM webhook. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
+- **--pr-state** - flag to denote PR state (optional, required when `--pr-number` is set). Supported values: `OPEN`, `CLOSED`.
+- **--pr-title** - flag to denote PR title (optional).
+- **--pr-target-branch** - flag to denote PR target branch name on the same component, i.e. the PR base branch such as `main` (optional).
+- **--pr-endpoint** - flag to denote URL of the PR in the upstream SCM (optional).
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
