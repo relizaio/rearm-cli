@@ -148,11 +148,26 @@ Flags stand for:
 - **--createcomponent-branch-version-schema** - feature branch version schema for the new component (optional). Only used with `--createcomponent`. Same supported values as `--createcomponent-version-schema`. **Requires organization-wide read-write API key.**
 - **--createcomponent-name** - display name for the new component (optional). Only used with `--createcomponent`. If not set, ReARM will derive the name from the VCS URI. **Requires organization-wide read-write API key.**
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
+- **--perspective** - perspective UUID (optional). When supplied together with `--createcomponent` and the component does not yet exist, the auto-created component is assigned to this perspective. **Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it)** — organization-wide read-write keys are also accepted because they cover any perspective implicitly. Ignored when the component already exists.
 - **--pr-number** - flag to denote upstream Pull Request number (optional). When set, the call also records PR data on the source branch so ReARM tracks open/closed PRs without an inbound SCM webhook. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
 - **--pr-state** - flag to denote PR state (optional, required when `--pr-number` is set). Supported values: `OPEN`, `CLOSED`.
 - **--pr-title** - flag to denote PR title (optional).
 - **--pr-target-branch** - flag to denote PR target branch name on the same component, i.e. the PR base branch such as `main` (optional).
 - **--pr-endpoint** - flag to denote URL of the PR in the upstream SCM (optional).
+
+Sample command using a FREEFORM key scoped to a perspective to auto-create the component into that perspective:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    getversion    \
+    -i freeform_perspective_write_api_id    \
+    -k freeform_perspective_write_api_key    \
+    --vcsuri github.com/myorg/myapp    \
+    --repo-path frontend    \
+    -b main    \
+    --createcomponent    \
+    --perspective 4b272da8-2fea-4f13-a6a4-8e6e746c6e86
+```
 
 ## 2. Use Case: Send Release Metadata to ReARM
 
