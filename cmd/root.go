@@ -645,7 +645,9 @@ var getVersionCmd = &cobra.Command{
 				body["vcsDisplayName"] = vcsDisplayName
 			}
 		}
-		// Add createComponentIfMissing options (requires org-wide read-write key)
+		// Add createComponentIfMissing options.
+		// Without --perspective: requires org-wide read-write key (ORGANIZATION_RW or FREEFORM with org WRITE).
+		// With --perspective: requires FREEFORM key with WRITE on the perspective (or any broader scope).
 		if createComponentIfMissing {
 			body["createComponentIfMissing"] = true
 			if len(createComponentVersionSchema) > 0 {
@@ -657,6 +659,9 @@ var getVersionCmd = &cobra.Command{
 			if len(createComponentName) > 0 {
 				body["createComponentName"] = createComponentName
 			}
+		}
+		if len(perspective) > 0 {
+			body["perspective"] = perspective
 		}
 		if len(modifier) > 0 {
 			body["modifier"] = modifier
@@ -959,6 +964,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentName, "createcomponent-name", "", "(Optional) Display name for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
+	getVersionCmd.PersistentFlags().StringVar(&perspective, "perspective", "", "(Optional) Perspective UUID. When supplied together with --createcomponent and the component does not yet exist, the new component is assigned to this perspective. Requires a FREEFORM API key with WRITE permission on the perspective. Ignored when the component already exists.")
 
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
