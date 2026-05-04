@@ -83,14 +83,19 @@ var tagKey string
 var tagVal string
 
 var tagsArr []string
-// PR-data flags on addrelease — populated by CI when a build is
-// running against a PR. Forwards to ReARM's pullRequest input on
-// addReleaseProgrammatic, which upserts a first-class PullRequest
-// entity keyed by (targetVcsRepository, identity). The flags were
-// previously also wired on getversion, but the backend stopped
-// reading the field on that mutation when PullRequest moved out of
-// BranchData; only addrelease has the SCE needed to advance the PR
-// head, so the flags live there now.
+// PR-data flags shared by getversion and addrelease — populated by
+// CI when a build is running against a PR. Forwards to ReARM's
+// pullRequest input on the corresponding mutations, which upsert a
+// first-class PullRequest entity keyed by
+// (targetVcsRepository, identity) and advance its head to the
+// just-persisted SCE.
+//
+// On getversion the upsert only fires when sourceCodeEntry/commits
+// are also supplied and --onlyversion is not set (otherwise no SCE
+// gets persisted, so there's nothing to advance the head to — the
+// backend silently drops the PR field). The CI happy path is to
+// pass --pr-* on every getversion AND addrelease call; the upsert is
+// idempotent on (targetVcs, identity) so duplicate calls are safe.
 var prIdentity string
 var prState string
 var prTitle string
@@ -743,6 +748,15 @@ var getVersionCmd = &cobra.Command{
 
 		body["onlyVersion"] = onlyVersion
 
+		// PR upsert at getNewVersion fires only when both SCE/commits AND
+		// PR input are populated AND --onlyversion is not set. The
+		// backend gates on the same triple — buildPullRequestInfoBody
+		// itself returns nil when identity/state are missing, so the
+		// PR field stays absent on non-PR builds.
+		if pr := buildPullRequestInfoBody(); pr != nil {
+			body["pullRequest"] = pr
+		}
+
 		query := `
 			mutation ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
@@ -966,6 +980,17 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentName, "createcomponent-name", "", "(Optional) Display name for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&perspective, "perspective", "", "(Optional) Perspective UUID. When supplied together with --createcomponent and the component does not yet exist, the new component is assigned to this perspective. Requires a FREEFORM API key with WRITE permission on the perspective. Ignored when the component already exists.")
+	// PR-data flags. The backend upserts a first-class PullRequest
+	// entity at getNewVersion time too — but only when SCE/commits are
+	// also present and --onlyversion is not set (else there's no SCE
+	// for the PR head to advance to). On any other invocation the
+	// flags are silently dropped.
+	getVersionCmd.PersistentFlags().StringVar(&prIdentity, "pr-identity", "", "(Optional) SCM-side PR identity (string). GitHub PR number, GitLab MR iid, or Gerrit change-id. Upserts a PullRequest entity when SCE/commits are also supplied (and --onlyversion is not set).")
+	getVersionCmd.PersistentFlags().StringVar(&prState, "pr-state", "", "(Optional) PR state — OPEN | CLOSED | MERGED. Required when --pr-identity is set.")
+	getVersionCmd.PersistentFlags().StringVar(&prTitle, "pr-title", "", "(Optional) PR title.")
+	getVersionCmd.PersistentFlags().StringVar(&prSourceBranchName, "pr-source-branch-name", "", "(Optional) Source branch name (the branch the PR is being merged from).")
+	getVersionCmd.PersistentFlags().StringVar(&prTargetBranchName, "pr-target-branch-name", "", "(Optional) Target branch name (the branch the PR is being merged into, e.g. \"main\").")
+	getVersionCmd.PersistentFlags().StringVar(&prEndpoint, "pr-endpoint", "", "(Optional) URL of the PR in the upstream SCM.")
 
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
