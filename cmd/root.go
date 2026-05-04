@@ -83,14 +83,19 @@ var tagKey string
 var tagVal string
 
 var tagsArr []string
-// PR-data flags shared by getversion and addrelease — populated by CI
-// when a build is running against a PR. Forwards to ReARM's
-// pullRequest input on the corresponding mutations so the source
-// branch's pullRequestData stays in sync without an inbound webhook.
-var prNumber int
+// PR-data flags on addrelease — populated by CI when a build is
+// running against a PR. Forwards to ReARM's pullRequest input on
+// addReleaseProgrammatic, which upserts a first-class PullRequest
+// entity keyed by (targetVcsRepository, identity). The flags were
+// previously also wired on getversion, but the backend stopped
+// reading the field on that mutation when PullRequest moved out of
+// BranchData; only addrelease has the SCE needed to advance the PR
+// head, so the flags live there now.
+var prIdentity string
 var prState string
 var prTitle string
-var prTargetBranch string
+var prSourceBranchName string
+var prTargetBranchName string
 var prEndpoint string
 var version string
 var versionSchema string
@@ -738,10 +743,6 @@ var getVersionCmd = &cobra.Command{
 
 		body["onlyVersion"] = onlyVersion
 
-		if pr := buildPullRequestInfoBody(); pr != nil {
-			body["pullRequest"] = pr
-		}
-
 		query := `
 			mutation ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
@@ -978,16 +979,6 @@ func init() {
 	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to retrieve release (required)")
 	releaseByVersionCmd.MarkPersistentFlagRequired("component")
 
-	// PR-data flags (shared by getversion). When run from CI on a PR
-	// build, the workflow can populate these from the SCM event so the
-	// source branch's pullRequestData is updated alongside the version
-	// bump. None are required.
-	getVersionCmd.PersistentFlags().IntVar(&prNumber, "pr-number", 0, "(Optional) PR number from upstream SCM. When set, version-bump call also updates the source branch's pullRequestData.")
-	getVersionCmd.PersistentFlags().StringVar(&prState, "pr-state", "", "(Optional) PR state — OPEN | CLOSED. Required when --pr-number is set.")
-	getVersionCmd.PersistentFlags().StringVar(&prTitle, "pr-title", "", "(Optional) PR title.")
-	getVersionCmd.PersistentFlags().StringVar(&prTargetBranch, "pr-target-branch", "", "(Optional) PR target branch name on the same component (e.g. \"main\").")
-	getVersionCmd.PersistentFlags().StringVar(&prEndpoint, "pr-endpoint", "", "(Optional) URL of the PR in the upstream SCM.")
-
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(printversionCmd)
 	rootCmd.AddCommand(addODeliverableCmd)
@@ -1000,25 +991,26 @@ func init() {
 	rootCmd.AddCommand(oolongCmd)
 }
 
-// buildPullRequestInfoBody assembles a PullRequestInfoInput map from the
-// shared --pr-* flags. Returns nil when no flags are populated so the
-// body field stays absent on regular non-PR builds.
+// buildPullRequestInfoBody assembles a PullRequestInfoInput map from
+// the addrelease --pr-* flags. Identity + state are required for the
+// upsert; missing either of them returns nil so the body field stays
+// absent on non-PR builds.
 func buildPullRequestInfoBody() map[string]interface{} {
-	if prNumber <= 0 {
-		return nil
-	}
-	if prState == "" {
+	if prIdentity == "" || prState == "" {
 		return nil
 	}
 	pr := map[string]interface{}{
-		"number": prNumber,
-		"state":  prState,
+		"identity": prIdentity,
+		"state":    prState,
 	}
 	if prTitle != "" {
 		pr["title"] = prTitle
 	}
-	if prTargetBranch != "" {
-		pr["targetBranch"] = prTargetBranch
+	if prSourceBranchName != "" {
+		pr["sourceBranchName"] = prSourceBranchName
+	}
+	if prTargetBranchName != "" {
+		pr["targetBranchName"] = prTargetBranchName
 	}
 	if prEndpoint != "" {
 		pr["endpoint"] = prEndpoint

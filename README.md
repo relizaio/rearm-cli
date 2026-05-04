@@ -149,11 +149,6 @@ Flags stand for:
 - **--createcomponent-name** - display name for the new component (optional). Only used with `--createcomponent`. If not set, ReARM will derive the name from the VCS URI. **Requires organization-wide read-write API key.**
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **--perspective** - perspective UUID (optional). When supplied together with `--createcomponent` and the component does not yet exist, the auto-created component is assigned to this perspective. **Requires a FREEFORM API key with WRITE permission on the perspective (or a broader scope that covers it)** — organization-wide read-write keys are also accepted because they cover any perspective implicitly. Ignored when the component already exists.
-- **--pr-number** - flag to denote upstream Pull Request number (optional). When set, the call also records PR data on the source branch so ReARM tracks open/closed PRs without an inbound SCM webhook. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
-- **--pr-state** - flag to denote PR state (optional, required when `--pr-number` is set). Supported values: `OPEN`, `CLOSED`.
-- **--pr-title** - flag to denote PR title (optional).
-- **--pr-target-branch** - flag to denote PR target branch name on the same component, i.e. the PR base branch such as `main` (optional).
-- **--pr-endpoint** - flag to denote URL of the PR in the upstream SCM (optional).
 
 Sample command using a FREEFORM key scoped to a perspective to auto-create the component into that perspective:
 
@@ -348,11 +343,12 @@ Sample entry for external storage:
 - **--vcs-display-name** - Display name for VCS repository (optional, used when auto-creating VCS - if not set when auto-creating VCS would resolve to ReARM defaults).
 - **vcstype** - flag to denote vcs type (optional). Supported values: git, svn, mercurial. This flag is needed if we want to set a commit for the release only if the vcs uri is not yet set for the component and we're creating a new component with new vcs uri.
 - **--rebuild** - flag to allow rebuilding release on repeated CI reruns (optional). Default is false. When set to true, if a release with the same version already exists, it will be rebuilt instead of rejected.
-- **--pr-number** - flag to denote upstream Pull Request number (optional). When set, the call also records PR data on the source branch so ReARM tracks open/closed PRs without an inbound SCM webhook. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
-- **--pr-state** - flag to denote PR state (optional, required when `--pr-number` is set). Supported values: `OPEN`, `CLOSED`.
-- **--pr-title** - flag to denote PR title (optional).
-- **--pr-target-branch** - flag to denote PR target branch name on the same component, i.e. the PR base branch such as `main` (optional).
-- **--pr-endpoint** - flag to denote URL of the PR in the upstream SCM (optional).
+- **--pr-identity** - SCM-side identity of the PR / MR / change-list (optional, string). GitHub PR number (`"42"`), GitLab MR iid, or Gerrit change-id all work. When set, addrelease also upserts a first-class PullRequest entity in ReARM keyed by `(target VCS, identity)` and advances its head to the just-created release's source code entry. `-b` should be the PR head branch (e.g. `github.head_ref`), not the synthetic merge ref.
+- **--pr-state** - PR state (optional, required when `--pr-identity` is set). Supported values: `OPEN`, `CLOSED`, `MERGED`.
+- **--pr-title** - PR title (optional).
+- **--pr-source-branch-name** - source branch name (optional, the branch the PR is being merged from).
+- **--pr-target-branch-name** - target branch name (optional, the branch the PR is being merged into, e.g. `main`).
+- **--pr-endpoint** - URL of the PR in the upstream SCM (optional).
 
 Note that multiple deliverables per release are supported. In which case deliverable specific flags (odelid, odelbuildid, odelbuilduri, odelcimeta, odeltype, odeldigests, odelartsjson must be repeated for each deliverable).
 
