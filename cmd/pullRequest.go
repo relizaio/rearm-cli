@@ -20,7 +20,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -57,9 +56,13 @@ of whether a release is also being created on the same commit.
 
 The PR is keyed on (targetVcsRepository, identity). Identity is opaque to
 ReARM — GitHub PR numbers, GitLab MR iids and Gerrit change-ids all flow
-through the same flag. Resolves the target VCS by --component (typical for
-COMPONENT-typed API keys) or by --vcsuri / --repo-path (typical for
-ORG-wide / FREEFORM keys).
+through the same flag.
+
+Target VCS resolution depends on the API key type:
+  - COMPONENT key: the component is implicit (the key identifies it);
+    --component / --vcsuri are not needed.
+  - ORGANIZATION_RW or FREEFORM key: supply either --component (UUID) or
+    --vcsuri / --repo-path. When both are present, --component wins.
 
 When --commit is supplied and an SCE already exists for (targetVcs, commit)
 the PR head is advanced to that SCE in the same call; otherwise the PR row
@@ -104,10 +107,10 @@ run (e.g. once per component in a monorepo).`,
 		if prUpsertCommit != "" {
 			input["commit"] = prUpsertCommit
 		}
-		if prUpsertComponent == "" && prUpsertVcsUri == "" {
-			fmt.Fprintln(os.Stderr, "Either --component or --vcsuri is required")
-			os.Exit(1)
-		}
+		// COMPONENT keys identify their component implicitly server-side,
+		// so neither flag is required there. Only enforce on ORG/FREEFORM
+		// keys — but the CLI doesn't introspect the key type, so let
+		// the server return its own clear error rather than guessing.
 
 		if debug == "true" {
 			jsonBody, _ := json.Marshal(input)
@@ -138,8 +141,8 @@ func init() {
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertSourceBranchName, "source-branch-name", "", "(Optional) Source branch name (the branch the PR is being merged from)")
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertTargetBranchName, "target-branch-name", "", "(Optional) Target branch name (the branch the PR is being merged into)")
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertEndpoint, "endpoint", "", "(Optional) URL of the PR in the upstream SCM")
-	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertComponent, "component", "", "Component UUID (use with COMPONENT-typed API keys; mutually exclusive with --vcsuri)")
-	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertVcsUri, "vcsuri", "", "VCS repository URI (use with ORG/FREEFORM API keys; mutually exclusive with --component)")
+	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertComponent, "component", "", "(Optional) Component UUID — explicit target for ORG_RW/FREEFORM keys. Not needed for COMPONENT keys (component is implicit). Mutually exclusive with --vcsuri.")
+	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertVcsUri, "vcsuri", "", "(Optional) VCS repository URI — for ORG_RW/FREEFORM keys when --component is not supplied. Mutually exclusive with --component. Not used by COMPONENT keys.")
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertRepoPath, "repo-path", "", "(Optional) Repository path for monorepo components")
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertVcsDisplayName, "vcs-display-name", "", "(Optional) Display name for VCS repository (used when auto-creating)")
 	pullRequestUpsertCmd.PersistentFlags().StringVar(&prUpsertCommit, "commit", "", "(Optional) Commit SHA. When set and the SCE for (targetVcs, commit) already exists, the PR head is advanced to that SCE")
