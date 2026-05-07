@@ -1021,6 +1021,74 @@ rearm-cli downloadartifact -i $APIKEY_ID -k $APIKEY_SECRET -u $REARM_URI \
 
 ---
 
+## 18. Use Case: Register PullRequest with ReARM
+Base Command: `pullrequest`
+
+Subcommand group for managing first-class PullRequest entities. Currently exposes a single `upsert` subcommand.
+
+### `rearm pullrequest upsert`
+
+Registers (or refreshes) a first-class PullRequest entity in ReARM, keyed by `(targetVcsRepository, identity)`. Designed to be called **unconditionally on every `pull_request` CI event** so the PR row exists regardless of whether a release is also being created on the same commit.
+
+This sidesteps the push/pull_request race that breaks the inline `--pr-*` flags on `addrelease` / `getversion`: GitHub fires both events for the same head commit, and whichever event creates the release first sees `DO_BUILD=true` and registers the PR; the other sees `DO_BUILD=false` and never runs the inline upsert. With `pullrequest upsert` you call the registration explicitly, before the `DO_BUILD` check, so the PR is always recorded.
+
+The upsert is **idempotent on `(targetVcs, identity)`** — safe to call multiple times per CI run (e.g. once per component in a monorepo).
+
+**Sample command (FREEFORM key, vcsUri path):**
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    pullrequest upsert \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    -u https://demo.rearmhq.com \
+    --identity 42 \
+    --state OPEN \
+    --vcsuri https://github.com/example/repo \
+    --repo-path backend \
+    --commit a1b2c3d4e5f6 \
+    --title "Add user authentication" \
+    --source-branch-name feature/auth \
+    --target-branch-name main \
+    --endpoint https://github.com/example/repo/pull/42
+```
+
+**Sample command (COMPONENT key):**
+
+```bash
+rearm pullrequest upsert \
+    -i component_api_id \
+    -k component_api_key \
+    -u https://demo.rearmhq.com \
+    --identity 42 \
+    --state OPEN \
+    --component <component-uuid> \
+    --commit a1b2c3d4e5f6
+```
+
+**Allowed API key types:** `COMPONENT` (only with `--component`) or `FREEFORM` (with org-wide WRITE permission, or COMPONENT scope when targeting a specific component). `ORGANIZATION_RW` keys are intentionally rejected — PR registration is a CI-side concern that should run with scoped credentials.
+
+**Flags:**
+
+- **-i** - API Key ID (required).
+- **-k** - API Key Secret (required).
+- **-u** - ReARM server URI (required).
+- **--identity** - SCM-side identity of the PR / MR / change-list (required, string). GitHub PR numbers (`"42"`), GitLab MR iids, Gerrit change-ids — all flow through the same flag. Identity is opaque to ReARM; uniqueness is enforced jointly with the target VCS repository.
+- **--state** - PR state (required). Supported values: `OPEN`, `CLOSED`, `MERGED`.
+- **--component** - Component UUID (use with COMPONENT-typed API keys; mutually exclusive with `--vcsuri`). The component's VCS is used as the PR target.
+- **--vcsuri** - VCS repository URI (use with FREEFORM API keys; mutually exclusive with `--component`). The repo is auto-created in ReARM if it doesn't already exist.
+- **--repo-path** - Repository path for monorepo components (optional, used with `--vcsuri`).
+- **--vcs-display-name** - Display name for the VCS repository (optional, used with `--vcsuri` when auto-creating).
+- **--commit** - Commit SHA (optional). When the SCE for `(targetVcs, commit)` already exists, the PR head is advanced to that SCE in the same call. When the SCE doesn't exist yet, the PR row is registered without a head; the subsequent `addrelease` call (which carries the same `--pr-*` flags) advances the head once the SCE is persisted.
+- **--title** - PR title (optional).
+- **--source-branch-name** - Source branch name (optional, the branch the PR is being merged from).
+- **--target-branch-name** - Target branch name (optional, the branch the PR is being merged into, e.g. `main`).
+- **--endpoint** - URL of the PR in the upstream SCM (optional).
+
+**CI guidance:** call `pullrequest upsert` from your CI workflow on every `pull_request` event, before any release-creation step. The standard rearm-actions `initialize` step does this automatically (see the [PR registration step](https://github.com/relizaio/rearm-actions/blob/main/initialize/action.yaml)) — no extra wiring needed if you use the action.
+
+---
+
 # Development of ReARM CLI
 
 ## Adding dependencies to ReARM CLI
