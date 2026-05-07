@@ -141,6 +141,7 @@ Flags stand for:
 - **--modifier** - flag to set version modifier (optional). This may be semver modifier or custom version schema metadata.
 - **--manual** - flag to indicate a manual release (optional). Sets lifecycle as 'DRAFT', otherwise 'PENDING' lifecycle is set.
 - **--onlyversion** - boolean flag to skip creation of the release (optional). Default is false.
+- **--rebuild** - boolean flag to opt in to reusing an existing version assignment for this commit on this branch (optional). Default is false. Without this flag, getversion fails when a version was already minted for this `(component, branch, commit)` tuple — guards CI against two events on the same head (e.g. `push` and `pull_request`) racing into separate releases. With `--rebuild`, the existing version is returned, so an intentional re-issue of an artifact for the same commit stays idempotent. No effect when `--commit` is not supplied (manual mints, marketing-version requests).
 - **--repo-path** - Repository path for monorepo components (optional).
 - **--action** - Bump action name: bump | bumppatch | bumpminor | bumpmajor | bumpdate (optional).
 - **--createcomponent** - flag to create component if it doesn't exist (optional). **Requires organization-wide read-write API key.** When set, if the component identified by `--vcsuri` (and optionally `--repo-path`) doesn't exist, it will be automatically created.
