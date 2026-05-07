@@ -1053,7 +1053,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     --endpoint https://github.com/example/repo/pull/42
 ```
 
-**Sample command (COMPONENT key):**
+**Sample command (COMPONENT key — component is implicit):**
 
 ```bash
 rearm pullrequest upsert \
@@ -1062,11 +1062,15 @@ rearm pullrequest upsert \
     -u https://demo.rearmhq.com \
     --identity 42 \
     --state OPEN \
-    --component <component-uuid> \
     --commit a1b2c3d4e5f6
 ```
 
-**Allowed API key types:** `COMPONENT` (only with `--component`) or `FREEFORM` (with org-wide WRITE permission, or COMPONENT scope when targeting a specific component). `ORGANIZATION_RW` keys are intentionally rejected — PR registration is a CI-side concern that should run with scoped credentials.
+**Allowed API key types:** `COMPONENT`, `FREEFORM` (with appropriate scope — org-wide WRITE or COMPONENT scope on the target), or `ORGANIZATION_RW`. Other ORGANIZATION_* (read-only) types are rejected.
+
+| Key type | How target VCS is resolved |
+|---|---|
+| `COMPONENT` | Implicit — the key identifies its component. `--component` / `--vcsuri` are not needed (and `--component` must match the bound component if supplied). |
+| `ORGANIZATION_RW` / `FREEFORM` | Supply either `--component <uuid>` or `--vcsuri` (+ `--repo-path`). When both are present, `--component` wins. |
 
 **Flags:**
 
@@ -1075,8 +1079,8 @@ rearm pullrequest upsert \
 - **-u** - ReARM server URI (required).
 - **--identity** - SCM-side identity of the PR / MR / change-list (required, string). GitHub PR numbers (`"42"`), GitLab MR iids, Gerrit change-ids — all flow through the same flag. Identity is opaque to ReARM; uniqueness is enforced jointly with the target VCS repository.
 - **--state** - PR state (required). Supported values: `OPEN`, `CLOSED`, `MERGED`.
-- **--component** - Component UUID (use with COMPONENT-typed API keys; mutually exclusive with `--vcsuri`). The component's VCS is used as the PR target.
-- **--vcsuri** - VCS repository URI (use with FREEFORM API keys; mutually exclusive with `--component`). The repo is auto-created in ReARM if it doesn't already exist.
+- **--component** - Component UUID (optional). Required for ORG_RW/FREEFORM keys when not using `--vcsuri`. Not needed for COMPONENT keys (component is implicit). Mutually exclusive with `--vcsuri`.
+- **--vcsuri** - VCS repository URI (optional). For ORG_RW/FREEFORM keys when `--component` is not supplied. The repo is auto-created in ReARM if it doesn't already exist. Not used by COMPONENT keys.
 - **--repo-path** - Repository path for monorepo components (optional, used with `--vcsuri`).
 - **--vcs-display-name** - Display name for the VCS repository (optional, used with `--vcsuri` when auto-creating).
 - **--commit** - Commit SHA (optional). When the SCE for `(targetVcs, commit)` already exists, the PR head is advanced to that SCE in the same call. When the SCE doesn't exist yet, the PR row is registered without a head; the subsequent `addrelease` call (which carries the same `--pr-*` flags) advances the head once the SCE is persisted.
