@@ -65,6 +65,7 @@ var metadata string
 var modifier string
 var namespace string
 var onlyVersion bool
+var rebuild bool
 var infile string
 var releaseId string
 var releaseVersion string
@@ -748,6 +749,10 @@ var getVersionCmd = &cobra.Command{
 
 		body["onlyVersion"] = onlyVersion
 
+		if rebuild {
+			body["rebuild"] = true
+		}
+
 		// PR upsert at getNewVersion fires only when both SCE/commits AND
 		// PR input are populated AND --onlyversion is not set. The
 		// backend gates on the same triple — buildPullRequestInfoBody
@@ -975,6 +980,7 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
 	getVersionCmd.PersistentFlags().BoolVar(&manual, "manual", false, "(Optional) Set --manual flag to indicate a manual release.")
 	getVersionCmd.PersistentFlags().BoolVar(&onlyVersion, "onlyversion", false, "(Optional) Set --onlyVersion flag to retrieve next version only and not create a release.")
+	getVersionCmd.PersistentFlags().BoolVar(&rebuild, "rebuild", false, "(Optional) Reuse the existing version assignment for this commit on this branch instead of failing the duplicate. Without this flag, getversion fails when a version was already minted for this (component, branch, commit) — guards against two CI events on the same head racing into separate releases.")
 	getVersionCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
