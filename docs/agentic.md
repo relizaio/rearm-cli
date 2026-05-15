@@ -245,10 +245,10 @@ The agent can carry additional free-form tags (`topic`, `severity`,
 
 ### Upload + attach (two-step)
 
-`rearm agent session` doesn't ship a dedicated `attach-artifact`
-sub-command yet — use the existing `rearm addrelease` /
-`rearm addartifact` paths to create the artifact, then attach the
-returned uuid to the session.
+Use the existing `rearm addrelease` / `rearm addartifact` paths to
+create the artifact (tags + type ride on the standard artifact JSON
+shape), then bind the returned uuid to the session with
+`rearm agent session attach-artifact`.
 
 ```bash
 # 1. Create the artifact via addrelease (works with FREEFORM keys).
@@ -279,11 +279,10 @@ rearm agent session attach-artifact "$SESSION_UUID" \
     -i "$REARM_APIKEYID" -k "$REARM_APIKEY" -u "$REARM_URI"
 ```
 
-> `rearm agent session attach-artifact` is on the v1 roadmap; until
-> it ships, call `sessionAttachArtifactProgrammatic` directly via
-> `curl` or use the same GraphQL mutation from any client. The
-> mutation takes `{ sessionUuid, artifactUuid }` and returns the
-> updated session.
+`attach-artifact` is idempotent — re-attaching the same artifact uuid
+is a no-op. It calls the `sessionAttachArtifactProgrammatic`
+GraphQL mutation under the hood; any AGENT-functioned FREEFORM key
+authorised on the org can drive it.
 
 ### Tags via `addartifact` (no release context)
 

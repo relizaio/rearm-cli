@@ -172,6 +172,48 @@ var agentSessionCloseCmd = &cobra.Command{
 	},
 }
 
+var attachArtifactUuid string
+
+var agentSessionAttachArtifactCmd = &cobra.Command{
+	Use:   "attach-artifact <session-uuid>",
+	Short: "Attach an existing artifact (e.g. an AGENTIC_REPORT) to the session",
+	Long: `Bind a previously-created artifact to a session via the agentic
+write path. The artifact must already exist — use ` + "`rearm addrelease`" + ` or
+` + "`rearm addartifact`" + ` to upload it first (with the right type / tags
+for the policies in effect, e.g. type=AGENTIC_REPORT + tag
+agenticPhase=ORIENTATION). See docs/agentic.md §5 for the full flow.
+
+Idempotent: re-attaching the same artifact uuid is a no-op.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		if attachArtifactUuid == "" {
+			fmt.Fprintln(os.Stderr, "--artifact-uuid is required")
+			os.Exit(1)
+		}
+		query := `
+			mutation ($input: SessionAttachArtifactInput!) {
+				sessionAttachArtifactProgrammatic(input: $input) {
+					uuid
+					status
+					artifacts
+				}
+			}
+		`
+		variables := map[string]interface{}{
+			"input": map[string]interface{}{
+				"sessionUuid":  args[0],
+				"artifactUuid": attachArtifactUuid,
+			},
+		}
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		emitJson(data["sessionAttachArtifactProgrammatic"])
+	},
+}
+
 func init() {
 	// init flags
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentName, "agent-name", "", "Display name of the agent (e.g. \"Claude Code\") — required")
@@ -186,9 +228,13 @@ func init() {
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
 
+	agentSessionAttachArtifactCmd.PersistentFlags().StringVar(&attachArtifactUuid, "artifact-uuid", "", "UUID of an existing artifact to attach — required")
+	_ = agentSessionAttachArtifactCmd.MarkPersistentFlagRequired("artifact-uuid")
+
 	agentSessionCmd.AddCommand(agentSessionInitCmd)
 	agentSessionCmd.AddCommand(agentSessionTouchCmd)
 	agentSessionCmd.AddCommand(agentSessionCloseCmd)
+	agentSessionCmd.AddCommand(agentSessionAttachArtifactCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	rootCmd.AddCommand(agentCmd)
 }
