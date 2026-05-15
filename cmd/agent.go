@@ -29,7 +29,7 @@ import (
 //
 //   rearm agent session init  --agent-name <name> --agent-model <model>
 //                              [--agent-vendor <v>] [--agent-model-version <v>]
-//                              [--client-session-id <id>] [--title <t>] [--branch <b>]
+//                              [--client-session-id <id>] [--title <t>]
 //   rearm agent session touch <session-uuid>
 //   rearm agent session close <session-uuid>
 //
@@ -58,7 +58,6 @@ var (
 	agentColor        string
 	clientSessionId   string
 	sessionTitle      string
-	sessionBranch     string
 )
 
 var agentSessionInitCmd = &cobra.Command{
@@ -82,7 +81,6 @@ idempotent — the existing session is returned.`,
 					clientSessionId
 					status
 					title
-					branch
 					startedAt
 				}
 			}
@@ -110,9 +108,6 @@ idempotent — the existing session is returned.`,
 		}
 		if sessionTitle != "" {
 			input["title"] = sessionTitle
-		}
-		if sessionBranch != "" {
-			input["branch"] = sessionBranch
 		}
 		variables := map[string]interface{}{"input": input}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
@@ -224,7 +219,6 @@ func init() {
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
 	agentSessionInitCmd.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
-	agentSessionInitCmd.PersistentFlags().StringVar(&sessionBranch, "branch", "", "Working branch the agent is on")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
 

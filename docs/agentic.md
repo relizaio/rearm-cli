@@ -44,8 +44,7 @@ rearm agent session init \
     --agent-model-version "4.5" \
     --agent-vendor "Anthropic" \
     --client-session-id "ci-run-${GITHUB_RUN_ID}" \
-    --title "Refactor billing webhook idempotency" \
-    --branch "fix/billing-idempotency"
+    --title "Refactor billing webhook idempotency"
 ```
 
 Required flags:
@@ -64,7 +63,7 @@ Optional flags:
 - `--client-session-id` — agent-supplied natural session id;
   **must be space-free** so it survives the commit-trailer wire
   format. Defaults to the new row uuid when omitted.
-- `--title`, `--branch` — informational metadata for the dashboard.
+- `--title` — informational metadata for the dashboard.
 
 Output (JSON):
 
@@ -75,7 +74,6 @@ Output (JSON):
   "clientSessionId": "ci-run-12345",
   "status": "OPEN",
   "title": "Refactor billing webhook idempotency",
-  "branch": "fix/billing-idempotency",
   "startedAt": "2026-05-13T14:42:11Z"
 }
 ```
