@@ -17,6 +17,7 @@ This file documents the **CLI side**.
 2. [Commit trailer format](#2-commit-trailer-format)
 3. [Shipping commit metadata to ReARM with trailers](#3-shipping-commit-metadata-to-rearm-with-trailers)
 4. [Authentication scope (v1)](#4-authentication-scope-v1)
+5. [Attaching agentic-report artifacts (orientation / intermediate / final)](#5-attaching-agentic-report-artifacts-orientation--intermediate--final)
 
 ---
 
@@ -220,3 +221,105 @@ FREEFORM key carries the org context the lookup needs.
 The same FREEFORM key may be bound to multiple agents (e.g. one
 key serving "Claude Code" and "Cursor Agent" rows in the same
 org); the `--agent-name` flag disambiguates on each `init` call.
+
+---
+
+## 5. Attaching agentic-report artifacts (orientation / intermediate / final)
+
+The agentic-policy layer can require that a session has produced
+specific artifacts before commits will be accepted. The artifact type
+is `AGENTIC_REPORT`; sub-phases are expressed via the `agenticPhase`
+**tag** (`ORIENTATION` / `INTERMEDIATE` / `FINAL`), mirroring the
+`lifecycle` tag pattern that SBOMs use.
+
+### Tag convention
+
+| Tag key        | Tag values                                | Use                                |
+|----------------|-------------------------------------------|------------------------------------|
+| `agenticPhase` | `ORIENTATION`                             | filed at session start (briefing) |
+| `agenticPhase` | `INTERMEDIATE`                            | mid-session checkpoint            |
+| `agenticPhase` | `FINAL`                                   | end-of-session summary            |
+
+The agent can carry additional free-form tags (`topic`, `severity`,
+…). Policies only fix the convention for keys they explicitly check.
+
+### Upload + attach (two-step)
+
+`rearm agent session` doesn't ship a dedicated `attach-artifact`
+sub-command yet — use the existing `rearm addrelease` /
+`rearm addartifact` paths to create the artifact, then attach the
+returned uuid to the session.
+
+```bash
+# 1. Create the artifact via addrelease (works with FREEFORM keys).
+#    The orientation report file can be any format — JSON, markdown,
+#    cyclonedx, … ReARM treats it opaquely.
+RESP=$(rearm addrelease \
+    -i "$REARM_APIKEYID" -k "$REARM_APIKEY" -u "$REARM_URI" \
+    --component "$COMPONENT_UUID" \
+    --version "0.0.0-session-${CI_RUN_ID}" \
+    --branch "$BRANCH" \
+    --commit "$COMMIT_SHA" \
+    --vcstype git --vcsuri "$REPO_URL" \
+    --lifecycle ASSEMBLED \
+    --releasearts '[{
+        "filePath": "/tmp/orientation.json",
+        "type": "AGENTIC_REPORT",
+        "storedIn": "REARM",
+        "displayIdentifier": "orientation-'"${CI_RUN_ID}"'",
+        "tags": [
+            {"key": "agenticPhase", "value": "ORIENTATION"}
+        ]
+    }]')
+ARTIFACT_UUID=$(echo "$RESP" | jq -r '.data.addReleaseProgrammatic.artifacts[0]')
+
+# 2. Bind it to the session.
+rearm agent session attach-artifact "$SESSION_UUID" \
+    --artifact-uuid "$ARTIFACT_UUID" \
+    -i "$REARM_APIKEYID" -k "$REARM_APIKEY" -u "$REARM_URI"
+```
+
+> `rearm agent session attach-artifact` is on the v1 roadmap; until
+> it ships, call `sessionAttachArtifactProgrammatic` directly via
+> `curl` or use the same GraphQL mutation from any client. The
+> mutation takes `{ sessionUuid, artifactUuid }` and returns the
+> updated session.
+
+### Tags via `addartifact` (no release context)
+
+When the agent only needs to file a standalone artifact (no release
+yet), use `rearm addartifact` with the same `tags` shape:
+
+```bash
+rearm addartifact \
+    -i "$REARM_APIKEYID" -k "$REARM_APIKEY" -u "$REARM_URI" \
+    --component "$COMPONENT_UUID" \
+    --version "0.0.0-session-${CI_RUN_ID}" \
+    --artifacts '[{
+        "filePath": "/tmp/final-report.md",
+        "type": "AGENTIC_REPORT",
+        "storedIn": "REARM",
+        "displayIdentifier": "final-'"${CI_RUN_ID}"'",
+        "tags": [
+            {"key": "agenticPhase", "value": "FINAL"},
+            {"key": "topic", "value": "auth-refactor"}
+        ]
+    }]'
+```
+
+### Sample policy that reads the tag
+
+The agentic-policy CEL evaluates against
+`session.artifacts[].tags` — each entry is a `{ key, value }` map:
+
+```
+session.artifacts.exists(a,
+    a.type == "AGENTIC_REPORT"
+    && a.tags.exists(t, t.key == "agenticPhase" && t.value == "ORIENTATION"))
+```
+
+Operators craft the policy in the ReARM UI (AI Agents → **Manage
+policies**) and pick a kind / severity that matches the gate they
+want — see
+[`backend/ai-plans/agentic/README.md`](https://github.com/relizaio/rearm-saas/blob/agentic/backend/ai-plans/agentic/README.md)
+§11.3 for the catalog of sample policies.
