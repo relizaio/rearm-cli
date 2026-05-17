@@ -66,6 +66,11 @@ It is possible to set authentication data via:
     8. [Send Deployment Metadata From Instance](docs/devops.md#158-send-deployment-metadata-from-instance)
 16. [Probe SBOM](#16-use-case-probe-sbom)
 17. [Download Artifact](#17-use-case-download-artifact)
+18. [Register PullRequest with ReARM](#18-use-case-register-pullrequest-with-rearm)
+19. [AI Agent Commands](docs/agentic.md)
+    1. [Session lifecycle (init / touch / close)](docs/agentic.md#1-session-lifecycle-commands)
+    2. [Commit trailer format](docs/agentic.md#2-commit-trailer-format)
+    3. [Shipping commit metadata with trailers](docs/agentic.md#3-shipping-commit-metadata-to-rearm-with-trailers)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 

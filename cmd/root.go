@@ -768,6 +768,7 @@ var getVersionCmd = &cobra.Command{
 					version
 					dockerTagSafeVersion
 					releaseAlreadyExists
+					lifecycle
 				}
 			}
 		`
@@ -973,8 +974,8 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
 	getVersionCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	getVersionCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id (required to create Source Code Entry for new release)")
-	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
-	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional). Mutually exclusive with --commitsfile.")
+	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit subject (optional). Only the subject line is shipped — full body is intentionally not stored. To carry AI-Agent attribution, append the trailers to the same line: see docs/agentic.md §3 for the canonical 'git log --pretty=\"%s %(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)\"' pattern.")
+	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release. Canonical pattern: 'git log --date=iso-strict --pretty=\"%H|||%ad|||%s|||%an|||%ae\" | base64 -w 0'. For AI-Agent attribution, replace %s with '%s %(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)' — see docs/agentic.md §3. Mutually exclusive with --commitsfile.")
 	getVersionCmd.PersistentFlags().StringVar(&commitsFile, "commitsfile", "", "Path to a file containing the same base64-encoded list of commits as --commits. Useful when the commits payload exceeds the shell's max argument size. Mutually exclusive with --commits.")
 	getVersionCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
 	getVersionCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
