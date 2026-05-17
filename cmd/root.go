@@ -762,13 +762,21 @@ var getVersionCmd = &cobra.Command{
 			body["pullRequest"] = pr
 		}
 
+		// Note: `lifecycle` is intentionally NOT selected here. The
+		// backend grew the Version.lifecycle field in mid-May 2026
+		// (rearm-saas 9c6a2c09) and asking for it against an older
+		// backend returns FieldUndefined / BAD_REQUEST, which would
+		// hard-break this CLI against unupgraded environments. The
+		// action's getlatestrelease fallback (rearm-actions 2026-05-
+		// agentic / c089306) handles the absence transparently. Add
+		// the field selection back once a CLI release is paired with
+		// a min-backend version bump (or behind schema introspection).
 		query := `
 			mutation ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
 					dockerTagSafeVersion
 					releaseAlreadyExists
-					lifecycle
 				}
 			}
 		`
