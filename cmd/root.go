@@ -762,6 +762,15 @@ var getVersionCmd = &cobra.Command{
 			body["pullRequest"] = pr
 		}
 
+		// Note: `lifecycle` is intentionally NOT selected here. The
+		// backend grew the Version.lifecycle field in mid-May 2026 and
+		// asking for it against an older backend returns
+		// FieldUndefined / BAD_REQUEST, which would hard-break this
+		// CLI against unupgraded environments. The action's
+		// getlatestrelease fallback handles the absence transparently.
+		// Add the field selection back once a CLI release is paired
+		// with a min-backend version bump (or behind schema
+		// introspection).
 		query := `
 			mutation ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
@@ -772,7 +781,62 @@ var getVersionCmd = &cobra.Command{
 			}
 		`
 		variables := map[string]interface{}{"GetNewVersionInput": body}
-		fmt.Println(sendRequest(query, variables, "getNewVersionProgrammatic"))
+
+		// --scearts lets initialize-time callers attach signature /
+		// signed-payload / BOM artifacts to the SCE right when the
+		// release is minted, so any component-level CEL gate that keys
+		// on signature.state sees a real verdict during processRelease.
+		// Same JSON shape as `rearm addrelease --scearts`. When set we
+		// switch transports to the graphql-multipart pipeline; without
+		// it we keep the simple JSON post for back-compat with callers
+		// that don't carry SCE artifacts.
+		if sceArts == "" {
+			fmt.Println(sendRequest(query, variables, "getNewVersionProgrammatic"))
+			return
+		}
+
+		filesCounter := 0
+		locationMap := map[string][]string{}
+		filesMap := map[string]interface{}{}
+
+		var artInputs []Artifact
+		if err := json.Unmarshal([]byte(sceArts), &artInputs); err != nil {
+			fmt.Fprintln(os.Stderr, "Error parsing SCE Artifact Input: ", err)
+			os.Exit(1)
+		}
+		processed := *processArtifactsInput(&artInputs,
+			"variables.GetNewVersionInput.sourceCodeEntry.artifacts.",
+			&filesCounter, &locationMap, &filesMap)
+
+		// Attach the artifact array to whatever shape we built for the
+		// sourceCodeEntry slot above. Handle both the map[string]string
+		// path (set when commit/commitMessage flags drove it) and the
+		// inferred-from-commits path.
+		attachArtifactsToSourceCodeEntry := func(value interface{}, arts []Artifact) interface{} {
+			if value == nil {
+				return map[string]interface{}{"artifacts": arts}
+			}
+			switch v := value.(type) {
+			case map[string]string:
+				converted := make(map[string]interface{}, len(v)+1)
+				for k, val := range v {
+					converted[k] = val
+				}
+				converted["artifacts"] = arts
+				return converted
+			case map[string]interface{}:
+				v["artifacts"] = arts
+				return v
+			default:
+				return map[string]interface{}{
+					"_originalSourceCodeEntry": value,
+					"artifacts":                arts,
+				}
+			}
+		}
+		body["sourceCodeEntry"] = attachArtifactsToSourceCodeEntry(body["sourceCodeEntry"], processed)
+
+		fmt.Println(sendGraphQLMultipart(query, variables, "getNewVersionProgrammatic", locationMap, filesMap))
 	},
 }
 
@@ -997,6 +1061,14 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&prSourceBranchName, "pr-source-branch-name", "", "(Optional) Source branch name (the branch the PR is being merged from).")
 	getVersionCmd.PersistentFlags().StringVar(&prTargetBranchName, "pr-target-branch-name", "", "(Optional) Target branch name (the branch the PR is being merged into, e.g. \"main\").")
 	getVersionCmd.PersistentFlags().StringVar(&prEndpoint, "pr-endpoint", "", "(Optional) URL of the PR in the upstream SCM.")
+	// --scearts mirrors the same flag on `rearm addrelease`. Lets the
+	// initialize step ship SIGNATURE + SIGNED_PAYLOAD + BOM artifacts
+	// to the SCE before component-level CEL gates evaluate at
+	// processRelease (otherwise sce.signature.state is still null when
+	// the gate runs and any "all commits VERIFIED" rule rejects the
+	// release at create time). JSON array of ArtifactInput records —
+	// same shape addrelease accepts.
+	getVersionCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "(Optional) JSON array of Source-Code-Entry Artifacts to attach to the SCE at version-resolution time. Same shape as `rearm addrelease --scearts`. Use this to deliver SIGNATURE + SIGNED_PAYLOAD pairs early so component CEL gates that key on signature.state see a verdict in processRelease.")
 
 	// flags for check release by hash command
 	checkReleaseByHashCmd.PersistentFlags().StringVar(&hash, "hash", "", "Hash of artifact to check")
@@ -1062,6 +1134,82 @@ func sendRequestWithUri(query string, variables map[string]interface{}, endpoint
 
 	jsonResponse, _ := json.Marshal(data[endpoint])
 	return string(jsonResponse)
+}
+
+// sendGraphQLMultipart sends a GraphQL request via the graphql-multipart-request-spec
+// upload pipeline (operations + map + numbered file parts) and returns the
+// marshaled `data[operationName]` portion of the response as a JSON string —
+// same return shape as sendRequest, so callers that already pipe through jq
+// (e.g. CI scripts reading getversion output) don't need to change.
+//
+// Use this path when the GraphQL input carries any `file: Upload` references.
+// The locationMap and filesMap are populated by processArtifactsInput / its
+// kin — keys are the file-part name ("0", "1", …) and the location map points
+// at the JSON variable slot the part should fill in.
+func sendGraphQLMultipart(query string, variables map[string]interface{}, operationName string,
+	locationMap map[string][]string, filesMap map[string]interface{}) string {
+
+	od := map[string]interface{}{
+		"operationName": operationName,
+		"variables":     variables,
+		"query":         query,
+	}
+	jsonOd, _ := json.Marshal(od)
+	operations := map[string]string{"operations": string(jsonOd)}
+	fileMapJson, _ := json.Marshal(locationMap)
+	fileMapFd := map[string]string{"map": string(fileMapJson)}
+
+	client := resty.New()
+	applySessionToRestyClient(client)
+	if len(apiKeyId) > 0 && len(apiKey) > 0 {
+		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+		client.SetHeader("Authorization", "Basic "+auth)
+	}
+	c := client.R()
+	for key, value := range filesMap {
+		if fileData, ok := value.(FileData); ok {
+			c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
+		} else {
+			fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
+		}
+	}
+
+	resp, err := c.SetHeader("Content-Type", "multipart/form-data").
+		SetHeader("User-Agent", "ReARM CLI").
+		SetHeader("Accept-Encoding", "gzip, deflate").
+		SetHeader("Apollo-Require-Preflight", "true").
+		SetMultipartFormData(operations).
+		SetMultipartFormData(fileMapFd).
+		SetBasicAuth(apiKeyId, apiKey).
+		Post(rearmUri + "/graphql")
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "multipart request failed: %v\n", err)
+		os.Exit(1)
+	}
+	if resp.StatusCode() != 200 {
+		fmt.Fprintf(os.Stderr, "multipart request returned %d: %s\n", resp.StatusCode(), resp.String())
+		os.Exit(1)
+	}
+	var gqlResp struct {
+		Data   map[string]interface{} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if jsonErr := json.Unmarshal(resp.Body(), &gqlResp); jsonErr != nil {
+		fmt.Fprintf(os.Stderr, "failed to unmarshal multipart response: %v\n", jsonErr)
+		os.Exit(1)
+	}
+	if len(gqlResp.Errors) > 0 {
+		fmt.Fprintln(os.Stderr, "GraphQL returned errors:")
+		for _, e := range gqlResp.Errors {
+			fmt.Fprintf(os.Stderr, "- %s\n", e.Message)
+		}
+		os.Exit(1)
+	}
+	out, _ := json.Marshal(gqlResp.Data[operationName])
+	return string(out)
 }
 
 func handleResponse(err error, resp *resty.Response) {
