@@ -768,6 +768,7 @@ var getVersionCmd = &cobra.Command{
 					version
 					dockerTagSafeVersion
 					releaseAlreadyExists
+					lifecycle
 				}
 			}
 		`
