@@ -771,8 +771,15 @@ var getVersionCmd = &cobra.Command{
 		// Add the field selection back once a CLI release is paired
 		// with a min-backend version bump (or behind schema
 		// introspection).
+		// Name the operation so the multipart pipeline's `operationName`
+		// field has something to bind to — `operationName` is matched
+		// against the mutation declaration's name, not the field name,
+		// so an anonymous `mutation (...) { ... }` causes the server to
+		// answer with `Unknown operation named 'getNewVersionProgrammatic'`
+		// on the multipart path. The simple-JSON post path also tolerates
+		// the named form, so both transports stay happy with one query.
 		query := `
-			mutation ($GetNewVersionInput: GetNewVersionInput!) {
+			mutation getNewVersionProgrammatic ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
 					dockerTagSafeVersion
