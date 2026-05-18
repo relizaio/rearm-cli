@@ -74,9 +74,18 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 		}
 		fingerprint = fp
 	}
+	// AGENT enrolment goes via the FREEFORM-auth'd programmatic
+	// mutation — that's what lets an agent bootstrap its own signing
+	// key without an operator JWT. COMMITTER enrolment stays on the
+	// JWT-authenticated path; only humans / CI bots admins enrol on
+	// committers.
+	op := "enrollSigningKey"
+	if strings.EqualFold(ownerType, "AGENT") {
+		op = "enrollSigningKeyProgrammatic"
+	}
 	query := `
 		mutation ($input: SigningKeyInput!) {
-			enrollSigningKey(input: $input) {
+			` + op + `(input: $input) {
 				uuid
 				format
 				ownerType
@@ -104,7 +113,7 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 		printGqlError(err)
 		os.Exit(1)
 	}
-	emitJson(data["enrollSigningKey"])
+	emitJson(data[op])
 }
 
 func deriveFingerprint(format, pubkeyFile string) (string, error) {

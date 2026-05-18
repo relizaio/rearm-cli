@@ -17,10 +17,14 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -82,6 +86,15 @@ idempotent — the existing session is returned.`,
 					status
 					title
 					startedAt
+					policyEvents {
+						policyName
+						kind
+						state
+						severity
+						message
+						evaluatedAt
+						policy { uuid name cel description enabled severity kind }
+					}
 				}
 			}
 		`
@@ -167,6 +180,82 @@ var agentSessionCloseCmd = &cobra.Command{
 	},
 }
 
+var agentSessionShowCmd = &cobra.Command{
+	Use:   "show <session-uuid>",
+	Short: "Show full session state — status, artifacts, policy verdicts, releases, PRs",
+	Long: `Returns the full Session shape including policyEvents (with the
+embedded AgentPolicy snapshot for each verdict so the calling agent
+can decide if a FAILED / PENDING policy is recoverable on its own).
+
+Useful for the "what should I do now?" decision at startup and after
+each inbox event — the inbox tells you what changed, this tells you
+the current full state.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		query := `
+			query ($uuid: ID!) {
+				session(uuid: $uuid) {
+					uuid clientSessionId status startedAt closedAt lastActivityAt
+					agent title parentSession
+					artifacts
+					commits
+					policyEvents {
+						policyName kind state severity message evaluatedAt
+						policy { uuid name cel description enabled severity kind }
+					}
+					releases { uuid version lifecycle }
+					pullRequests { uuid identity title state }
+				}
+			}
+		`
+		variables := map[string]interface{}{"uuid": args[0]}
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		emitJson(data["session"])
+	},
+}
+
+var agentReleaseCmd = &cobra.Command{
+	Use:   "release",
+	Short: "Release helpers for AI agents (read-only inspection by uuid)",
+	Long:  `Read-side queries an agent needs after seeing an inbox event pointing at a release. Mutations on releases continue to go through ` + "`rearm addrelease`" + ` / ` + "`rearm approverelease`" + `.`,
+}
+
+var agentReleaseShowCmd = &cobra.Command{
+	Use:   "show <release-uuid>",
+	Short: "Show a release the inbox pointed you at — lifecycle, update events, approval events",
+	Long: `Looks up a release by uuid and returns the shape an agent typically
+needs after seeing a LIFECYCLE_CHANGE or APPROVAL inbox event:
+
+  - updateEvents[].message — the human-readable reason a CEL gate
+    flipped lifecycle ("Triggered by '...' (CEL: ...)").
+  - approvalEvents[] — full approval history with reviewer comments.
+  - sourceCodeEntryDetails — per-commit attribution + signature state.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		query := `
+			query ($u: ID!) {
+				release(releaseUuid: $u) {
+					uuid version lifecycle
+					updateEvents { rus rua oldValue newValue message date }
+					approvalEvents { approvalEntry approvalRoleId state comment date }
+					sourceCodeEntryDetails { uuid commit attributionState attributionReason }
+				}
+			}
+		`
+		variables := map[string]interface{}{"u": args[0]}
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		emitJson(data["release"])
+	},
+}
+
 // session inbox flags
 var (
 	inboxSince string
@@ -228,45 +317,135 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 	},
 }
 
-var attachArtifactUuid string
+// session add-artifact flags
+var (
+	addArtifactFile          string
+	addArtifactType          string
+	addArtifactDisplayId     string
+	addArtifactTags          []string
+	addArtifactDigests       []string
+)
 
-var agentSessionAttachArtifactCmd = &cobra.Command{
-	Use:   "attach-artifact <session-uuid>",
-	Short: "Attach an existing artifact (e.g. an AGENTIC_REPORT) to the session",
-	Long: `Bind a previously-created artifact to a session via the agentic
-write path. The artifact must already exist — use ` + "`rearm addrelease`" + ` or
-` + "`rearm addartifact`" + ` to upload it first (with the right type / tags
-for the policies in effect, e.g. type=AGENTIC_REPORT + tag
-agenticPhase=ORIENTATION). See docs/agentic.md §5 for the full flow.
+var agentSessionAddArtifactCmd = &cobra.Command{
+	Use:   "add-artifact <session-uuid>",
+	Short: "Upload an artifact and bind it to the session in one round-trip",
+	Long: `Uploads a file to ReARM artifact storage and binds the resulting
+artifact row directly to the session. The artifact lives only on the
+session (belongsTo=AGENT_SESSION) — it does not appear on any release
+or component. This is the only way to put artifacts onto a session;
+attaching pre-existing release / sce artifacts is intentionally not
+supported (artifacts that originate elsewhere don't belong here).
 
-Idempotent: re-attaching the same artifact uuid is a no-op.`,
+The canonical AGENTIC_REPORT case:
+
+  rearm agent session add-artifact <session-uuid> \
+    --file ./orientation.json \
+    --type AGENTIC_REPORT \
+    --display-id orient \
+    --tag agenticPhase=ORIENTATION
+
+--tag is repeatable. Tags are stored verbatim and surface to the
+CEL session.* policy surface.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if attachArtifactUuid == "" {
-			fmt.Fprintln(os.Stderr, "--artifact-uuid is required")
+		if addArtifactFile == "" {
+			fmt.Fprintln(os.Stderr, "--file is required")
 			os.Exit(1)
 		}
-		query := `
-			mutation ($input: SessionAttachArtifactInput!) {
-				sessionAttachArtifactProgrammatic(input: $input) {
+		if addArtifactType == "" {
+			fmt.Fprintln(os.Stderr, "--type is required (e.g. AGENTIC_REPORT)")
+			os.Exit(1)
+		}
+		fileBytes, err := os.ReadFile(addArtifactFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read --file %s: %v\n", addArtifactFile, err)
+			os.Exit(1)
+		}
+		fileName := filepath.Base(addArtifactFile)
+
+		// Parse --tag k=v pairs into [{key, value}] for ArtifactInput.tags.
+		var tags []map[string]interface{}
+		for _, t := range addArtifactTags {
+			eq := strings.Index(t, "=")
+			if eq <= 0 {
+				fmt.Fprintf(os.Stderr, "Invalid --tag %q — expected key=value\n", t)
+				os.Exit(1)
+			}
+			tags = append(tags, map[string]interface{}{
+				"key":   t[:eq],
+				"value": t[eq+1:],
+			})
+		}
+
+		// Build the single ArtifactInput. file:null is the placeholder
+		// that the multipart map[] rewrites to the uploaded part.
+		art := map[string]interface{}{
+			"type":              addArtifactType,
+			"storedIn":          "REARM",
+			"file":              nil,
+		}
+		if addArtifactDisplayId != "" {
+			art["displayIdentifier"] = addArtifactDisplayId
+		} else {
+			art["displayIdentifier"] = fileName
+		}
+		if len(tags) > 0 {
+			art["tags"] = tags
+		}
+		if len(addArtifactDigests) > 0 {
+			art["digestRecords"] = addArtifactDigests
+		}
+
+		mutation := `
+			mutation SessionAddArtifact($input: SessionAddArtifactInput!) {
+				sessionAddArtifactProgrammatic(input: $input) {
 					uuid
 					status
 					artifacts
+					policyEvents { policyName state severity message evaluatedAt }
 				}
 			}
 		`
 		variables := map[string]interface{}{
 			"input": map[string]interface{}{
-				"sessionUuid":  args[0],
-				"artifactUuid": attachArtifactUuid,
+				"sessionUuid": args[0],
+				"artifacts":   []map[string]interface{}{art},
 			},
 		}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
-		if err != nil {
-			printGqlError(err)
-			os.Exit(1)
+
+		// Apollo multipart spec: operations + map + files keyed "0", "1", ...
+		operations := map[string]interface{}{
+			"operationName": "SessionAddArtifact",
+			"query":         mutation,
+			"variables":     variables,
 		}
-		emitJson(data["sessionAttachArtifactProgrammatic"])
+		opsJson, _ := json.Marshal(operations)
+		// One file at index 0, path inside variables to the file slot.
+		locationMap := map[string][]string{
+			"0": {"variables", "input", "artifacts", "0", "file"},
+		}
+		mapJson, _ := json.Marshal(locationMap)
+
+		if debug == "true" {
+			fmt.Println("GraphQL operations:", string(opsJson))
+			fmt.Println("Multipart map:", string(mapJson))
+		}
+
+		client := resty.New()
+		applySessionToRestyClient(client)
+		c := client.R().
+			SetFileReader("0", fileName, bytes.NewReader(fileBytes)).
+			SetHeader("Content-Type", "multipart/form-data").
+			SetHeader("User-Agent", "ReARM CLI").
+			SetHeader("Accept-Encoding", "gzip, deflate").
+			SetHeader("Apollo-Require-Preflight", "true").
+			SetMultipartFormData(map[string]string{
+				"operations": string(opsJson),
+				"map":        string(mapJson),
+			}).
+			SetBasicAuth(apiKeyId, apiKey)
+		resp, err := c.Post(rearmUri + "/graphql")
+		handleResponse(err, resp)
 	},
 }
 
@@ -283,8 +462,14 @@ func init() {
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
 
-	agentSessionAttachArtifactCmd.PersistentFlags().StringVar(&attachArtifactUuid, "artifact-uuid", "", "UUID of an existing artifact to attach — required")
-	_ = agentSessionAttachArtifactCmd.MarkPersistentFlagRequired("artifact-uuid")
+	// session add-artifact flags
+	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactFile, "file", "", "Local file path to upload (required)")
+	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactType, "type", "", "ArtifactType enum (e.g. AGENTIC_REPORT) — required")
+	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactDisplayId, "display-id", "", "Display identifier; defaults to the file basename")
+	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactTags, "tag", nil, "Tag in key=value form — repeatable (e.g. --tag agenticPhase=ORIENTATION)")
+	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactDigests, "digest", nil, "Pre-computed digest record(s) — optional, server auto-computes when omitted")
+	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("file")
+	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("type")
 
 	// inbox flags
 	agentSessionInboxCmd.PersistentFlags().StringVar(&inboxSince, "since", "", "Cursor from a prior poll — fetch events strictly after this cursor")
@@ -294,9 +479,12 @@ func init() {
 	agentSessionCmd.AddCommand(agentSessionInitCmd)
 	agentSessionCmd.AddCommand(agentSessionTouchCmd)
 	agentSessionCmd.AddCommand(agentSessionCloseCmd)
-	agentSessionCmd.AddCommand(agentSessionAttachArtifactCmd)
+	agentSessionCmd.AddCommand(agentSessionAddArtifactCmd)
 	agentSessionCmd.AddCommand(agentSessionInboxCmd)
+	agentSessionCmd.AddCommand(agentSessionShowCmd)
+	agentReleaseCmd.AddCommand(agentReleaseShowCmd)
 	agentCmd.AddCommand(agentSessionCmd)
+	agentCmd.AddCommand(agentReleaseCmd)
 	rootCmd.AddCommand(agentCmd)
 }
 
