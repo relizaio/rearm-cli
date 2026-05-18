@@ -227,21 +227,36 @@ var agentReleaseCmd = &cobra.Command{
 	Long:  `Read-side queries an agent needs after seeing an inbox event pointing at a release. Mutations on releases continue to go through ` + "`rearm addrelease`" + ` / ` + "`rearm approverelease`" + `.`,
 }
 
+var (
+	releaseShowSessionUuid     string
+	releaseShowClientSessionId string
+)
+
 var agentReleaseShowCmd = &cobra.Command{
 	Use:   "show <release-uuid>",
-	Short: "Show a release the inbox pointed you at — lifecycle, update events, approval events",
+	Short: "Show a release attributed to your session — lifecycle, update events, approval events",
 	Long: `Looks up a release by uuid and returns the shape an agent typically
 needs after seeing a LIFECYCLE_CHANGE or APPROVAL inbox event:
 
   - updateEvents[].message — the human-readable reason a CEL gate
     flipped lifecycle ("Triggered by '...' (CEL: ...)").
   - approvalEvents[] — full approval history with reviewer comments.
-  - sourceCodeEntryDetails — per-commit attribution + signature state.`,
+  - sourceCodeEntryDetails — per-commit attribution + signature state.
+
+The release must be attributed to YOUR session (one of the session's
+commits must trace through to this release). Pass either --session
+(the session row uuid) or --client-session-id (the agent-chosen id
+from the commit trailer). The backend verifies the calling key owns
+the session before returning anything.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if releaseShowSessionUuid == "" && releaseShowClientSessionId == "" {
+			fmt.Fprintln(os.Stderr, "--session or --client-session-id is required")
+			os.Exit(1)
+		}
 		query := `
-			query ($u: ID!) {
-				releaseProgrammatic(uuid: $u) {
+			query ($u: ID!, $s: ID, $c: String) {
+				releaseProgrammatic(uuid: $u, sessionUuid: $s, clientSessionId: $c) {
 					uuid version lifecycle
 					updateEvents { rus rua oldValue newValue message date }
 					approvalEvents { approvalEntry approvalRoleId state comment date }
@@ -250,6 +265,12 @@ needs after seeing a LIFECYCLE_CHANGE or APPROVAL inbox event:
 			}
 		`
 		variables := map[string]interface{}{"u": args[0]}
+		if releaseShowSessionUuid != "" {
+			variables["s"] = releaseShowSessionUuid
+		}
+		if releaseShowClientSessionId != "" {
+			variables["c"] = releaseShowClientSessionId
+		}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -548,6 +569,10 @@ func init() {
 	agentSessionInboxCmd.PersistentFlags().StringVar(&inboxSince, "since", "", "Cursor from a prior poll — fetch events strictly after this cursor")
 	agentSessionInboxCmd.PersistentFlags().StringSliceVar(&inboxKinds, "kind", nil, "Filter by event kind (LIFECYCLE_CHANGE / APPROVAL / POLICY_VERDICT) — repeatable")
 	agentSessionInboxCmd.PersistentFlags().IntVar(&inboxLimit, "limit", 0, "Max events to return (default 50, server-capped at 200)")
+
+	// release show flags
+	agentReleaseShowCmd.PersistentFlags().StringVar(&releaseShowSessionUuid, "session", "", "Session row uuid (required when --client-session-id is not provided)")
+	agentReleaseShowCmd.PersistentFlags().StringVar(&releaseShowClientSessionId, "client-session-id", "", "Agent-chosen session id from the commit trailer (alternative to --session)")
 
 	agentSessionCmd.AddCommand(agentSessionInitCmd)
 	agentSessionCmd.AddCommand(agentSessionTouchCmd)
