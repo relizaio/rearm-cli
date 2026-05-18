@@ -81,8 +81,8 @@ twice with the same --client-session-id on an OPEN session is
 idempotent — the existing session is returned.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		query := `
-			mutation ($input: SessionInitializeInput!) {
-				sessionInitializeProgrammatic(input: $input) {
+			mutation ($sessionInit: SessionInitializeInput!) {
+				sessionInitializeProgrammatic(sessionInit: $sessionInit) {
 					uuid
 					agent
 					clientSessionId
@@ -125,7 +125,7 @@ idempotent — the existing session is returned.`,
 		if sessionTitle != "" {
 			input["title"] = sessionTitle
 		}
-		variables := map[string]interface{}{"input": input}
+		variables := map[string]interface{}{"sessionInit": input}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -141,15 +141,15 @@ var agentSessionTouchCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		query := `
-			mutation ($uuid: ID!) {
-				sessionTouchProgrammatic(uuid: $uuid) {
+			mutation ($sessionUuid: ID!) {
+				sessionTouchProgrammatic(sessionUuid: $sessionUuid) {
 					uuid
 					status
 					lastActivityAt
 				}
 			}
 		`
-		variables := map[string]interface{}{"uuid": args[0]}
+		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -165,15 +165,15 @@ var agentSessionCloseCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		query := `
-			mutation ($uuid: ID!) {
-				sessionCloseProgrammatic(uuid: $uuid) {
+			mutation ($sessionUuid: ID!) {
+				sessionCloseProgrammatic(sessionUuid: $sessionUuid) {
 					uuid
 					status
 					closedAt
 				}
 			}
 		`
-		variables := map[string]interface{}{"uuid": args[0]}
+		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -196,8 +196,8 @@ the current full state.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		query := `
-			query ($uuid: ID!) {
-				sessionProgrammatic(uuid: $uuid) {
+			query ($sessionUuid: ID!) {
+				sessionProgrammatic(sessionUuid: $sessionUuid) {
 					uuid clientSessionId status startedAt closedAt lastActivityAt
 					agent title parentSession
 					artifacts
@@ -211,7 +211,7 @@ the current full state.`,
 				}
 			}
 		`
-		variables := map[string]interface{}{"uuid": args[0]}
+		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -255,8 +255,8 @@ the session before returning anything.`,
 			os.Exit(1)
 		}
 		query := `
-			query ($u: ID!, $s: ID, $c: String) {
-				releaseProgrammatic(uuid: $u, sessionUuid: $s, clientSessionId: $c) {
+			query ($releaseUuid: ID!, $sessionUuid: ID, $clientSessionId: String) {
+				agenticReleaseProgrammatic(releaseUuid: $releaseUuid, sessionUuid: $sessionUuid, clientSessionId: $clientSessionId) {
 					uuid version lifecycle
 					updateEvents { rus rua oldValue newValue message date }
 					approvalEvents { approvalEntry approvalRoleId state comment date }
@@ -264,19 +264,19 @@ the session before returning anything.`,
 				}
 			}
 		`
-		variables := map[string]interface{}{"u": args[0]}
+		variables := map[string]interface{}{"releaseUuid": args[0]}
 		if releaseShowSessionUuid != "" {
-			variables["s"] = releaseShowSessionUuid
+			variables["sessionUuid"] = releaseShowSessionUuid
 		}
 		if releaseShowClientSessionId != "" {
-			variables["c"] = releaseShowClientSessionId
+			variables["clientSessionId"] = releaseShowClientSessionId
 		}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
 		}
-		emitJson(data["releaseProgrammatic"])
+		emitJson(data["agenticReleaseProgrammatic"])
 	},
 }
 
@@ -306,8 +306,8 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		query := `
-			query ($input: AgentSessionInboxInput!) {
-				agentSessionInboxProgrammatic(input: $input) {
+			query ($inboxRequest: AgentSessionInboxInput!) {
+				agentSessionInboxProgrammatic(inboxRequest: $inboxRequest) {
 					cursor
 					occurredAt
 					kind
@@ -321,17 +321,17 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 				}
 			}
 		`
-		input := map[string]interface{}{"sessionUuid": args[0]}
+		inboxRequest := map[string]interface{}{"sessionUuid": args[0]}
 		if inboxSince != "" {
-			input["since"] = inboxSince
+			inboxRequest["since"] = inboxSince
 		}
 		if len(inboxKinds) > 0 {
-			input["kinds"] = inboxKinds
+			inboxRequest["kinds"] = inboxKinds
 		}
 		if inboxLimit > 0 {
-			input["limit"] = inboxLimit
+			inboxRequest["limit"] = inboxLimit
 		}
-		variables := map[string]interface{}{"input": input}
+		variables := map[string]interface{}{"inboxRequest": inboxRequest}
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 		if err != nil {
 			printGqlError(err)
@@ -421,8 +421,8 @@ CEL session.* policy surface.`,
 		}
 
 		mutation := `
-			mutation SessionAddArtifact($input: SessionAddArtifactInput!) {
-				sessionAddArtifactProgrammatic(input: $input) {
+			mutation SessionAddArtifact($addArtifact: SessionAddArtifactInput!) {
+				sessionAddArtifactProgrammatic(addArtifact: $addArtifact) {
 					uuid
 					status
 					artifacts
@@ -431,7 +431,7 @@ CEL session.* policy surface.`,
 			}
 		`
 		variables := map[string]interface{}{
-			"input": map[string]interface{}{
+			"addArtifact": map[string]interface{}{
 				"sessionUuid": args[0],
 				"artifacts":   []map[string]interface{}{art},
 			},
@@ -446,7 +446,7 @@ CEL session.* policy surface.`,
 		opsJson, _ := json.Marshal(operations)
 		// Apollo spec: map value is an array of dot-separated paths.
 		locationMap := map[string][]string{
-			"0": {"variables.input.artifacts.0.file"},
+			"0": {"variables.addArtifact.artifacts.0.file"},
 		}
 		mapJson, _ := json.Marshal(locationMap)
 

@@ -79,13 +79,18 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 	// key without an operator JWT. COMMITTER enrolment stays on the
 	// JWT-authenticated path; only humans / CI bots admins enrol on
 	// committers.
+	// AGENT enrolment uses the FREEFORM-auth'd programmatic mutation;
+	// the wrapper argument is `signingKey`. COMMITTER enrolment stays
+	// on the JWT path which still uses the legacy `input` arg name.
 	op := "enrollSigningKey"
+	argName := "input"
 	if strings.EqualFold(ownerType, "AGENT") {
 		op = "enrollSigningKeyProgrammatic"
+		argName = "signingKey"
 	}
 	query := `
-		mutation ($input: SigningKeyInput!) {
-			` + op + `(input: $input) {
+		mutation ($` + argName + `: SigningKeyInput!) {
+			` + op + `(` + argName + `: $` + argName + `) {
 				uuid
 				format
 				ownerType
@@ -107,7 +112,7 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 	if identity != "" {
 		input["identity"] = identity
 	}
-	variables := map[string]interface{}{"input": input}
+	variables := map[string]interface{}{argName: input}
 	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
 	if err != nil {
 		printGqlError(err)
