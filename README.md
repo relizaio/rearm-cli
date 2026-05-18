@@ -847,6 +847,29 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     }]'
 ```
 
+### Add a VEX Document
+
+A VEX (Vulnerability Exploitability eXchange) document is uploaded as a regular artifact with `type` set to `VEX`. The target release must already have at least one SBOM artifact, otherwise the upload fails. The optional `vexScope`, `vexImportMode`, and `userIssuerClassOverride` fields control how the VEX is imported; omit them to use the backend defaults (`COMPONENT` scope, `AUTO_ACCEPT` mode).
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    addartifact    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
+    --version 1.0.5    \
+    --artifacts '[{
+      "filePath": "./vendor-vex.cdx.json",
+      "type": "VEX",
+      "bomFormat": "CYCLONEDX",
+      "storedIn": "REARM",
+      "displayIdentifier": "vendor-vex",
+      "vexScope": "RELEASE",
+      "vexImportMode": "STAGE",
+      "userIssuerClassOverride": "VENDOR"
+    }]'
+```
+
 **Flags:**
 
 - **addartifact** - command that denotes we are adding artifacts to an existing release, deliverable, or SCE
@@ -887,6 +910,16 @@ All artifact objects follow the same format as in `addrelease`:
   "tags": [{"key": "category", "value": "security"}]
 }
 ```
+
+**VEX Artifact Fields:**
+
+When `type` is `VEX`, three optional fields control the inbound VEX import. All may be omitted to accept the backend defaults:
+
+| Field | Values | Default | Meaning |
+|---|---|---|---|
+| `vexScope` | `ORG`, `RESOURCE_GROUP`, `COMPONENT`, `BRANCH`, `RELEASE` | `COMPONENT` | How broadly the imported VEX claim applies |
+| `vexImportMode` | `AUTO_ACCEPT`, `STAGE`, `REJECT` | `AUTO_ACCEPT` | Whether matched statements are applied directly, staged for review, or rejected |
+| `userIssuerClassOverride` | `SELF`, `VENDOR`, `THIRD_PARTY` | derived from upload context | Overrides the heuristically-derived issuer class |
 
 **Common Use Cases:**
 
