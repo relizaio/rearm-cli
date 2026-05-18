@@ -58,6 +58,13 @@ Examples:
     --component "my-component" --version "1.0.0" \
     --artifacts '[{"filePath": "/path/to/sbom.json", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "inventoryTypes": ["SOFTWARE"], "displayIdentifier": "my-sbom"}]'
 
+  # Add a VEX document (the release must already have an SBOM). The optional
+  # vexScope / vexImportMode / userIssuerClassOverride fields control the
+  # import; omit them to use the backend defaults (COMPONENT scope, AUTO_ACCEPT).
+  rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
+    --component "my-component" --version "1.0.0" \
+    --artifacts '[{"filePath": "/path/to/vex.cdx.json", "type": "VEX", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "displayIdentifier": "vendor-vex", "vexImportMode": "STAGE"}]'
+
   # Add artifacts to multiple targets (advanced mode)
   rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
     --component "my-component" --version "1.0.0" \

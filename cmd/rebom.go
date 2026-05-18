@@ -58,7 +58,16 @@ type Artifact struct {
 	File              []byte     `json:"file"`
 	FilePath          string     `json:"filePath,omitempty"`
 	StripBom          string     `json:"stripBom,omitempty"`
-	Artifacts         []Artifact `json:"artifacts,omitempty"`
+	// VEX-only fields, applied when type is "VEX" — they control how an
+	// inbound VEX document is imported. All optional; the backend applies
+	// defaults (scope COMPONENT, mode AUTO_ACCEPT) when omitted.
+	//   VexScope                - AnalysisScope: ORG/RESOURCE_GROUP/COMPONENT/BRANCH/RELEASE
+	//   VexImportMode           - AUTO_ACCEPT/STAGE/REJECT
+	//   UserIssuerClassOverride - SELF/VENDOR/THIRD_PARTY
+	VexScope                string     `json:"vexScope,omitempty"`
+	VexImportMode           string     `json:"vexImportMode,omitempty"`
+	UserIssuerClassOverride string     `json:"userIssuerClassOverride,omitempty"`
+	Artifacts               []Artifact `json:"artifacts,omitempty"`
 }
 type Link struct {
 	Uri     string `json:"uri"`
