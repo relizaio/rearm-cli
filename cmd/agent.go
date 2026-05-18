@@ -493,15 +493,6 @@ CEL session.* policy surface.`,
 				cookieVal = "JSESSIONID=" + session.JSessionId + "; " + cookieVal
 			}
 			hreq.Header.Set("Cookie", cookieVal)
-		} else {
-			fmt.Fprintln(os.Stderr, "WARNING: getSession() returned nil — CSRF token unavailable")
-		}
-
-		if debug == "true" {
-			fmt.Fprintf(os.Stderr, "DEBUG outbound headers:\n")
-			for k, v := range hreq.Header {
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", k, v)
-			}
 		}
 
 		hresp, err := http.DefaultClient.Do(hreq)
