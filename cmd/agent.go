@@ -167,6 +167,67 @@ var agentSessionCloseCmd = &cobra.Command{
 	},
 }
 
+// session inbox flags
+var (
+	inboxSince string
+	inboxKinds []string
+	inboxLimit int
+)
+
+var agentSessionInboxCmd = &cobra.Command{
+	Use:   "inbox <session-uuid>",
+	Short: "Poll the agent's inbox — release lifecycle / approval / policy events scoped to this session",
+	Long: `Returns events the agent should react to: release lifecycle moves
+(LIFECYCLE_CHANGE — e.g. REJECTED by a CEL gate, ASSEMBLED), approval
+verdicts on releases minted from this session's commits
+(APPROVAL — DISAPPROVED with reviewer comment is the canonical fix-loop
+trigger), and policy verdicts landing on the session itself
+(POLICY_VERDICT — orientation-artifact / commit-attribution re-eval).
+
+Use --since with the cursor from the most recent event you already
+processed to fetch strictly newer events. Default limit is 50, capped
+at 200. Filter to specific event kinds with --kind (repeatable).
+
+Pair with a sleep loop on the agent side — 30-60s between polls is the
+recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		query := `
+			query ($input: AgentSessionInboxInput!) {
+				agentSessionInboxProgrammatic(input: $input) {
+					cursor
+					occurredAt
+					kind
+					release { uuid version lifecycle }
+					oldValue
+					newValue
+					reason
+					source
+					actorUuid
+					actorRoleId
+				}
+			}
+		`
+		input := map[string]interface{}{"sessionUuid": args[0]}
+		if inboxSince != "" {
+			input["since"] = inboxSince
+		}
+		if len(inboxKinds) > 0 {
+			input["kinds"] = inboxKinds
+		}
+		if inboxLimit > 0 {
+			input["limit"] = inboxLimit
+		}
+		variables := map[string]interface{}{"input": input}
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		emitJson(data["agentSessionInboxProgrammatic"])
+	},
+}
+
 var attachArtifactUuid string
 
 var agentSessionAttachArtifactCmd = &cobra.Command{
@@ -225,10 +286,16 @@ func init() {
 	agentSessionAttachArtifactCmd.PersistentFlags().StringVar(&attachArtifactUuid, "artifact-uuid", "", "UUID of an existing artifact to attach — required")
 	_ = agentSessionAttachArtifactCmd.MarkPersistentFlagRequired("artifact-uuid")
 
+	// inbox flags
+	agentSessionInboxCmd.PersistentFlags().StringVar(&inboxSince, "since", "", "Cursor from a prior poll — fetch events strictly after this cursor")
+	agentSessionInboxCmd.PersistentFlags().StringSliceVar(&inboxKinds, "kind", nil, "Filter by event kind (LIFECYCLE_CHANGE / APPROVAL / POLICY_VERDICT) — repeatable")
+	agentSessionInboxCmd.PersistentFlags().IntVar(&inboxLimit, "limit", 0, "Max events to return (default 50, server-capped at 200)")
+
 	agentSessionCmd.AddCommand(agentSessionInitCmd)
 	agentSessionCmd.AddCommand(agentSessionTouchCmd)
 	agentSessionCmd.AddCommand(agentSessionCloseCmd)
 	agentSessionCmd.AddCommand(agentSessionAttachArtifactCmd)
+	agentSessionCmd.AddCommand(agentSessionInboxCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	rootCmd.AddCommand(agentCmd)
 }
