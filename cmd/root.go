@@ -66,6 +66,7 @@ var modifier string
 var namespace string
 var onlyVersion bool
 var rebuild bool
+var includeLifecycle bool
 var infile string
 var releaseId string
 var releaseVersion string
@@ -778,13 +779,24 @@ var getVersionCmd = &cobra.Command{
 		// answer with `Unknown operation named 'getNewVersionProgrammatic'`
 		// on the multipart path. The simple-JSON post path also tolerates
 		// the named form, so both transports stay happy with one query.
+		// `lifecycle` on the Version response only exists on backends
+		// that have shipped the 2026-05 agentic merge. Selecting it
+		// against an older backend fails the entire mutation with
+		// "Field 'lifecycle' in type 'Version' is undefined", so gate
+		// it behind --include-lifecycle (default off) and let callers
+		// who know they're paired with a recent enough backend
+		// (e.g. the rearm-actions initialize step) opt in.
+		lifecycleField := ""
+		if includeLifecycle {
+			lifecycleField = "lifecycle"
+		}
 		query := `
 			mutation getNewVersionProgrammatic ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
 					dockerTagSafeVersion
 					releaseAlreadyExists
-					lifecycle
+					` + lifecycleField + `
 				}
 			}
 		`
@@ -1053,6 +1065,7 @@ func init() {
 	getVersionCmd.PersistentFlags().BoolVar(&manual, "manual", false, "(Optional) Set --manual flag to indicate a manual release.")
 	getVersionCmd.PersistentFlags().BoolVar(&onlyVersion, "onlyversion", false, "(Optional) Set --onlyVersion flag to retrieve next version only and not create a release.")
 	getVersionCmd.PersistentFlags().BoolVar(&rebuild, "rebuild", false, "(Optional) Reuse the existing version assignment for this commit on this branch instead of failing the duplicate. Without this flag, getversion fails when a version was already minted for this (component, branch, commit) — guards against two CI events on the same head racing into separate releases.")
+	getVersionCmd.PersistentFlags().BoolVar(&includeLifecycle, "include-lifecycle", false, "(Optional) Select the release `lifecycle` field on the response. Off by default for back-compat — older backends don't expose this field and would reject the whole mutation. Turn on only when paired with a backend that ships the lifecycle-on-getNewVersion change (rearm-saas 2026-05 agentic merge or later).")
 	getVersionCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
