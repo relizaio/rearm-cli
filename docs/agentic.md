@@ -306,11 +306,14 @@ rearm addartifact \
 
 ### Sample policy that reads the tag
 
-The agentic-policy CEL evaluates against
-`session.artifacts[].tags` — each entry is a `{ key, value }` map:
+Agentic-policy CEL uses **match-to-block** semantics — the
+expression describes the *failure* condition. CEL true → policy
+fires (FAILED / WARNING / PENDING). CEL false → PASSED. To require
+an orientation-tagged AGENTIC_REPORT, the policy fires when one is
+*missing*:
 
 ```
-session.artifacts.exists(a,
+!session.artifacts.exists(a,
     a.type == "AGENTIC_REPORT"
     && a.tags.exists(t, t.key == "agenticPhase" && t.value == "ORIENTATION"))
 ```
