@@ -18,16 +18,14 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -455,91 +453,30 @@ CEL session.* policy surface.`,
 			fmt.Println("Multipart map:", string(mapJson))
 		}
 
-		// CSRF must be passed on the multipart POST or Spring's
-		// CsrfFilter rejects with 401 before the resolver runs. Fetch
-		// the CSRF token ONCE up-front; using applySessionToRestyClient
-		// would call getSession again with a different token, causing
-		// the cookie value and the X-XSRF-TOKEN header value to fall
-		// out of sync (Spring's CookieCsrfTokenRepository mints a fresh
-		// token each call, and CsrfFilter rejects when cookie != header).
-		// CSRF must be passed on the multipart POST or Spring's
-		// CsrfFilter rejects with 401 before the resolver runs. Build
-		// the request with net/http directly — resty (v2.17) has a
-		// quirk where headers set on a multipart request can be
-		// dropped on the wire, and CSRF is one of them.
-		session, _ := getSession()
-
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
-		opsPart, _ := writer.CreatePart(textproto.MIMEHeader{
-			"Content-Disposition": []string{`form-data; name="operations"`},
-			"Content-Type":        []string{"application/json"},
-		})
-		opsPart.Write(opsJson)
-		mapPart, _ := writer.CreatePart(textproto.MIMEHeader{
-			"Content-Disposition": []string{`form-data; name="map"`},
-			"Content-Type":        []string{"application/json"},
-		})
-		mapPart.Write(mapJson)
-		filePart, _ := writer.CreatePart(textproto.MIMEHeader{
-			"Content-Disposition": []string{fmt.Sprintf(`form-data; name="0"; filename=%q`, fileName)},
-			"Content-Type":        []string{"application/octet-stream"},
-		})
-		filePart.Write(fileBytes)
-		writer.Close()
-
-		hreq, err := http.NewRequest("POST", rearmUri+"/graphql", body)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to build request: %v\n", err)
-			os.Exit(1)
-		}
-		hreq.Header.Set("Content-Type", writer.FormDataContentType())
-		hreq.Header.Set("User-Agent", "ReARM CLI")
-		// No Accept-Encoding: net/http won't transparently decode gzip
-		// unless the http.Transport's DisableCompression is left to
-		// default and we don't set the header explicitly. Letting it
-		// auto-negotiate keeps the response body decoded.
-		hreq.Header.Set("Apollo-Require-Preflight", "true")
+		// Standard CLI multipart pattern: applySessionToRestyClient
+		// fetches the CSRF token + cookie pair and sets both on the
+		// client; resty propagates them onto the multipart POST. Then
+		// add the Basic-auth header and the Apollo-Require-Preflight
+		// signal Spring needs for multipart-upload validation.
+		client := resty.New()
+		applySessionToRestyClient(client)
 		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			hreq.SetBasicAuth(apiKeyId, apiKey)
+			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
+			client.SetHeader("Authorization", "Basic "+auth)
 		}
-		if session != nil {
-			hreq.Header.Set("X-XSRF-TOKEN", session.XsrfToken)
-			// Build a clean Cookie header — skip JSESSIONID when empty
-			// (Spring rejects `JSESSIONID=;` as malformed and the whole
-			// Cookie line gets discarded, taking the XSRF-TOKEN cookie
-			// with it and triggering a CSRF 401).
-			cookieVal := "XSRF-TOKEN=" + session.XsrfToken
-			if session.JSessionId != "" {
-				cookieVal = "JSESSIONID=" + session.JSessionId + "; " + cookieVal
-			}
-			hreq.Header.Set("Cookie", cookieVal)
-		}
-
-		hresp, err := http.DefaultClient.Do(hreq)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Request failed: %v\n", err)
-			os.Exit(1)
-		}
-		defer hresp.Body.Close()
-		respBytes, _ := io.ReadAll(hresp.Body)
-		if hresp.StatusCode != 200 {
-			fmt.Fprintf(os.Stderr, "HTTP %d: %s\n", hresp.StatusCode, string(respBytes))
-			os.Exit(1)
-		}
-		// Parse for GraphQL errors and emit data shape consistent with sendGraphQLRequest.
-		var parsed map[string]interface{}
-		if err := json.Unmarshal(respBytes, &parsed); err != nil {
-			fmt.Fprintf(os.Stderr, "Could not parse response JSON: %v\nRaw: %s\n", err, string(respBytes))
-			os.Exit(1)
-		}
-		if errsRaw, has := parsed["errors"]; has && errsRaw != nil {
-			eb, _ := json.Marshal(errsRaw)
-			fmt.Fprintf(os.Stderr, "GraphQL errors: %s\n", string(eb))
-			os.Exit(1)
-		}
-		dataMap, _ := parsed["data"].(map[string]interface{})
-		emitJson(dataMap["sessionAddArtifactProgrammatic"])
+		resp, err := client.R().
+			SetFileReader("0", fileName, bytes.NewReader(fileBytes)).
+			SetHeader("Content-Type", "multipart/form-data").
+			SetHeader("User-Agent", "ReARM CLI").
+			SetHeader("Accept-Encoding", "gzip, deflate").
+			SetHeader("Apollo-Require-Preflight", "true").
+			SetMultipartFormData(map[string]string{
+				"operations": string(opsJson),
+				"map":        string(mapJson),
+			}).
+			SetBasicAuth(apiKeyId, apiKey).
+			Post(rearmUri + "/graphql")
+		handleResponse(err, resp)
 	},
 }
 
