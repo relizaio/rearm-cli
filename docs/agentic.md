@@ -7,9 +7,10 @@ emits commit trailers that ReARM uses to attribute every commit /
 release back to the session, and closes the session when the work
 window ends.
 
-The full design (entities, hierarchy, policies) lives in
-[`rearm-saas/backend/ai-plans/agentic/README.md`](https://github.com/relizaio/rearm-saas/blob/agentic/backend/ai-plans/agentic/README.md).
-This file documents the **CLI side**.
+The authoritative runtime contract — what the backend expects an
+agent to call and in what order — is served at
+`$REARM_URL/api/agents/orientation.md` by every backend that supports
+these commands. This file documents the **CLI side**.
 
 ## Table of Contents
 
@@ -320,6 +321,5 @@ an orientation-tagged AGENTIC_REPORT, the policy fires when one is
 
 Operators craft the policy in the ReARM UI (AI Agents → **Manage
 policies**) and pick a kind / severity that matches the gate they
-want — see
-[`backend/ai-plans/agentic/README.md`](https://github.com/relizaio/rearm-saas/blob/agentic/backend/ai-plans/agentic/README.md)
-§11.3 for the catalog of sample policies.
+want — the UI's policy editor ships a starter catalogue of sample
+policies for the common shapes.

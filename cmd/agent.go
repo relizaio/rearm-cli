@@ -29,8 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// AI-Agent commands. The full design lives in
-// rearm-core/backend/ai-plans/agentic/README.md §9. Locked CLI shape:
+// AI-Agent commands. Locked CLI shape:
 //
 //   rearm agent session init  --agent-name <name> --agent-model <model>
 //                              [--agent-vendor <v>] [--agent-model-version <v>]
@@ -38,13 +37,14 @@ import (
 //   rearm agent session touch <session-uuid>
 //   rearm agent session close <session-uuid>
 //
-// Not in this PR (follow-up): spawn, submit-metadata, attach-artifact,
-// list, model attach.
+// The authoritative runtime contract is served at
+// $REARM_URL/api/agents/orientation.md by every backend that supports
+// these commands; agent runtimes should fetch it on first connection.
 
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "AI Agent commands (coding agents — Claude Code, Cursor, Codex, …)",
-	Long:  `Commands for managing AI coding agents and their sessions. See https://github.com/relizaio/rearm-saas/blob/main/backend/ai-plans/agentic/README.md for the full design.`,
+	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection.`,
 }
 
 var agentSessionCmd = &cobra.Command{
