@@ -66,6 +66,7 @@ var modifier string
 var namespace string
 var onlyVersion bool
 var rebuild bool
+var includeLifecycle bool
 var infile string
 var releaseId string
 var releaseVersion string
@@ -778,13 +779,24 @@ var getVersionCmd = &cobra.Command{
 		// answer with `Unknown operation named 'getNewVersionProgrammatic'`
 		// on the multipart path. The simple-JSON post path also tolerates
 		// the named form, so both transports stay happy with one query.
+		// `lifecycle` on the Version response only exists on backends
+		// that have shipped the 2026-05 agentic merge. Selecting it
+		// against an older backend fails the entire mutation with
+		// "Field 'lifecycle' in type 'Version' is undefined", so gate
+		// it behind --include-lifecycle (default off) and let callers
+		// who know they're paired with a recent enough backend
+		// (e.g. the rearm-actions initialize step) opt in.
+		lifecycleField := ""
+		if includeLifecycle {
+			lifecycleField = "lifecycle"
+		}
 		query := `
 			mutation getNewVersionProgrammatic ($GetNewVersionInput: GetNewVersionInput!) {
 				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
 					version
 					dockerTagSafeVersion
 					releaseAlreadyExists
-					lifecycle
+					` + lifecycleField + `
 				}
 			}
 		`
@@ -1045,14 +1057,15 @@ func init() {
 	getVersionCmd.PersistentFlags().StringVar(&vcsDisplayName, "vcs-display-name", "", "Display name for VCS repository (optional, used when auto-creating VCS)")
 	getVersionCmd.PersistentFlags().StringVar(&vcsType, "vcstype", "", "Type of VCS repository: git, svn, mercurial")
 	getVersionCmd.PersistentFlags().StringVar(&commit, "commit", "", "Commit id (required to create Source Code Entry for new release)")
-	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit message or subject (optional)")
-	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release, can be obtained with 'git log --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0' command (optional). Mutually exclusive with --commitsfile.")
+	getVersionCmd.PersistentFlags().StringVar(&commitMessage, "commitmessage", "", "Commit subject (optional). Only the subject line is shipped — full body is intentionally not stored. To carry AI-Agent attribution, append the trailers to the same line: see docs/agentic.md §3 for the canonical 'git log --pretty=\"%s %(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)\"' pattern.")
+	getVersionCmd.PersistentFlags().StringVar(&commits, "commits", "", "Base64-encoded list of commits associated with this release. Canonical pattern: 'git log --date=iso-strict --pretty=\"%H|||%ad|||%s|||%an|||%ae\" | base64 -w 0'. For AI-Agent attribution, replace %s with '%s %(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)' — see docs/agentic.md §3. Mutually exclusive with --commitsfile.")
 	getVersionCmd.PersistentFlags().StringVar(&commitsFile, "commitsfile", "", "Path to a file containing the same base64-encoded list of commits as --commits. Useful when the commits payload exceeds the shell's max argument size. Mutually exclusive with --commits.")
 	getVersionCmd.PersistentFlags().StringVar(&vcsTag, "vcstag", "", "VCS Tag")
 	getVersionCmd.PersistentFlags().StringVar(&dateActual, "date", "", "Commit date and time in iso strict format, use git log --date=iso-strict (optional).")
 	getVersionCmd.PersistentFlags().BoolVar(&manual, "manual", false, "(Optional) Set --manual flag to indicate a manual release.")
 	getVersionCmd.PersistentFlags().BoolVar(&onlyVersion, "onlyversion", false, "(Optional) Set --onlyVersion flag to retrieve next version only and not create a release.")
 	getVersionCmd.PersistentFlags().BoolVar(&rebuild, "rebuild", false, "(Optional) Reuse the existing version assignment for this commit on this branch instead of failing the duplicate. Without this flag, getversion fails when a version was already minted for this (component, branch, commit) — guards against two CI events on the same head racing into separate releases.")
+	getVersionCmd.PersistentFlags().BoolVar(&includeLifecycle, "include-lifecycle", false, "(Optional) Select the release `lifecycle` field on the response. Off by default for back-compat — older backends don't expose this field and would reject the whole mutation. Turn on only when paired with a backend recent enough to surface lifecycle on the getNewVersion response.")
 	getVersionCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentVersionSchema, "createcomponent-version-schema", "", "(Optional) Version schema for new component (e.g., 'semver'). Only used with --createcomponent. Requires organization-wide read-write API key.")
 	getVersionCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
