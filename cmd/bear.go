@@ -33,9 +33,10 @@ import (
 )
 
 var (
-	bearUri      string
-	bearApiKey   string
-	skipPatterns []string
+	bearUri          string
+	bearApiKey       string
+	skipPatterns     []string
+	resilientBearDns bool
 )
 
 const bearBatchSize = 10
@@ -68,17 +69,22 @@ var enrichCmd = &cobra.Command{
 }
 
 func init() {
+	const resilientDnsHelp = "Use resilient DNS for BEAR calls — skip the k8s search-domain expansion (treat host as FQDN) and retry transient resolver errors. Set --resilientDns=false when BEAR is in-cluster and only resolvable via search domains (e.g. http://bear.rearm.svc.cluster.local)."
+
 	enrichSupplierCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
 	enrichSupplierCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichSupplierCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichSupplierCmd)
 
 	enrichLicenseCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
 	enrichLicenseCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichLicenseCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichLicenseCmd)
 
 	enrichCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
 	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
 	enrichCmd.PersistentFlags().StringArrayVar(&skipPatterns, "skipPattern", []string{}, "Skip components whose purl contains this pattern (can be specified multiple times)")
+	enrichCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichCmd)
 }
 
@@ -482,10 +488,11 @@ func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 		req.Header.Set("X-API-Key", bearApiKey)
 	}
 
-	// Add timeout to prevent hanging
-	client := &http.Client{
-		Timeout: 300 * time.Second,
-	}
+	// Use the bear-specific HTTP client. When --resilientDns is true
+	// (default) this side-steps the pure-Go resolver's ndots:5 search-
+	// domain explosion + parallel A/AAAA race on burst BEAR traffic from
+	// inside k8s pods (e.g. rebom's enrichment scheduler).
+	client := buildBearHttpClient(300 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making request to BEAR: %w", err)
