@@ -371,20 +371,6 @@ func buildReleaseArts(filesCounter *int, locationMap *map[string][]string, files
 	return &artifactsObject
 }
 
-func buildSceArts(filesCounter *int, locationMap *map[string][]string, filesMap *map[string]interface{}) *[]Artifact {
-	var sceArtifacts []Artifact
-	var artifactsObject []Artifact
-	err := json.Unmarshal([]byte(sceArts), &sceArtifacts)
-	if err != nil {
-		fmt.Println("Error parsing SCE Artifact Input: ", err)
-		os.Exit(1)
-	} else {
-		indexPrefix := "variables.releaseInputProg.sceArts."
-		artifactsObject = *processArtifactsInput(&sceArtifacts, indexPrefix, filesCounter, locationMap, filesMap)
-	}
-	return &artifactsObject
-}
-
 var addreleaseCmd = &cobra.Command{
 	Use:   "addrelease",
 	Short: "Creates release on ReARM",
@@ -477,9 +463,14 @@ var addreleaseCmd = &cobra.Command{
 			body["fsBom"] = RawBomInput{RawBom: ReadBomJsonFromFile(fsBomPath), BomType: "APPLICATION"}
 		}
 
-		if sceArts != "" {
-			body["sceArts"] = *buildSceArts(&filesCounter, &locationMap, &filesMap)
-		}
+		// `--scearts` artifacts are attached to the source-code entry via
+		// buildCommitMap above (which puts them on
+		// `variables.releaseInputProg.sourceCodeEntry.artifacts`). The
+		// duplicate top-level `body["sceArts"]` send was a leftover —
+		// `addReleaseProgrammatic` has never consumed that field and
+		// `ReleaseInputProg.sceArts` is now @deprecated server-side
+		// (logs a WARN on receipt). Dropped here so we stop generating
+		// the warning.
 
 		if pr := buildPullRequestInfoBody(); pr != nil {
 			body["pullRequest"] = pr
