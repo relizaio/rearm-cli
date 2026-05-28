@@ -506,7 +506,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     --repo-path frontend
 ```
 
-**⚠️ Important: Version Schema Requirement**
+**(!) Important: Version Schema Requirement**
 
 The `--versionschema` flag is **critical** for components created via API. Without it:
 - `getversion` command will fail with "missing version schema configuration" error
