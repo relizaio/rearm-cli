@@ -12,18 +12,61 @@ jobs:
       - name: Record build start
         run: echo "BUILD_START=$(date -Iseconds)" >> $GITHUB_ENV
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df # v4.2.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Obtain version from release from Reliza Hub
+      - name: Setup rearm CLI
+        uses: relizaio/rearm-actions/setup-cli@46f1e94352761205d85e8a26d32dc0d618687b6d # 1.4.0
+      # Verify the dispatch payload version against ReARM's current
+      # ready-to-ship release. The ReARM trigger's Dynamic client payload
+      # (CEL) produces {"version": "<release.version>"}, so the payload
+      # version is what fired the trigger. Cross-check it against
+      # getlatestrelease --lifecycle READY_TO_SHIP (server-side a
+      # lifecycle.ordinal() >= READY_TO_SHIP filter, so it also accepts
+      # GENERAL_AVAILABILITY and later). If the latest ready-to-ship
+      # release no longer matches the payload (a newer release was approved
+      # between trigger fire and workflow start), bail instead of
+      # republishing a superseded version.
+      - name: Resolve and verify approved release from ReARM
+        env:
+          REARM_API_ID:  ${{ secrets.REARM_API_ID }}
+          REARM_API_KEY: ${{ secrets.REARM_API_KEY }}
+          PAYLOAD_VER:   ${{ github.event.client_payload.version }}
         run: |
-          reliza_ver=$(docker run --rm relizaio/reliza-cli:latest getlatestrelease -k ${{ secrets.RELIZA_API_KEY }} -i ${{ secrets.RELIZA_API_ID }} -b ${{github.ref_name}} --project ${{ secrets.RELIZA_HUB_PROJECT_ID }} --env UAT | jq -r ".version")
-          echo $reliza_ver
-          echo "VERSION=$reliza_ver" >> $GITHUB_ENV
+          set -euo pipefail
+          if [ -z "${PAYLOAD_VER:-}" ]; then
+            echo "::error::client_payload.version missing — the ReARM trigger's Dynamic client payload must evaluate to {\"version\":\"<release.version>\"}"
+            exit 1
+          fi
+          latest=$(rearm getlatestrelease \
+            -i "$REARM_API_ID" -k "$REARM_API_KEY" \
+            -u https://reliza.rearmhq.com \
+            --branch main \
+            --lifecycle READY_TO_SHIP \
+            --vcsuri github.com/${{ github.repository }})
+          approved_ver=$(echo    "$latest" | jq -r '.version')
+          approved_uuid=$(echo   "$latest" | jq -r '.uuid')
+          approved_commit=$(echo "$latest" | jq -r '.sourceCodeEntryDetails.commit')
+          echo "ReARM approved: version=$approved_ver uuid=$approved_uuid commit=$approved_commit"
+          if [ "$approved_ver" != "$PAYLOAD_VER" ]; then
+            echo "::error::trigger payload version '$PAYLOAD_VER' no longer matches latest ready-to-ship version '$approved_ver' on main — refusing to publish a superseded release"
+            exit 1
+          fi
+          if [ -z "$approved_commit" ] || [ "$approved_commit" = "null" ]; then
+            echo "::error::approved release $approved_ver has no recorded source commit — cannot determine what to publish"
+            exit 1
+          fi
+          echo "VERSION=$approved_ver"            >> $GITHUB_ENV
+          echo "RELEASE_UUID=$approved_uuid"      >> $GITHUB_ENV
+          echo "APPROVED_COMMIT=$approved_commit" >> $GITHUB_ENV
+      - name: Checkout the approved commit
+        run: git checkout "$APPROVED_COMMIT"
       - name: Update version in version.go
         run: sed -i "s/Version.*/Version string = \"${VERSION}\"/" cmd/version.go
       - name: Build for all different OS and Architecture
@@ -35,7 +78,7 @@ jobs:
           docker cp rearm-container://$VERSION ./
           aws s3 cp --recursive $VERSION s3://reliza-images/rearm-download/$VERSION
       - name: Login to DockerHub
-        uses: docker/login-action@v2.1.0
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: ${{ secrets.DOCKER_LOGIN }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -45,25 +88,25 @@ jobs:
           docker pull registry.relizahub.com/library/rearm-cli:$VERSION
           docker tag registry.relizahub.com/library/rearm-cli:$VERSION registry.relizahub.com/library/rearm-cli:latest
           docker push registry.relizahub.com/library/rearm-cli:latest
-      - name: Add artifacts to corresponding Reliza Hub release
+      - name: Add outbound deliverables to corresponding ReARM release
         run: |
-          echo -n "-k ${{ secrets.RELIZA_API_KEY }} -i ${{ secrets.RELIZA_API_ID }} --project ${{ secrets.RELIZA_HUB_PROJECT_ID }} " >> reliza_command
-          echo -n "--version $VERSION " >> reliza_command
+          echo -n "-k ${{ secrets.REARM_API_KEY }} -i ${{ secrets.REARM_API_ID }} -u https://reliza.rearmhq.com --releaseid $RELEASE_UUID " >> rearm_command
           readarray -t sha256sums <<< $(cat $VERSION/sha256sums.txt)
           for i in "${sha256sums[@]}"; do
-            echo -n "--artid https://d7ge14utcyki8.cloudfront.net/rearm-download/$VERSION/$(awk '{print $2}' <<< "$i") " >> reliza_command
-            echo -n "--artbuildid github$GITHUB_ACTION$GITHUB_SHA " >> reliza_command
-            echo -n "--artbuilduri https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID " >> reliza_command
-            echo -n "--artcimeta GitHub Actions " >> reliza_command
-            echo -n "--arttype Application " >> reliza_command
-            echo -n "--artdigests sha256:$(awk '{print $1}' <<< "$i") " >> reliza_command
-            echo -n "--datestart $BUILD_START " >> reliza_command
-            echo -n "--dateend $(date -Iseconds) " >> reliza_command
+            echo -n "--odelid https://d7ge14utcyki8.cloudfront.net/rearm-download/$VERSION/$(awk '{print $2}' <<< "$i") " >> rearm_command
+            echo -n "--odelbuildid github$GITHUB_ACTION$GITHUB_SHA " >> rearm_command
+            echo -n "--odelbuilduri https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID " >> rearm_command
+            echo -n "--odelcimeta GitHub Actions " >> rearm_command
+            echo -n "--odeltype APPLICATION " >> rearm_command
+            echo -n "--odeldigests sha256:$(awk '{print $1}' <<< "$i") " >> rearm_command
+            echo -n "--datestart $BUILD_START " >> rearm_command
+            echo -n "--dateend $(date -Iseconds) " >> rearm_command
           done
           # debug
-          echo "$(cat reliza_command)"
+          echo "$(cat rearm_command)"
           # send data
-          echo docker run --rm relizaio/reliza-cli:latest addartifact $(cat reliza_command) > rlz_cmd_exec
-          eval $(cat rlz_cmd_exec)
+          echo rearm addodeliverable $(cat rearm_command) > rearm_cmd_exec
+          eval $(cat rearm_cmd_exec)
       - name: Stop docker container
         run: docker stop rearm-container
+        
