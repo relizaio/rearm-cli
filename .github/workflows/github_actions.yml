@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ReARM Build And Submit
-        uses: relizaio/rearm-docker-action@c9b221a61039ba59f8255d2976a62542d2286207 # v.1.11.0
+        uses: relizaio/rearm-docker-action@aee0b69f1f70064c6e17ba9f12894cafd0e16d4d # next
         with:
           registry_username: ${{ secrets.DOCKER_LOGIN }}
           registry_password: ${{ secrets.DOCKER_TOKEN }}
