@@ -2,6 +2,25 @@
 
 Base Command: `devops`
 
+## Table of Contents
+
+1. [Export Instance CycloneDX BOM](#151-export-instance-cyclonedx-bom)
+2. [Set Sealed Secret Certificate on Instance](#152-set-sealed-secret-certificate-on-instance)
+3. [Replace Tags on Deployment Templates for GitOps](#153-replace-tags-on-deployment-templates-for-gitops)
+   - [Using Instance and Revision](#using-instance-and-revision)
+   - [Using Product and Version](#using-product-and-version)
+   - [Using Environment](#using-environment)
+4. [Retrieve Instance Properties and Secrets](#154-retrieve-instance-properties-and-secrets)
+5. [Override and Get Merged Helm Chart Values](#155-override-and-get-merged-helm-chart-values)
+6. [Get Deliverable Download Secrets](#156-get-deliverable-download-secrets)
+7. [Check if Instance Has Sealed Secret Certificate](#157-check-if-instance-has-sealed-secret-certificate)
+8. [Send Deployment Metadata From Instance](#158-send-deployment-metadata-from-instance)
+9. [List Product Feature Sets on an Instance Plan](#159-list-product-feature-sets-on-an-instance-plan)
+10. [Switch Product Feature Set on an Instance](#1510-switch-product-feature-set-on-an-instance)
+11. [Version Feature Set on a Product](#1511-version-feature-set-on-a-product)
+
+---
+
 ## 15.1 Export Instance CycloneDX BOM
 
 The `devops exportinst` command outputs the CycloneDX specification of your instance. It queries ReARM for the instance revision and returns the full CycloneDX BOM in JSON format.

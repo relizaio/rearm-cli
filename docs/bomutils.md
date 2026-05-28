@@ -2,6 +2,18 @@
 
 Base Command: `bomutils`
 
+## Table of Contents
+
+1. [Fix incorrect OCI purl generated via cdxgen](#91-fix-incorrect-oci-purl-generated-via-cdxgen)
+2. [BOM Enrichment with BEAR](#92-bom-enrichment-with-bear)
+   - [Enrich Supplier Only](#921-enrich-supplier-only)
+   - [Enrich License Only](#922-enrich-license-only)
+   - [Enrich Both Supplier and License](#923-enrich-both-supplier-and-license)
+3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
+4. [Merge Multiple BOMs](#94-merge-multiple-boms)
+
+---
+
 ## 9.1 Fix incorrect OCI purl generated via cdxgen
 purl generated for an oci artifact via cdxgen contains incorrect purls; as per the [spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst#oci) `oci` purls must be registry agnostic by default.
 
