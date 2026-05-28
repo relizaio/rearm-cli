@@ -2,6 +2,13 @@
 
 Base Command: `tea`
 
+## Table of Contents
+
+1. [Transparency Exchange API (TEA) Discovery](#111-transparency-exchange-api-tea-discovery)
+2. [Complete TEA Flow - Product and Component Details](#112-complete-tea-flow---product-and-component-details)
+
+---
+
 ## 11.1 Transparency Exchange API (TEA) Discovery
 
 The `tea discovery` command resolves a Transparency Exchange Identifier (TEI) to a product release UUID by following the TEA discovery flow as defined in the [CycloneDX TEA specification](https://github.com/CycloneDX/transparency-exchange-api).
