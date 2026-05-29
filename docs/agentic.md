@@ -14,11 +14,13 @@ these commands. This file documents the **CLI side**.
 
 ## Table of Contents
 
-1. [Session lifecycle commands](#1-session-lifecycle-commands)
+1. [Session lifecycle commands](#1-session-lifecycle-commands) — `init` / `touch` / `close` / `show` / `inbox`
 2. [Commit trailer format](#2-commit-trailer-format)
 3. [Shipping commit metadata to ReARM with trailers](#3-shipping-commit-metadata-to-rearm-with-trailers)
 4. [Authentication scope (v1)](#4-authentication-scope-v1)
 5. [Attaching agentic-report artifacts (orientation / intermediate / final)](#5-attaching-agentic-report-artifacts-orientation--intermediate--final)
+6. [Inspecting a release](#6-inspecting-a-release) — `release show` (lifecycle, approvals, vulnerabilities / violations)
+7. [Enrolling a signing key](#7-enrolling-a-signing-key) — `enrollkey`
 
 ---
 
@@ -105,6 +107,31 @@ creates a fresh row. Idempotent on already-closed sessions.
 
 ```bash
 rearm agent session close "01f8d9c3-…"
+```
+
+### `rearm agent session show <session-uuid>`
+
+Returns the full Session shape — `status`, `artifacts`, `commits`,
+`releases`, `pullRequests`, and `policyEvents` (each with the embedded
+`policy` snapshot: `cel`, `description`, `severity`, `kind`). This is
+the "what should I do now?" read at startup and after each inbox
+event — the inbox says what changed, this gives the current full
+state.
+
+```bash
+rearm agent session show "01f8d9c3-…"
+```
+
+### `rearm agent session inbox <session-uuid>`
+
+Polls events the agent should react to — release lifecycle moves,
+approval verdicts, and policy verdicts scoped to this session. Pass
+`--since <cursor>` with the cursor of the most recent event you've
+already handled to fetch only newer ones; `--limit` (default/cap 200)
+bounds the page; `--kind` (repeatable) filters to specific event kinds.
+
+```bash
+rearm agent session inbox "01f8d9c3-…" --since "2026-05-13T14:42:11Z"
 ```
 
 ---
@@ -247,7 +274,7 @@ The agent can carry additional free-form tags (`topic`, `severity`,
 Use the existing `rearm addrelease` / `rearm addartifact` paths to
 create the artifact (tags + type ride on the standard artifact JSON
 shape), then bind the returned uuid to the session with
-`rearm agent session attach-artifact`.
+`rearm agent session add-artifact`.
 
 ```bash
 # 1. Create the artifact via addrelease (works with FREEFORM keys).
@@ -273,12 +300,12 @@ RESP=$(rearm addrelease \
 ARTIFACT_UUID=$(echo "$RESP" | jq -r '.data.addReleaseProgrammatic.artifacts[0]')
 
 # 2. Bind it to the session.
-rearm agent session attach-artifact "$SESSION_UUID" \
+rearm agent session add-artifact "$SESSION_UUID" \
     --artifact-uuid "$ARTIFACT_UUID" \
     -i "$REARM_APIKEYID" -k "$REARM_APIKEY" -u "$REARM_URI"
 ```
 
-`attach-artifact` is idempotent — re-attaching the same artifact uuid
+`add-artifact` is idempotent — re-attaching the same artifact uuid
 is a no-op. It calls the `sessionAttachArtifactProgrammatic`
 GraphQL mutation under the hood; any AGENT-functioned FREEFORM key
 authorised on the org can drive it.
@@ -323,3 +350,65 @@ Operators craft the policy in the ReARM UI (AI Agents → **Manage
 policies**) and pick a kind / severity that matches the gate they
 want — the UI's policy editor ships a starter catalogue of sample
 policies for the common shapes.
+
+---
+
+## 6. Inspecting a release
+
+### `rearm agent release show <release-uuid>`
+
+Looks up a release the way an agent typically needs it after a
+`LIFECYCLE_CHANGE` or `APPROVAL` inbox event, or to read its security
+posture. Returns:
+
+- `lifecycle` and `updateEvents[].message` — the human-readable reason
+  a CEL gate flipped lifecycle (`"Triggered by '…' (CEL: …)"`).
+- `approvalEvents[]` — approval history with reviewer comments.
+- `sourceCodeEntryDetails[]` — per-commit attribution + signature state.
+- `metrics` — security posture from the latest Dependency-Track scan
+  (`metrics.lastScanned`): severity counts (`critical` / `high` /
+  `medium` / `low` / `unassigned`), policy-violation totals
+  (security / license / operational), and the per-finding lists
+  `vulnerabilityDetails[]` (`purl`, `vulnId`, `severity`,
+  `analysisState`) and `violationDetails[]` (`purl`, `type`, `license`,
+  `analysisState`).
+
+Pass either `--session <session-uuid>` or `--client-session-id <id>`
+(the value from your commit trailer):
+
+```bash
+rearm agent release show "998ea056-…" --session "01f8d9c3-…"
+```
+
+**Authorization.** A release **attributed to your session** (one of
+the session's commits traces through to it) needs no extra permission —
+the FREEFORM key owning the session is enough. A release **not**
+attributed to your session is only returned if the calling key has
+explicit `RESOURCE` read permission on its component / product.
+
+---
+
+## 7. Enrolling a signing key
+
+### `rearm agent enrollkey`
+
+Binds a public key to an agent so the verifier can match the agent's
+signed commits (commits attributed via the `ReARM-Agent:` trailer
+verify only when the signature matches a key enrolled here). An agent
+can bootstrap its **own** key on first run — no operator step needed.
+
+```bash
+rearm agent enrollkey \
+    --org "$ORG_UUID" \
+    --agent "$AGENT_UUID" \
+    --format SSH \
+    --pubkey-file ~/.ssh/agent_signing_key.pub \
+    --identity "agent@your-org.example"
+```
+
+Required: `--agent`, `--org`, `--format` (`SSH` or `GPG`),
+`--pubkey-file`. The fingerprint is derived locally from the pubkey
+via `ssh-keygen` / `gpg`; pass `--fingerprint` to skip that local-tool
+dependency. For SSH, `--identity` is required and must match the
+allowed-signers principal the verifier checks (usually the agent
+email).
