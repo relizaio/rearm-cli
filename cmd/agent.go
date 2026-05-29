@@ -239,12 +239,23 @@ needs after seeing a LIFECYCLE_CHANGE or APPROVAL inbox event:
   - updateEvents[].message — the human-readable reason a CEL gate
     flipped lifecycle ("Triggered by '...' (CEL: ...)").
   - approvalEvents[] — full approval history with reviewer comments.
-  - sourceCodeEntryDetails — per-commit attribution + signature state.
-  - metrics — security posture: severity counts (critical/high/...),
-    policy-violation totals, and the per-finding lists
-    vulnerabilityDetails[] (purl, vulnId, severity, analysisState) and
-    violationDetails[] (purl, type, license, analysisState). Populated
-    from the latest Dependency-Track scan (see metrics.lastScanned).
+  - sourceCodeEntryDetails — per-commit attribution + signature state,
+    plus its source-code SBOM artifacts (artifactDetails).
+  - metrics — release-level (AGGREGATE) security posture: severity
+    counts (critical/high/...), policy-violation totals, and the
+    per-finding lists vulnerabilityDetails[] (purl, vulnId, severity,
+    analysisState) and violationDetails[] (purl, type, license,
+    analysisState). Populated from the latest scan (see lastScanned).
+  - per-artifact metrics — every artifact carries its OWN metrics, so
+    you can tell WHERE findings live: a clean source-code SBOM vs a
+    vulnerable deliverable/container SBOM, plus SARIF / VDR results.
+    Walk: sourceCodeEntryDetails.artifactDetails (source SBOMs),
+    artifactDetails (release-level), and
+    variantDetails[].outboundDeliverableDetails[].artifactDetails
+    (deliverable SBOMs / scan results).
+    NB: release-level metrics reflect release-scope vuln suppressions
+    while per-artifact metrics are raw — the two detail lists can
+    differ; that's expected.
 
 The release must be attributed to YOUR session (one of the session's
 commits must trace through to this release). Pass either --session
@@ -260,19 +271,49 @@ permission on its component/product.`,
 			fmt.Fprintln(os.Stderr, "--session or --client-session-id is required")
 			os.Exit(1)
 		}
+		// Per-artifact metrics fragment — each artifact (BOM, SARIF /
+		// CODE_SCANNING_RESULT, VDR, …) carries its own scan metrics, so a
+		// release with a clean source-code SBOM but a vulnerable deliverable
+		// SBOM is legible by walking the artifacts, not just the aggregate.
+		artifactMetrics := `
+			uuid displayIdentifier type bomFormat tags { key value }
+			metrics {
+				firstScanned lastScanned
+				critical high medium low unassigned
+				policyViolationsSecurityTotal policyViolationsLicenseTotal policyViolationsOperationalTotal
+				vulnerabilityDetails { purl vulnId severity analysisState }
+				violationDetails { purl type license violationDetails analysisState }
+			}`
 		query := `
 			query ($releaseUuid: ID!, $sessionUuid: ID, $clientSessionId: String) {
 				agenticReleaseProgrammatic(releaseUuid: $releaseUuid, sessionUuid: $sessionUuid, clientSessionId: $clientSessionId) {
 					uuid version lifecycle
 					updateEvents { rus rua oldValue newValue message date }
 					approvalEvents { approvalEntry approvalRoleId state comment date }
-					sourceCodeEntryDetails { uuid commit attributionState attributionReason }
+					sourceCodeEntryDetails {
+						uuid commit attributionState attributionReason
+						artifactDetails { ` + artifactMetrics + ` }
+					}
+					# Release-level metrics are the AGGREGATE, reflecting any
+					# release-scope vulnerability suppressions; per-artifact
+					# metrics below are raw (artifact scope), so the two detail
+					# lists can differ — keep both.
 					metrics {
 						lastScanned firstScanned
 						critical high medium low unassigned
 						policyViolationsSecurityTotal policyViolationsLicenseTotal policyViolationsOperationalTotal
 						vulnerabilityDetails { purl vulnId severity analysisState }
 						violationDetails { purl type license violationDetails analysisState }
+					}
+					# Release-level artifacts (e.g. an aggregated SBOM / SARIF
+					# attached straight to the release).
+					artifactDetails { ` + artifactMetrics + ` }
+					# Deliverable SBOMs / scan results, per variant.
+					variantDetails {
+						outboundDeliverableDetails {
+							uuid displayIdentifier
+							artifactDetails { ` + artifactMetrics + ` }
+						}
 					}
 				}
 			}
