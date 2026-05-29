@@ -240,12 +240,20 @@ needs after seeing a LIFECYCLE_CHANGE or APPROVAL inbox event:
     flipped lifecycle ("Triggered by '...' (CEL: ...)").
   - approvalEvents[] — full approval history with reviewer comments.
   - sourceCodeEntryDetails — per-commit attribution + signature state.
+  - metrics — security posture: severity counts (critical/high/...),
+    policy-violation totals, and the per-finding lists
+    vulnerabilityDetails[] (purl, vulnId, severity, analysisState) and
+    violationDetails[] (purl, type, license, analysisState). Populated
+    from the latest Dependency-Track scan (see metrics.lastScanned).
 
 The release must be attributed to YOUR session (one of the session's
 commits must trace through to this release). Pass either --session
 (the session row uuid) or --client-session-id (the agent-chosen id
 from the commit trailer). The backend verifies the calling key owns
-the session before returning anything.`,
+the session before returning anything — so a release your own session
+built needs no extra permission. A release NOT attributed to your
+session is only returned if the calling key has explicit RESOURCE read
+permission on its component/product.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if releaseShowSessionUuid == "" && releaseShowClientSessionId == "" {
@@ -259,6 +267,13 @@ the session before returning anything.`,
 					updateEvents { rus rua oldValue newValue message date }
 					approvalEvents { approvalEntry approvalRoleId state comment date }
 					sourceCodeEntryDetails { uuid commit attributionState attributionReason }
+					metrics {
+						lastScanned firstScanned
+						critical high medium low unassigned
+						policyViolationsSecurityTotal policyViolationsLicenseTotal policyViolationsOperationalTotal
+						vulnerabilityDetails { purl vulnId severity analysisState }
+						violationDetails { purl type license violationDetails analysisState }
+					}
 				}
 			}
 		`
