@@ -1133,6 +1133,88 @@ rearm pullrequest upsert \
 
 ---
 
+## 19. Use Case: Send Batched Release Metadata to ReARM
+
+Base Command: `addreleases`
+
+Creates several releases on ReARM in a single **all-or-nothing** call. If any release in the batch fails (validation, authorization, duplicate version, etc.), none are persisted. This is the batch counterpart to `addrelease` (Use Case 2).
+
+The key difference from calling `addrelease` once per component is **auto-integration behavior**. When several component releases in one batch are dependencies of the same product Feature Set (with auto-integrate enabled), the backend fires product auto-integration only **once per affected Feature Set for the whole batch** (deduplicated) — producing a single Product release that references every component release — instead of one Product release per component release. Use this when a CI run builds several component releases at once and you want a single product auto-integrate rather than one per component version.
+
+Each release is supplied as an element of a JSON array read from a file via `--infile`. Every element has **exactly the same shape** as the input accepted by `addrelease` (the per-release `version`, `branch`/`component` (or `vcsuri`/`repo-path`), `lifecycle`, `sourceCodeEntry`, `commits`, `outboundDeliverables`, `artifacts`, `pullRequest`, etc.).
+
+**Artifacts reference local files by path.** As with `addrelease`, you do not embed file bytes in the JSON — each artifact object carries a `filePath` field pointing at a local file, and the CLI reads each file and uploads it alongside the batch. Artifacts may appear at any of the same locations `addrelease` supports: release-level (`artifacts`), source-code-entry (`sourceCodeEntry.artifacts` or `commits[].artifacts`), and per-deliverable (`outboundDeliverables[].artifacts`).
+
+Sample command:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work registry.relizahub.com/library/rearm-cli    \
+    addreleases    \
+    -i component_or_organization_wide_rw_api_id    \
+    -k component_or_organization_wide_rw_api_key    \
+    --infile ./batch.json
+```
+
+Sample `batch.json` (two releases, each carrying a CycloneDX SBOM):
+
+```json
+[
+  {
+    "component": "5a813e39-c453-444e-85cd-b618b7de6108",
+    "branch": "main",
+    "version": "1.4.0",
+    "lifecycle": "ASSEMBLED",
+    "sourceCodeEntry": {
+      "commit": "9f1c2ab",
+      "commitMessage": "fix: handle null tokens",
+      "uri": "github.com/acme/widget",
+      "type": "git",
+      "artifacts": [
+        { "displayIdentifier": "source-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "filePath": "./sboms/widget-source.cdx.json" }
+      ]
+    },
+    "outboundDeliverables": [
+      {
+        "displayIdentifier": "registry.acme.com/widget:1.4.0",
+        "type": "CONTAINER",
+        "softwareMetadata": { "packageType": "OCI", "digests": ["sha256:abc123"] },
+        "artifacts": [
+          { "displayIdentifier": "deliverable-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "inventoryTypes": ["SOFTWARE"], "filePath": "./sboms/widget-image.cdx.json" }
+        ]
+      }
+    ],
+    "artifacts": [
+      { "displayIdentifier": "trivy-scan", "type": "SARIF", "storedIn": "REARM", "filePath": "./scans/widget.sarif" }
+    ]
+  },
+  {
+    "component": "7c0a1b2e-1111-2222-3333-444455556666",
+    "branch": "main",
+    "version": "2.1.0",
+    "lifecycle": "ASSEMBLED",
+    "artifacts": [
+      { "displayIdentifier": "gateway-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "filePath": "./sboms/gateway.cdx.json" }
+    ]
+  }
+]
+```
+
+Flags stand for:
+
+- **addreleases** - command that denotes we are sending metadata for several Releases to ReARM in one batch.
+- **-i** - flag for component api id or organization-wide read-write api id (required). The same key is used for every release in the batch, so it must be authorized for each release's component.
+- **-k** - flag for component api key or organization-wide read-write api key (required).
+- **--infile** - path to a JSON file containing an array of release objects (required). Each object has the same shape as the `addrelease` input; artifacts reference local files via their `filePath` field.
+- **--stripbom** - flag to toggle stripping of bom metadata for hash comparison (optional). Default is true. Supported values: true|false. Applied to every artifact in the batch.
+
+Notes:
+
+- Because the whole batch is uploaded in one request, the server's max upload size applies to the **sum** of all artifact files in the batch, not per release.
+- `lifecycle` is taken from each release object (e.g. `"ASSEMBLED"`); only `ASSEMBLED` releases trigger product auto-integration, matching `addrelease` behavior.
+- Authorization is enforced **per release** against the supplied key — a key authorized for some but not all of the batch's components will cause the entire batch to be rejected.
+
+---
+
 # Development of ReARM CLI
 
 ## Adding dependencies to ReARM CLI
