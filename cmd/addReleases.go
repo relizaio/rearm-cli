@@ -68,7 +68,7 @@ Example batch.json (one element shown):
       {
         "displayIdentifier": "registry.acme.com/widget:1.4.0",
         "type": "CONTAINER",
-        "softwareMetadata": { "packageType": "OCI", "digests": ["sha256:abc123"] },
+        "softwareMetadata": { "packageType": "CONTAINER", "digests": ["sha256:abc123"] },
         "artifacts": [
           { "displayIdentifier": "deliverable-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "filePath": "./sboms/widget-image.cdx.json" }
         ]

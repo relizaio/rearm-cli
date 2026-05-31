@@ -438,7 +438,7 @@ Flags stand for:
 - **vcsuri** - flag to denote uri of vcs repository for the component (used if component API key is not used and explicit component UUID is not provided).
 - **--repo-path** - Repository path for monorepo components (optional, used in combination with vcsuri for component resolution).
 - **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
-- **--branch** - flag to denote required branch of chosen Component or Product (required).
+- **--branch** - name of the chosen Component's branch — or, for a Product, its Feature Set (a Product's Feature Set is the product-level equivalent of a Component branch) (required).
 - **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
 - **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
 - **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).
@@ -1184,7 +1184,7 @@ Sample `batch.json` (two releases, each carrying a CycloneDX SBOM):
       {
         "displayIdentifier": "registry.acme.com/widget:1.4.0",
         "type": "CONTAINER",
-        "softwareMetadata": { "packageType": "OCI", "digests": ["sha256:abc123"] },
+        "softwareMetadata": { "packageType": "CONTAINER", "digests": ["sha256:abc123"] },
         "artifacts": [
           { "displayIdentifier": "deliverable-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "inventoryTypes": ["SOFTWARE"], "filePath": "./sboms/widget-image.cdx.json" }
         ]
