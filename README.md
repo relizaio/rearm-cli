@@ -1184,7 +1184,7 @@ Sample `batch.json` (two releases, each carrying a CycloneDX SBOM):
       {
         "displayIdentifier": "registry.acme.com/widget:1.4.0",
         "type": "CONTAINER",
-        "softwareMetadata": { "packageType": "OCI", "digests": ["sha256:abc123"] },
+        "softwareMetadata": { "packageType": "CONTAINER", "digests": ["sha256:abc123"] },
         "artifacts": [
           { "displayIdentifier": "deliverable-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "inventoryTypes": ["SOFTWARE"], "filePath": "./sboms/widget-image.cdx.json" }
         ]
