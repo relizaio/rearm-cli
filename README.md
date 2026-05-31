@@ -71,6 +71,7 @@ It is possible to set authentication data via:
     1. [Session lifecycle (init / touch / close)](docs/agentic.md#1-session-lifecycle-commands)
     2. [Commit trailer format](docs/agentic.md#2-commit-trailer-format)
     3. [Shipping commit metadata with trailers](docs/agentic.md#3-shipping-commit-metadata-to-rearm-with-trailers)
+20. [Send Batched Release Metadata to ReARM](#20-use-case-send-batched-release-metadata-to-rearm)
 
 ## 1. Use Case: Get Version Assignment From ReARM
 
@@ -1133,7 +1134,13 @@ rearm pullrequest upsert \
 
 ---
 
-## 19. Use Case: Send Batched Release Metadata to ReARM
+## 19. [AI Agent Commands](docs/agentic.md)
+    19.1. [Session lifecycle (init / touch / close)](docs/agentic.md#1-session-lifecycle-commands)
+    19.2. [Commit trailer format](docs/agentic.md#2-commit-trailer-format)
+    19.3. [Shipping commit metadata with trailers](docs/agentic.md#3-shipping-commit-metadata-to-rearm-with-trailers)
+--- 
+
+## 20. Use Case: Send Batched Release Metadata to ReARM
 
 Base Command: `addreleases`
 
