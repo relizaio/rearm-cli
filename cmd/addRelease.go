@@ -522,7 +522,7 @@ var addreleaseCmd = &cobra.Command{
 }
 
 func init() {
-	addreleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of VCS Branch used")
+	addreleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of the Component branch — or, for a Product, its Feature Set (the product-level equivalent of a branch)")
 	addreleaseCmd.PersistentFlags().StringVarP(&version, "version", "v", "", "Release version")
 	addreleaseCmd.MarkPersistentFlagRequired("version")
 	addreleaseCmd.MarkPersistentFlagRequired("branch")

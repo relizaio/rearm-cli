@@ -156,7 +156,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 func init() {
 	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM for which to obtain latest release")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&product, "product", "", "Product UUID from ReARM to condition component release to this product (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of branch or Feature Set from ReARM for which latest release is requested (required)")
+	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of the Component branch — or, for a Product, its Feature Set (the product-level equivalent of a branch) — for which the latest release is requested (required)")
 	getLatestReleaseCmd.MarkPersistentFlagRequired("branch")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
