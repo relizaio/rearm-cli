@@ -399,16 +399,16 @@ can bootstrap its **own** key on first run — no operator step needed.
 
 ```bash
 rearm agent enrollkey \
-    --org "$ORG_UUID" \
     --agent "$AGENT_UUID" \
     --format SSH \
     --pubkey-file ~/.ssh/agent_signing_key.pub \
     --identity "agent@your-org.example"
 ```
 
-Required: `--agent`, `--org`, `--format` (`SSH` or `GPG`),
-`--pubkey-file`. The fingerprint is derived locally from the pubkey
-via `ssh-keygen` / `gpg`; pass `--fingerprint` to skip that local-tool
-dependency. For SSH, `--identity` is required and must match the
-allowed-signers principal the verifier checks (usually the agent
-email).
+Required: `--agent`, `--format` (`SSH` or `GPG`), `--pubkey-file`. The
+org is **not** a flag — it is always the org the calling key resolves
+to, so there is nothing to pass (and nothing to get wrong). The
+fingerprint is derived locally from the pubkey via `ssh-keygen` /
+`gpg`; pass `--fingerprint` to skip that local-tool dependency. For
+SSH, `--identity` is required and must match the allowed-signers
+principal the verifier checks (usually the agent email).
