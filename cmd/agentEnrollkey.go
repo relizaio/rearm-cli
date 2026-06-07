@@ -27,12 +27,11 @@ import (
 // not available (e.g. CI shipping a pre-computed value).
 
 var (
-	enrollAgentUuid     string
-	enrollKeyFormat     string
-	enrollKeyOrg        string
-	enrollPubkeyFile    string
-	enrollFingerprint   string
-	enrollKeyIdentity   string
+	enrollAgentUuid   string
+	enrollKeyFormat   string
+	enrollPubkeyFile  string
+	enrollFingerprint string
+	enrollKeyIdentity string
 )
 
 var agentEnrollkeyCmd = &cobra.Command{
@@ -50,8 +49,8 @@ For SSH, --identity is required and must match the
 allowed_signers principal the verifier will check against
 (usually the user / agent email).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if enrollAgentUuid == "" || enrollKeyOrg == "" || enrollKeyFormat == "" || enrollPubkeyFile == "" {
-			fmt.Fprintln(os.Stderr, "--agent, --org, --format, and --pubkey-file are required")
+		if enrollAgentUuid == "" || enrollKeyFormat == "" || enrollPubkeyFile == "" {
+			fmt.Fprintln(os.Stderr, "--agent, --format, and --pubkey-file are required")
 			os.Exit(1)
 		}
 		pubKey, err := os.ReadFile(enrollPubkeyFile)
@@ -59,12 +58,12 @@ allowed_signers principal the verifier will check against
 			fmt.Fprintf(os.Stderr, "Failed to read pubkey file: %v\n", err)
 			os.Exit(1)
 		}
-		runEnrollkey("AGENT", enrollAgentUuid, enrollKeyOrg, enrollKeyFormat,
+		runEnrollkey(enrollAgentUuid, enrollKeyFormat,
 			enrollPubkeyFile, string(pubKey), enrollFingerprint, enrollKeyIdentity)
 	},
 }
 
-func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerprint, identity string) {
+func runEnrollkey(ownerUuid, format, pubkeyFile, pubKey, fingerprint, identity string) {
 	if fingerprint == "" {
 		fp, err := deriveFingerprint(format, pubkeyFile)
 		if err != nil {
@@ -74,22 +73,16 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 		}
 		fingerprint = fp
 	}
-	// AGENT enrolment goes via the FREEFORM-auth'd programmatic
-	// mutation — that's what lets an agent bootstrap its own signing
-	// key without an operator JWT. COMMITTER enrolment stays on the
-	// JWT-authenticated path; only humans / CI bots admins enrol on
-	// committers.
-	// AGENT enrolment uses the FREEFORM-auth'd programmatic mutation;
-	// the wrapper argument is `signingKey`. COMMITTER enrolment stays
-	// on the JWT path which still uses the legacy `input` arg name.
-	op := "enrollSigningKey"
-	argName := "input"
-	if strings.EqualFold(ownerType, "AGENT") {
-		op = "enrollSigningKeyProgrammatic"
-		argName = "signingKey"
-	}
+	// AGENT enrolment goes via the FREEFORM-auth'd programmatic mutation
+	// — that's what lets an agent bootstrap its own signing key without
+	// an operator JWT. The org is not sent: the server always uses the
+	// org the calling key resolves to (AgentSigningKeyInput has no org
+	// field). COMMITTER enrolment stays on the JWT-authenticated
+	// `enrollSigningKey`, which is operator-only and not exposed here.
+	const op = "enrollSigningKeyProgrammatic"
+	const argName = "signingKey"
 	query := `
-		mutation ($` + argName + `: SigningKeyInput!) {
+		mutation ($` + argName + `: AgentSigningKeyInput!) {
 			` + op + `(` + argName + `: $` + argName + `) {
 				uuid
 				format
@@ -102,9 +95,8 @@ func runEnrollkey(ownerType, ownerUuid, org, format, pubkeyFile, pubKey, fingerp
 		}
 	`
 	input := map[string]interface{}{
-		"org":         org,
 		"format":      strings.ToUpper(format),
-		"ownerType":   ownerType,
+		"ownerType":   "AGENT",
 		"ownerUuid":   ownerUuid,
 		"fingerprint": fingerprint,
 		"pubKey":      strings.TrimSpace(pubKey),
@@ -157,13 +149,11 @@ func deriveFingerprint(format, pubkeyFile string) (string, error) {
 
 func init() {
 	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollAgentUuid, "agent", "", "UUID of the agent — required")
-	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollKeyOrg, "org", "", "Org UUID — required")
 	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollKeyFormat, "format", "", "Signature format: SSH or GPG — required")
 	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollPubkeyFile, "pubkey-file", "", "Path to the public key (single-line SSH or ASCII-armoured GPG) — required")
 	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollFingerprint, "fingerprint", "", "Override the auto-derived fingerprint")
 	agentEnrollkeyCmd.PersistentFlags().StringVar(&enrollKeyIdentity, "identity", "", "Allowed-signers principal (required for SSH; e.g. email)")
 	_ = agentEnrollkeyCmd.MarkPersistentFlagRequired("agent")
-	_ = agentEnrollkeyCmd.MarkPersistentFlagRequired("org")
 	_ = agentEnrollkeyCmd.MarkPersistentFlagRequired("format")
 	_ = agentEnrollkeyCmd.MarkPersistentFlagRequired("pubkey-file")
 
