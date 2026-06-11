@@ -53,6 +53,13 @@ var (
 	createComponentName                string
 	rebuildRelease                     bool
 	vcsDisplayName                     string
+
+	// Distribution module — device-identity fields on a release.
+	releaseIdentifiers []string
+	gudidRecord      string
+	gudidStatus      string
+	eos              string
+	eol              string
 )
 
 type Identifier struct {
@@ -463,6 +470,41 @@ var addreleaseCmd = &cobra.Command{
 			body["fsBom"] = RawBomInput{RawBom: ReadBomJsonFromFile(fsBomPath), BomType: "APPLICATION"}
 		}
 
+		// Distribution module: release-level identity fields. Only sent
+		// when supplied, so existing usage is unaffected and they no-op against
+		// older servers that don't yet accept them.
+		if len(releaseIdentifiers) > 0 {
+			var ri []Identifier
+			for _, pair := range releaseIdentifiers {
+				kv := strings.SplitN(pair, ":", 2)
+				if len(kv) == 2 {
+					ri = append(ri, Identifier{IdType: kv[0], IdValue: kv[1]})
+				} else {
+					fmt.Println("Skipping malformed --relidentifiers entry (expected TYPE:VALUE): " + pair)
+				}
+			}
+			if len(ri) > 0 {
+				body["identifiers"] = ri
+			}
+		}
+		if len(gudidRecord) > 0 {
+			var gr map[string]interface{}
+			if err := json.Unmarshal([]byte(gudidRecord), &gr); err != nil {
+				fmt.Println("Error parsing --gudid-record JSON: " + err.Error())
+				os.Exit(1)
+			}
+			body["gudidRecord"] = gr
+		}
+		if len(gudidStatus) > 0 {
+			body["gudidStatus"] = strings.ToUpper(gudidStatus)
+		}
+		if len(eos) > 0 {
+			body["eos"] = eos
+		}
+		if len(eol) > 0 {
+			body["eol"] = eol
+		}
+
 		// `--scearts` artifacts are attached to the source-code entry via
 		// buildCommitMap above (which puts them on
 		// `variables.releaseInputProg.sourceCodeEntry.artifacts`). The
@@ -577,5 +619,11 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&prSourceBranchName, "pr-source-branch-name", "", "(Optional) Source branch name (the branch the PR is being merged from).")
 	addreleaseCmd.PersistentFlags().StringVar(&prTargetBranchName, "pr-target-branch-name", "", "(Optional) Target branch name (the branch the PR is being merged into, e.g. \"main\").")
 	addreleaseCmd.PersistentFlags().StringVar(&prEndpoint, "pr-endpoint", "", "(Optional) URL of the PR in the upstream SCM.")
+	// Distribution module — device-identity fields shipped via addReleaseProgrammatic.
+	addreleaseCmd.PersistentFlags().StringArrayVar(&releaseIdentifiers, "relidentifiers", []string{}, "(Optional) Release identifiers as Type:Value pairs (multiple allowed). Type is one of PURL, CPE, TEI, UDI, UDI_DI, UDI_PI, SERIAL, LOT. E.g. --relidentifiers UDI_DI:00366012345678")
+	addreleaseCmd.PersistentFlags().StringVar(&gudidRecord, "gudid-record", "", "(Optional) GUDID record as a JSON object string, e.g. '{\"brandName\":\"X\",\"versionModel\":\"v1\"}'.")
+	addreleaseCmd.PersistentFlags().StringVar(&gudidStatus, "gudid-status", "", "(Optional) GUDID submission status: NOT_SUBMITTED | SUBMITTED | PUBLISHED.")
+	addreleaseCmd.PersistentFlags().StringVar(&eos, "eos", "", "(Optional) End-of-support date (ISO-8601, e.g. 2027-01-31).")
+	addreleaseCmd.PersistentFlags().StringVar(&eol, "eol", "", "(Optional) End-of-life date (ISO-8601, e.g. 2028-01-31).")
 	rootCmd.AddCommand(addreleaseCmd)
 }
