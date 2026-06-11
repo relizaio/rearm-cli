@@ -1205,6 +1205,9 @@ Sample `batch.json` (two releases, each carrying a CycloneDX SBOM):
   }
 ]
 ```
+For full specification refer to
+
+`addReleasesProgrammatic(releases: [ReleaseInputProg!]!): [Release]` endpoint in ReARM's GraphQL [schema](https://raw.githubusercontent.com/relizaio/rearm/refs/heads/main/backend/src/main/resources/schema/schema.graphqls).
 
 Flags stand for:
 
