@@ -55,7 +55,7 @@ var (
 	vcsDisplayName                     string
 
 	// Distribution module — device-identity fields on a release.
-	rearmIdentifiers []string
+	releaseIdentifiers []string
 	gudidRecord      string
 	gudidStatus      string
 	eos              string
@@ -470,21 +470,21 @@ var addreleaseCmd = &cobra.Command{
 			body["fsBom"] = RawBomInput{RawBom: ReadBomJsonFromFile(fsBomPath), BomType: "APPLICATION"}
 		}
 
-		// Distribution module: ReARM-native device-identity fields. Only sent
+		// Distribution module: release-level identity fields. Only sent
 		// when supplied, so existing usage is unaffected and they no-op against
 		// older servers that don't yet accept them.
-		if len(rearmIdentifiers) > 0 {
+		if len(releaseIdentifiers) > 0 {
 			var ri []Identifier
-			for _, pair := range rearmIdentifiers {
+			for _, pair := range releaseIdentifiers {
 				kv := strings.SplitN(pair, ":", 2)
 				if len(kv) == 2 {
 					ri = append(ri, Identifier{IdType: kv[0], IdValue: kv[1]})
 				} else {
-					fmt.Println("Skipping malformed --rearmidentifiers entry (expected TYPE:VALUE): " + pair)
+					fmt.Println("Skipping malformed --relidentifiers entry (expected TYPE:VALUE): " + pair)
 				}
 			}
 			if len(ri) > 0 {
-				body["rearmIdentifiers"] = ri
+				body["identifiers"] = ri
 			}
 		}
 		if len(gudidRecord) > 0 {
@@ -620,7 +620,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&prTargetBranchName, "pr-target-branch-name", "", "(Optional) Target branch name (the branch the PR is being merged into, e.g. \"main\").")
 	addreleaseCmd.PersistentFlags().StringVar(&prEndpoint, "pr-endpoint", "", "(Optional) URL of the PR in the upstream SCM.")
 	// Distribution module — device-identity fields shipped via addReleaseProgrammatic.
-	addreleaseCmd.PersistentFlags().StringArrayVar(&rearmIdentifiers, "rearmidentifiers", []string{}, "(Optional) Release ReARM-native identifiers as Type:Value pairs (multiple allowed). Type is one of UDI, UDI_DI, UDI_PI. E.g. --rearmidentifiers UDI_DI:00366012345678")
+	addreleaseCmd.PersistentFlags().StringArrayVar(&releaseIdentifiers, "relidentifiers", []string{}, "(Optional) Release identifiers as Type:Value pairs (multiple allowed). Type is one of PURL, CPE, TEI, UDI, UDI_DI, UDI_PI, SERIAL, LOT. E.g. --relidentifiers UDI_DI:00366012345678")
 	addreleaseCmd.PersistentFlags().StringVar(&gudidRecord, "gudid-record", "", "(Optional) GUDID record as a JSON object string, e.g. '{\"brandName\":\"X\",\"versionModel\":\"v1\"}'.")
 	addreleaseCmd.PersistentFlags().StringVar(&gudidStatus, "gudid-status", "", "(Optional) GUDID submission status: NOT_SUBMITTED | SUBMITTED | PUBLISHED.")
 	addreleaseCmd.PersistentFlags().StringVar(&eos, "eos", "", "(Optional) End-of-support date (ISO-8601, e.g. 2027-01-31).")
