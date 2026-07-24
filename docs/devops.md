@@ -441,3 +441,45 @@ When multiple overrides are supplied with different branch names, the new featur
 - A feature set with the chosen new name must not already exist on the product.
 
 **Output:** JSON of the newly-created `Branch` (the new feature set), including its UUID for use as the input to a subsequent `switchfeatureset` call.
+## 15.12 Report Deployment Failures From a CD Agent
+
+Reports deployment failure events for an instance. Failures are surfaced in the ReARM Instance view, so a broken deploy is visible in ReARM instead of only in the CD agent's pod logs.
+
+Batch form (what a reconcile loop should use — one call per iteration, not one per failure):
+
+```bash
+rearm devops instevent -i $APIKEYID -k $APIKEY --eventsfile ./events.json
+```
+
+Single-event form:
+
+```bash
+rearm devops instevent -i $APIKEYID -k $APIKEY \
+  --deployment traefik \
+  --namespace traefik \
+  --phase HELM_INSTALL \
+  --failureclass RBAC_FORBIDDEN \
+  --message "UPGRADE FAILED: could not get clusterroles" \
+  --detailfile ./helm-stderr.txt
+```
+
+**Flags:**
+- **--deployment** - name of the deployment that failed (required unless `--events`/`--eventsfile` is used).
+- **--namespace** - namespace of the deployment. Required when authenticating with a CLUSTER-scoped API key, since that key covers many namespaces and the namespace is what resolves the owning instance.
+- **--sender** - unique sender within a single namespace (optional).
+- **--phase** - reconcile stage: `VALUES_MERGE`, `TAG_REPLACE`, `SECRETS`, `HELM_INSTALL`, `HELM_UNINSTALL`, `WATCHER_INSTALL`, `BACKUP` (optional, defaults to `UNKNOWN`).
+- **--failureclass** - cause: `RBAC_FORBIDDEN`, `CHART_NOT_FOUND`, `TIMEOUT`, `IMAGE_PULL`, `VALUES_INVALID`, `PRECONDITION_MISSING` (optional, defaults to `UNKNOWN`).
+- **--message** - one-line failure summary (optional).
+- **--detail** / **--detailfile** - failure detail such as captured stderr, inline or from a file (optional).
+- **--fingerprint** - stable dedup key for this fault (optional, derived when omitted).
+- **--featureset**, **--product**, **--targetrelease** - UUIDs for context (optional).
+- **--attemptedat** - RFC3339 time of the failed attempt (optional, defaults to now).
+- **--events** / **--eventsfile** - JSON array of event objects for batch reporting, inline or from a file. Each object uses the same field names as the flags above (`deploymentName`, `namespace`, `phase`, `failureClass`, `message`, `detail`, `fingerprint`, `featureSet`, `product`, `targetRelease`, `attemptedAt`).
+
+**Deduplication:** ReARM keys failures on `(namespace, deploymentName, fingerprint)`. A failure that repeats on every reconcile updates one record's last-seen timestamp and occurrence count rather than creating new records. Supply `--fingerprint` when the agent can compute a stable one; otherwise it is derived from the deployment, phase, failure class and a normalized message (uuids, digests, timestamps and bare numbers are normalized out, so a message embedding volatile tokens still dedupes).
+
+**Redaction:** `--detail` and `--message` are scrubbed of credential-looking material (assignments to password/secret/token/apikey-style keys including camelCase variants, `Authorization` headers, PEM private-key blocks, JWTs, and credentials embedded in URLs) and truncated before anything leaves the cluster. Helm output can echo rendered values, so raw stderr is never transmitted as-is. Redaction is intentionally aggressive — a lost diagnostic line is cheaper than a leaked credential.
+
+**Resolution:** there is no explicit "resolved" event. ReARM infers resolution from silence — a failure that stops being re-reported is treated as fixed and ages out. Report a live failure on every reconcile for as long as it persists.
+
+**Output:** JSON with `status` and the count of `accepted` events.
