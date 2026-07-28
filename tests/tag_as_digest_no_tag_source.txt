@@ -1,0 +1,1 @@
+docker.io/dependencytrack/apiserver@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

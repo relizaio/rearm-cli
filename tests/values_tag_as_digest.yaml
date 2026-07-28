@@ -1,0 +1,15 @@
+# Chart whose subchart takes a digest through the tag field, with no separate
+# digest/sha key (e.g. the Dependency-Track v2 chart).
+apiServer:
+  image:
+    registry: docker.io
+    repository: dependencytrack/apiserver
+    tag: 5.0.3@sha256:0cf15de2649d75ce4e7736b428d203f9630665d8bc843d15f0c6c5b23b56ada7
+    pullPolicy: IfNotPresent
+  topology: monolith
+frontend:
+  image:
+    registry: docker.io
+    repository: dependencytrack/frontend
+    tag: 5.0.3@sha256:c8bb3f1b806f9ab2a854eec577a97a177d13befd488757f3ed61810d48ae6d9b
+    pullPolicy: IfNotPresent

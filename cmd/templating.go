@@ -236,6 +236,15 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 			}
 		}
 
+		if len(replacedSubst.Digest) == 0 {
+			// The block has the shape of a split image, but the tag source has
+			// nothing for this image. Hand it back unclaimed so the caller
+			// parses it line by line like any other block -- returning an empty
+			// slice while still reporting a match silently deleted the whole
+			// block from the output.
+			return nil, false
+		}
+
 		if len(replacedSubst.Digest) > 0 {
 			for _, line := range *bitnamiLineCache {
 				trimmedLine := strings.Trim(line, " ")
@@ -254,8 +263,16 @@ func validateAndParseBitnamiLines(bitnamiLineCache *[]string, sortedSubstitution
 						// Full Bitnami format with separate digest/sha field - tag only
 						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag)
 					} else if isTagAsDigest {
-						// No separate digest/sha field - combine tag@digest
-						parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag+"@"+replacedSubst.Digest)
+						// No separate digest/sha field - combine tag@digest.
+						// With no tag to combine, write the bare digest: charts
+						// that take a digest through the tag field accept
+						// "sha256:..." on its own, whereas "@sha256:..." is not
+						// a valid reference.
+						if len(replacedSubst.Tag) > 0 {
+							parsedLines = append(parsedLines, prefix+" "+replacedSubst.Tag+"@"+replacedSubst.Digest)
+						} else {
+							parsedLines = append(parsedLines, prefix+" "+replacedSubst.Digest)
+						}
 					}
 				} else if strings.HasPrefix(trimmedLine, "digest: ") {
 					colonIndex := strings.Index(line, ":")
