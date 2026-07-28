@@ -164,3 +164,44 @@ func TestReplaceTagsBitnamiShaField(t *testing.T) {
 		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
 	}
 }
+
+// A chart whose subchart takes the digest through the tag field, with no
+// separate digest/sha key. The tag source deliberately covers only one of the
+// two images: the matched block is rewritten, and the unmatched one must come
+// through untouched. It used to be deleted outright, silently dropping the
+// image override and falling back to whatever the subchart shipped.
+func TestReplaceTagsTagAsDigest(t *testing.T) {
+	var replaceTagsVars cmd.ReplaceTagsVars
+	replaceTagsVars.TagSourceFile = "tag_as_digest_source.txt"
+	replaceTagsVars.TypeVal = "text"
+	replaceTagsVars.Infile = "values_tag_as_digest.yaml"
+
+	replacedTags := cmd.ReplaceTags(replaceTagsVars)
+	expectedReplacement, err := os.ReadFile("expected_values_tag_as_digest.yaml")
+	if err != nil {
+		t.Fatalf("failed reading expected values file")
+	}
+	if replacedTags != string(expectedReplacement) {
+		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
+	}
+}
+
+// Same shape, but the source reference carries a digest and no tag. There is
+// nothing to combine, so the bare digest goes in on its own -- charts that
+// accept a digest through the tag field understand "sha256:...", whereas the
+// "@sha256:..." this used to produce is not a valid reference.
+func TestReplaceTagsTagAsDigestWithoutTag(t *testing.T) {
+	var replaceTagsVars cmd.ReplaceTagsVars
+	replaceTagsVars.TagSourceFile = "tag_as_digest_no_tag_source.txt"
+	replaceTagsVars.TypeVal = "text"
+	replaceTagsVars.Infile = "values_tag_as_digest.yaml"
+
+	replacedTags := cmd.ReplaceTags(replaceTagsVars)
+	expectedReplacement, err := os.ReadFile("expected_values_tag_as_digest_no_tag.yaml")
+	if err != nil {
+		t.Fatalf("failed reading expected values file")
+	}
+	if replacedTags != string(expectedReplacement) {
+		t.Fatalf("replaced tags do not equal expected, actual = %s", replacedTags)
+	}
+}
