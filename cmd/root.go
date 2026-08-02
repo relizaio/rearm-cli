@@ -1314,6 +1314,19 @@ func initConfig(cmd *cobra.Command) {
 	}
 
 	v.AutomaticEnv() // read in environment variables that match
+
+	// The auth trio answers to BOTH published spellings. AutomaticEnv only
+	// derives REARM_<FLAGNAME> (REARM_URI / REARM_APIKEYID / REARM_APIKEY),
+	// but the operator-facing docs (orientation.md §1.1, the agentic workflow
+	// page) document REARM_URL / REARM_API_ID / REARM_API_KEY — which were
+	// silently ignored, failing with `unsupported protocol scheme ""`.
+	// Explicit BindEnv accepts both; first name with a value wins, so the
+	// flag-derived spelling keeps precedence when both are set. Flags still
+	// override env (bindFlags only applies env when the flag is unset).
+	v.BindEnv("uri", "REARM_URI", "REARM_URL")
+	v.BindEnv("apikeyid", "REARM_APIKEYID", "REARM_API_ID")
+	v.BindEnv("apikey", "REARM_APIKEY", "REARM_API_KEY")
+
 	bindFlags(cmd, v)
 
 }
