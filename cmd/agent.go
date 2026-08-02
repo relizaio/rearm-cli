@@ -292,6 +292,12 @@ permission on its component/product.`,
 					approvalEvents { approvalEntry approvalRoleId state comment date }
 					sourceCodeEntryDetails {
 						uuid commit attributionState attributionReason
+						# Latest signature-verification verdict (null when no
+						# SIGNATURE artifact was ever attached to this commit).
+						# Independent of attribution: RESOLVED attribution does
+						# NOT imply a VERIFIED signature — this is the field
+						# that tells them apart.
+						signature { state format signedByOwnerType signedByOwnerUuid verifiedAt keyFingerprint }
 						artifactDetails { ` + artifactMetrics + ` }
 					}
 					# Release-level metrics are the AGGREGATE, reflecting any
