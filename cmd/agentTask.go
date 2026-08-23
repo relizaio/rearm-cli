@@ -59,9 +59,10 @@ const agentBoardFragment = `
 
 const agentTaskFragment = `
 	uuid org board externalRef title sourceUrl status role orderIndex
-	dependsOn holdReason
+	dependsOn requireHumanReview
+	hold { level kind gateRole reason heldBy heldAt }
 	assignment { session agent role assignedAt promptVersion }
-	signOffs { role agent session assignedAt signedOffAt outcome note promptVersion }
+	signOffs { role agent session assignedAt signedOffAt outcome note promptVersion reviewedBy }
 	returns { role agent session reason description returnedAt }
 	parentTask childTasks sessions prUrls registeredBySession createdDate completedAt
 	statusHistory { from to at trigger actor }
@@ -74,6 +75,7 @@ const agentWorkerAssignmentFragment = `
 
 const agentRoleConfigFragment = `
 	uuid board org name prompt orderIndex wipLimit requireDistinctAgent active requiredCapabilities
+	kind necessity humanGate
 `
 
 var (
@@ -373,6 +375,18 @@ var agentTaskReleaseholdCmd = &cobra.Command{
 	},
 }
 
+var agentTaskRequireReviewCmd = &cobra.Command{
+	Use:   "requirereview <task-uuid>",
+	Short: "Coordinator: require human review of the task's next sign-off (add-only; clearing is operator-only)",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(`mutation ($taskUuid: ID!, $sessionUuid: ID!) {
+			agentTaskRequireHumanReviewProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid) {`+agentTaskFragment+`} }`,
+			map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid},
+			"agentTaskRequireHumanReviewProgrammatic")
+	},
+}
+
 var agentTaskOrderCmd = &cobra.Command{
 	Use:   "order <task-uuid>",
 	Short: "Coordinator: re-prioritize a task",
@@ -531,6 +545,7 @@ func init() {
 	agentTaskAuthorizeCmd.PersistentFlags().StringSliceVar(&taskDependsOn, "depends-on", nil, "Task uuids that must be COMPLETED before this one is assignable (replaces the list)")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskNote, "reason", "", "Why the task waits for a human — required")
 	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("session")
 	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("reason")
@@ -575,6 +590,7 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskOrderCmd)
 	agentTaskCmd.AddCommand(agentTaskHoldCmd)
 	agentTaskCmd.AddCommand(agentTaskReleaseholdCmd)
+	agentTaskCmd.AddCommand(agentTaskRequireReviewCmd)
 	agentTaskCmd.AddCommand(agentTaskSplitCmd)
 	agentTaskCmd.AddCommand(agentTaskCompleteCmd)
 	agentTaskCmd.AddCommand(agentTaskCancelCmd)
