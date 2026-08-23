@@ -64,6 +64,7 @@ const agentTaskFragment = `
 	signOffs { role agent session assignedAt signedOffAt outcome note promptVersion }
 	returns { role agent session reason description returnedAt }
 	parentTask childTasks sessions prUrls registeredBySession createdDate completedAt
+	statusHistory { from to at trigger actor }
 `
 
 const agentWorkerAssignmentFragment = `
