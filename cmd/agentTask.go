@@ -50,7 +50,8 @@ import (
 
 const agentBoardFragment = `
 	uuid org name description status sources
-	coordinatingIssueRef coordinatingIssueUrl coordinatorPrompt
+	coordinatorPrompt missingCapabilities
+	events { kind message actor eventAt }
 	lock { level reason lockedBy lockedAt }
 	coordinatorSeat { session agent claimedAt }
 	perAgentWipLimit createdDate
@@ -58,6 +59,7 @@ const agentBoardFragment = `
 
 const agentTaskFragment = `
 	uuid org board externalRef title sourceUrl status role orderIndex
+	dependsOn holdReason
 	assignment { session agent role assignedAt promptVersion }
 	signOffs { role agent session assignedAt signedOffAt outcome note promptVersion }
 	returns { role agent session reason description returnedAt }
@@ -70,7 +72,7 @@ const agentWorkerAssignmentFragment = `
 `
 
 const agentRoleConfigFragment = `
-	uuid board org name prompt orderIndex wipLimit requireDistinctAgent active
+	uuid board org name prompt orderIndex wipLimit requireDistinctAgent active requiredCapabilities
 `
 
 var (
@@ -89,6 +91,8 @@ var (
 	taskPrUrl        string
 	taskStatusFilter string
 	taskLockReason   string
+	taskDependsOn    []string
+	taskEventKind    string
 	roleName         string
 	rolePrompt       string
 	rolePromptFile   string
@@ -172,6 +176,18 @@ var agentBoardUnlockCmd = &cobra.Command{
 	Short: "Lift a coordinator lock",
 	Args:  cobra.ExactArgs(1),
 	Run:   boardLockRun(false),
+}
+
+var agentBoardPosteventCmd = &cobra.Command{
+	Use:   "postevent <board-uuid>",
+	Short: "Coordinator: post an ALERT or INFO notice to the board's event feed",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(`mutation ($boardUuid: ID!, $sessionUuid: ID!, $kind: AgentBoardEventKind!, $message: String!) {
+			agentBoardPostEventProgrammatic(boardUuid: $boardUuid, sessionUuid: $sessionUuid, kind: $kind, message: $message) {`+agentBoardFragment+`} }`,
+			map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid, "kind": taskEventKind, "message": taskNote},
+			"agentBoardPostEventProgrammatic")
+	},
 }
 
 var agentBoardRoleconfigCmd = &cobra.Command{
@@ -312,16 +328,47 @@ var agentTaskReturnCmd = &cobra.Command{
 
 var agentTaskAuthorizeCmd = &cobra.Command{
 	Use:   "authorize <task-uuid>",
-	Short: "Coordinator: authorize the task for a role with a priority order (-> QUEUED)",
-	Args:  cobra.ExactArgs(1),
+	Short: "Coordinator: authorize the task for a role with priority order and optional dependencies (-> QUEUED)",
+	Long: `Queues the task for a role. --depends-on (comma-separated task uuids)
+replaces the dependency list: the task stays queued but ineligible for
+assignment until every dependency is COMPLETED - lay out the whole
+plan up front and the server releases work as dependencies land.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
 		if taskOrder != 0 {
 			variables["orderIndex"] = taskOrder
 		}
-		runGql(`mutation ($taskUuid: ID!, $sessionUuid: ID!, $role: String!, $orderIndex: Int) {
-			agentTaskAuthorizeProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid, role: $role, orderIndex: $orderIndex) {`+agentTaskFragment+`} }`,
+		if len(taskDependsOn) > 0 {
+			variables["dependsOn"] = taskDependsOn
+		}
+		runGql(`mutation ($taskUuid: ID!, $sessionUuid: ID!, $role: String!, $orderIndex: Int, $dependsOn: [ID!]) {
+			agentTaskAuthorizeProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid, role: $role, orderIndex: $orderIndex, dependsOn: $dependsOn) {`+agentTaskFragment+`} }`,
 			variables, "agentTaskAuthorizeProgrammatic")
+	},
+}
+
+var agentTaskHoldCmd = &cobra.Command{
+	Use:   "hold <task-uuid>",
+	Short: "Coordinator: put the task ON_HOLD pending human input (excluded from polls)",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(`mutation ($taskUuid: ID!, $sessionUuid: ID!, $reason: String!) {
+			agentTaskHoldProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid, reason: $reason) {`+agentTaskFragment+`} }`,
+			map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskNote},
+			"agentTaskHoldProgrammatic")
+	},
+}
+
+var agentTaskReleaseholdCmd = &cobra.Command{
+	Use:   "releasehold <task-uuid>",
+	Short: "Coordinator: release a hold back to AWAITING_COORDINATOR",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(`mutation ($taskUuid: ID!, $sessionUuid: ID!) {
+			agentTaskReleaseHoldProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid) {`+agentTaskFragment+`} }`,
+			map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid},
+			"agentTaskReleaseHoldProgrammatic")
 	},
 }
 
@@ -480,7 +527,19 @@ func init() {
 	_ = agentTaskReturnCmd.MarkPersistentFlagRequired("reason")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskRole, "role", "", "Role to queue the task for — required")
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order (lowest served first)")
+	agentTaskAuthorizeCmd.PersistentFlags().StringSliceVar(&taskDependsOn, "depends-on", nil, "Task uuids that must be COMPLETED before this one is assignable (replaces the list)")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
+	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	agentTaskHoldCmd.PersistentFlags().StringVar(&taskNote, "reason", "", "Why the task waits for a human — required")
+	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("session")
+	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("reason")
+	agentTaskReleaseholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	_ = agentTaskReleaseholdCmd.MarkPersistentFlagRequired("session")
+	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskEventKind, "kind", "INFO", "ALERT | INFO")
+	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskNote, "message", "", "Notice text — required")
+	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("session")
+	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("message")
 	agentTaskOrderCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order — required")
 	_ = agentTaskOrderCmd.MarkPersistentFlagRequired("order")
 	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]' — required`)
@@ -503,6 +562,7 @@ func init() {
 	agentBoardCmd.AddCommand(agentBoardCoordinateCmd)
 	agentBoardCmd.AddCommand(agentBoardLockCmd)
 	agentBoardCmd.AddCommand(agentBoardUnlockCmd)
+	agentBoardCmd.AddCommand(agentBoardPosteventCmd)
 	agentBoardCmd.AddCommand(agentBoardRoleconfigCmd)
 
 	agentTaskCmd.AddCommand(agentTaskRegisterCmd)
@@ -512,6 +572,8 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskReturnCmd)
 	agentTaskCmd.AddCommand(agentTaskAuthorizeCmd)
 	agentTaskCmd.AddCommand(agentTaskOrderCmd)
+	agentTaskCmd.AddCommand(agentTaskHoldCmd)
+	agentTaskCmd.AddCommand(agentTaskReleaseholdCmd)
 	agentTaskCmd.AddCommand(agentTaskSplitCmd)
 	agentTaskCmd.AddCommand(agentTaskCompleteCmd)
 	agentTaskCmd.AddCommand(agentTaskCancelCmd)
