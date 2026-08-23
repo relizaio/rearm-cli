@@ -54,7 +54,7 @@ const agentBoardFragment = `
 	events { kind message actor eventAt }
 	lock { level reason lockedBy lockedAt }
 	coordinatorSeat { session agent claimedAt }
-	perAgentWipLimit createdDate
+	perAgentWipLimit priorityType createdDate
 `
 
 const agentTaskFragment = `
