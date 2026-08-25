@@ -28,7 +28,6 @@ import (
 	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
-	purl "github.com/package-url/packageurl-go"
 	"github.com/spf13/cobra"
 )
 
@@ -37,6 +36,14 @@ var (
 	bearApiKey       string
 	skipPatterns     []string
 	resilientBearDns bool
+	// Full purls skipped by exact (case-insensitive) match rather than the
+	// substring semantics of skipPatterns. Currently only the BOM's own
+	// metadata component: exact equality is deliberate -- a substring of the
+	// root's purl would also skip other versions of the same package
+	// appearing as real dependencies (pkg:npm/a@1.0 is a substring of
+	// pkg:npm/a@1.0.1), and a substring of just the NAME would skip every
+	// component whose purl merely contains it.
+	rootSkipPurls    []string
 )
 
 const bearBatchSize = 10
@@ -274,8 +281,9 @@ func enrichFunc() {
 		return
 	}
 
-	// Extract metadata component purl and add its name to skipPatterns
-	addMetadataComponentToSkipPatterns(bom)
+	// The BOM's own root must not be enriched: register its purl for an
+	// exact-match skip.
+	addMetadataComponentSelfSkip(bom)
 
 	// Collect components that need enrichment (supplier OR license OR copyright)
 	var purlsToEnrich []string
@@ -376,9 +384,15 @@ func enrichFunc() {
 	}
 }
 
-// shouldSkipPurl checks if a purl matches any of the skip patterns (case-insensitive)
+// shouldSkipPurl checks if a purl is the BOM root (exact, case-insensitive)
+// or matches any of the skip patterns (substring, case-insensitive)
 func shouldSkipPurl(purl string) bool {
 	lowerPurl := strings.ToLower(purl)
+	for _, root := range rootSkipPurls {
+		if lowerPurl == strings.ToLower(root) {
+			return true
+		}
+	}
 	for _, pattern := range skipPatterns {
 		if strings.Contains(lowerPurl, strings.ToLower(pattern)) {
 			return true
@@ -525,42 +539,26 @@ func bearEnrichBatchRequest(purls []string) ([]BearComponent, error) {
 	return response.Data.EnrichBatch, nil
 }
 
-// addMetadataComponentToSkipPatterns extracts the metadata->component->purl if present,
-// parses it to get the name, and adds .*<name>.* to skipPatterns
-func addMetadataComponentToSkipPatterns(bom *cdx.BOM) {
-	// Check if metadata exists
-	if bom.Metadata == nil {
+// addMetadataComponentSelfSkip registers the BOM's own metadata component
+// purl for an exact-match skip, so the root never gets enriched as if it
+// were one of its own dependencies.
+//
+// This replaces a pattern of the form ".*<name>.*" appended to skipPatterns:
+// those are matched by substring, never as a regex, so the old pattern could
+// only match a purl containing the literal characters ".*" -- the root
+// self-skip had never actually fired.
+func addMetadataComponentSelfSkip(bom *cdx.BOM) {
+	if bom.Metadata == nil || bom.Metadata.Component == nil {
 		return
 	}
-
-	// Check if component exists
-	if bom.Metadata.Component == nil {
+	rootPurl := bom.Metadata.Component.PackageURL
+	if rootPurl == "" {
 		return
 	}
-
-	// Check if purl exists
-	if bom.Metadata.Component.PackageURL == "" {
-		return
-	}
-
-	// Try to parse the purl
-	parsedPurl, err := purl.FromString(bom.Metadata.Component.PackageURL)
-	if err != nil {
-		// Silently fail - just don't add skip pattern
-		return
-	}
-
-	// Extract name from parsed purl
-	if parsedPurl.Name == "" {
-		return
-	}
-
-	// Add .*<name>.* pattern to skipPatterns
-	pattern := ".*" + parsedPurl.Name + ".*"
-	skipPatterns = append(skipPatterns, pattern)
+	rootSkipPurls = append(rootSkipPurls, rootPurl)
 
 	if debug == "true" {
-		fmt.Printf("Auto-added skip pattern from metadata component: %s\n", pattern)
+		fmt.Printf("Auto-added root self-skip from metadata component: %s\n", rootPurl)
 	}
 }
 
