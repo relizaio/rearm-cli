@@ -9,7 +9,14 @@ RUN go test ./tests
 RUN go version
 ARG TARGETOS
 ARG TARGETARCH
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o ./ ./...
+# -X injects the release version into the binary itself, so `rearm version`
+# inside the container reports the real version. The CDN zip path achieves
+# the same by sed-ing cmd/version.go in the publish workflow; the container
+# build gets VERSION only as a build-arg, which ldflags turns into the same
+# result without mutating sources.
+ARG VERSION=not_versioned
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+    -ldflags "-X github.com/relizaio/rearm/cmd.Version=$VERSION" -o ./ ./...
 
 # Skeleton for the scratch release image: directory tree, version file and
 # the apprunner account, prepared here because scratch has no shell to run
@@ -17,7 +24,6 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o ./ ./...
 ARG CI_ENV=noci
 ARG GIT_COMMIT=git_commit_undefined
 ARG GIT_BRANCH=git_branch_undefined
-ARG VERSION=not_versioned
 RUN apk add --no-cache ca-certificates && \
     mkdir -p /skel/app/localdata /skel/indir /skel/outdir /skel/tmp && \
     echo "version=$VERSION" > /skel/app/version && \
