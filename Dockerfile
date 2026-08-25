@@ -11,19 +11,40 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o ./ ./...
 
-FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS release-stage
+# Skeleton for the scratch release image: directory tree, version file and
+# the apprunner account, prepared here because scratch has no shell to run
+# mkdir/adduser/echo in.
 ARG CI_ENV=noci
 ARG GIT_COMMIT=git_commit_undefined
 ARG GIT_BRANCH=git_branch_undefined
 ARG VERSION=not_versioned
-RUN mkdir /app
-RUN adduser -u 1000 -D apprunner && chown apprunner:apprunner /app
-COPY --from=build-stage --chown=apprunner:apprunner /build/rearm /app/app
-RUN mkdir /indir && chown apprunner:apprunner -R /indir
-RUN mkdir /outdir && chown apprunner:apprunner -R /outdir
+RUN apk add --no-cache ca-certificates && \
+    mkdir -p /skel/app/localdata /skel/indir /skel/outdir /skel/tmp && \
+    echo "version=$VERSION" > /skel/app/version && \
+    echo "commit=$GIT_COMMIT" >> /skel/app/version && \
+    echo "branch=$GIT_BRANCH" >> /skel/app/version && \
+    echo "apprunner:x:1000:1000:apprunner:/app:/sbin/nologin" > /skel-passwd && \
+    echo "apprunner:x:1000:" > /skel-group && \
+    chown -R 1000:1000 /skel
+
+# The binary is fully static (CGO_ENABLED=0), so the release image carries no
+# distro at all: FROM scratch removes every Alpine package finding (openssl,
+# busybox) along with the shell and package manager an attacker could use.
+# Everything a distro stage used to do at runtime (mkdir/adduser/echo) is
+# prepared in the build stage and copied in; CA certificates come along so
+# HTTPS against ReARM keeps working.
+FROM scratch AS release-stage
+ARG CI_ENV=noci
+ARG GIT_COMMIT=git_commit_undefined
+ARG GIT_BRANCH=git_branch_undefined
+ARG VERSION=not_versioned
+COPY --from=build-stage /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build-stage /skel-passwd /etc/passwd
+COPY --from=build-stage /skel-group /etc/group
+COPY --from=build-stage /skel/ /
+COPY --from=build-stage --chown=1000:1000 /build/rearm /app/app
 USER apprunner
-RUN echo "version=$VERSION" > /app/version && echo "commit=$GIT_COMMIT" >> /app/version && echo "branch=$GIT_BRANCH" >> /app/version
-RUN mkdir /app/localdata
+ENV TMPDIR=/tmp HOME=/app
 
 LABEL git_commit=$GIT_COMMIT
 LABEL git_branch=$GIT_BRANCH
