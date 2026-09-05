@@ -465,7 +465,7 @@ func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, t
 	provenanceLine1 = "# Tags replaced with Reliza CLI version " + relizaCliCurrentVersion + " on " + currentDateTimeFormatted
 
 	// Second line: where tags come from, either:
-	// (tagsource file) or (environment) or (product+version)
+	// (tagsource file) or (product+version) or (product+environment)
 	// or (instance+revision/stateType) or (instanceuri+revision/stateType)
 	// or (apiKeyId suffix, if using apiKeyId+apiKey pair from instance)
 	if len(stateType) == 0 {
@@ -473,10 +473,10 @@ func addProvenanceToReplaceTagsOutput(outFileOpened *os.File, apiKeyId string, t
 	}
 	if tagSourceFile != "" {
 		provenanceLine2 = "# According to tag source file " + tagSourceFile
-	} else if len(environment) > 0 {
-		provenanceLine2 = "# According to the latest approved images in  " + environment + " environment."
 	} else if len(product) > 0 && len(version) > 0 {
 		provenanceLine2 = "# According to product " + product + " version " + version
+	} else if len(product) > 0 && len(environment) > 0 {
+		provenanceLine2 = "# According to the latest release of product " + product + " approved for the " + strings.ToUpper(environment) + " environment"
 	} else if len(instance) > 0 {
 		if len(revision) > 0 {
 			provenanceLine2 = "# According to " + stateType + " state, revision " + revision + " of the instance " + instance
@@ -657,45 +657,71 @@ func scanTags(replaceTagsVars ReplaceTagsVars) map[string]string {
 	if replaceTagsVars.TagSourceFile != "" {
 		tagSourceMap = scanTagFile(replaceTagsVars.TagSourceFile, replaceTagsVars.TypeVal)
 	} else if len(replaceTagsVars.Product) > 0 {
-		cycloneBytes := getProductVersionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.ApiKey, replaceTagsVars.Product, replaceTagsVars.Environment, replaceTagsVars.Version)
+		cycloneBytes := getProductObomV1(replaceTagsVars.Product, replaceTagsVars.Environment, replaceTagsVars.Version)
 		var bomJSON map[string]interface{}
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
 	} else if len(replaceTagsVars.Environment) > 0 {
-		cycloneBytes := getEnvironmentCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.ApiKey, replaceTagsVars.Environment)
-		var bomJSON map[string]interface{}
-		json.Unmarshal(cycloneBytes, &bomJSON)
-		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
+		// ReARM has no org-wide "everything approved for an environment" view;
+		// environment selection is per product.
+		fmt.Println("Error: --env requires --product (the latest release of that product approved for the environment is used)")
+		os.Exit(1)
 	} else if len(replaceTagsVars.Instance) > 0 || len(replaceTagsVars.InstanceURI) > 0 || strings.HasPrefix(replaceTagsVars.ApiKeyId, "INSTANCE__") || strings.HasPrefix(replaceTagsVars.ApiKeyId, "CLUSTER__") {
 		cycloneBytes := getInstanceRevisionCycloneDxExportV1(replaceTagsVars.ApiKeyId, replaceTagsVars.Instance, replaceTagsVars.Revision, replaceTagsVars.InstanceURI, replaceTagsVars.Namespace, replaceTagsVars.StateType)
 		var bomJSON map[string]interface{}
 		json.Unmarshal(cycloneBytes, &bomJSON)
 		extractComponentsFromCycloneJSON(bomJSON, tagSourceMap)
 	} else {
-		fmt.Println("Scan Tags Failed! specify either tagsource or instance or product and version")
+		fmt.Println("Scan Tags Failed! specify either tagsource, instance, or product with version or env")
 		os.Exit(1)
 	}
 	return tagSourceMap
 }
 
-func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product string,
-	environment string, version string) []byte {
-
-	if len(product) <= 0 && (len(version) <= 0 || len(environment) <= 0) {
-		//throw error and exit
-		fmt.Println("Error: Product name and either version or environment must be provided!")
+// Product OBOM for tag replacement. An exact --version wins (and --env is then
+// ignored); otherwise the latest ASSEMBLED release approved for the environment
+// on the product's base feature set. A policy disapproval does not revoke an
+// environment approval; only an admin override removes it.
+func getProductObomV1(product string, environment string, version string) []byte {
+	if len(product) <= 0 || (len(version) <= 0 && len(environment) <= 0) {
+		fmt.Println("Error: --product (UUID or unique name) and either --version or --env must be provided!")
 		os.Exit(1)
 	}
-
-	query := `
-		query ($productName: String!, $productVersion: String, $environment: String) {
-			exportAsBomProg(productName: $productName, productVersion: $productVersion, environment: $environment)
+	var query string
+	var variables map[string]interface{}
+	var field string
+	if len(version) > 0 {
+		query = `
+		query ($version: String!, $componentId: ID, $componentName: String) {
+			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId, componentName: $componentName)
 		}
 	`
-	variables := map[string]interface{}{
-		"productName":    product,
-		"productVersion": version,
-		"environment":    environment,
+		variables = map[string]interface{}{"version": version}
+		if isUuidString(product) {
+			variables["componentId"] = product
+		} else {
+			variables["componentName"] = product
+		}
+		field = "getReleaseByReleaseVersionProgrammatic"
+	} else {
+		query = `
+		query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
+			getLatestReleaseProgrammaticCdx(release: $GetLatestReleaseInput)
+		}
+	`
+		// Tag replacement must never pick a cancelled or rejected release that
+		// was once approved, so the lifecycle floor is pinned to ASSEMBLED.
+		input := map[string]interface{}{
+			"approvedEnvironment": strings.ToUpper(environment),
+			"lifecycle":           "ASSEMBLED",
+		}
+		if isUuidString(product) {
+			input["component"] = product
+		} else {
+			input["componentName"] = product
+		}
+		variables = map[string]interface{}{"GetLatestReleaseInput": input}
+		field = "getLatestReleaseProgrammaticCdx"
 	}
 
 	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
@@ -704,34 +730,7 @@ func getProductVersionCycloneDxExportV1(apiKeyId string, apiKey string, product 
 		os.Exit(1)
 	}
 
-	if result, ok := data["exportAsBomProg"].(string); ok {
-		return []byte(result)
-	}
-	return []byte("")
-}
-
-func getEnvironmentCycloneDxExportV1(apiKeyId string, apiKey string, environment string) []byte {
-
-	if len(environment) <= 0 {
-		//throw error and exit
-		fmt.Println("environment not specified!")
-		os.Exit(1)
-	}
-
-	query := `
-		query ($environment: String!) {
-			exportAsBomProgByEnv(environment: $environment)
-		}
-	`
-	variables := map[string]interface{}{"environment": environment}
-
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
-	if err != nil {
-		printGqlError(err)
-		os.Exit(1)
-	}
-
-	if result, ok := data["exportAsBomProgByEnv"].(string); ok {
+	if result, ok := data[field].(string); ok {
 		return []byte(result)
 	}
 	return []byte("")

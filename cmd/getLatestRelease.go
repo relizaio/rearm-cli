@@ -63,7 +63,11 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	body := map[string]interface{}{}
 
 	if len(component) > 0 {
-		body["component"] = component
+		if isUuidString(component) {
+			body["component"] = component
+		} else {
+			body["componentName"] = component
+		}
 	}
 
 	if len(product) > 0 {
@@ -92,6 +96,9 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 
 	if len(upToVersion) > 0 {
 		body["upToVersion"] = upToVersion
+	}
+	if len(environment) > 0 {
+		body["approvedEnvironment"] = strings.ToUpper(environment)
 	}
 
 	if len(approvalEntries) > 0 || len(approvalStates) > 0 {
@@ -154,13 +161,12 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 }
 
 func init() {
-	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM for which to obtain latest release")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM, or its name when it is unique in the org, for which to obtain latest release")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&product, "product", "", "Product UUID from ReARM to condition component release to this product (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of the Component branch — or, for a Product, its Feature Set (the product-level equivalent of a branch) — for which the latest release is requested (required)")
-	getLatestReleaseCmd.MarkPersistentFlagRequired("branch")
+	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of the Component branch -- or, for a Product, its Feature Set. Required for Components; a Product defaults to its base Feature Set when omitted")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components (optional)")
-	getLatestReleaseCmd.PersistentFlags().StringVar(&environment, "env", "", "Environment to obtain approvals details from (optional)")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&environment, "env", "", "Only consider releases approved for this environment (DEV, BUILD, TEST, SIT, UAT, PAT, STAGING, PRODUCTION). Orthogonal to --lifecycle and approval conditions. Note: environment approvals are add-only, a later disapproval does not revoke them (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&instance, "instance", "", "Instance ID for which to check release (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace within instance for which to check release, only matters if instance is supplied (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&tagKey, "tagkey", "", "Tag key to use for picking artifact (optional)")

@@ -137,7 +137,7 @@ On failure, an error message is displayed.
 
 ## 15.3 Replace Tags on Deployment Templates for GitOps
 
-The `devops replacetags` command replaces image tags in deployment templates (Helm values, Docker Compose, k8s manifests) with correct artifact versions. Tags can be sourced from an instance revision, a bundle version, an environment, or a local CycloneDX/text file.
+The `devops replacetags` command replaces image tags in deployment templates (Helm values, Docker Compose, k8s manifests) with correct artifact versions. Tags can be sourced from an instance revision, an exact product version, the latest product release approved for an environment, or a local CycloneDX/text file.
 
 ### Using Instance and Revision
 
@@ -165,13 +165,15 @@ docker run --rm \
     devops replacetags \
     -i api_id \
     -k api_key \
-    --product <product_name> \
+    --product <product_uuid_or_name> \
     --version <product_version> \
     --infile /values.yaml \
     --outfile /output_dir/output_values.yaml
 ```
 
-### Using Environment
+### Using Product and Environment
+
+Uses the latest release of the product (on its base Feature Set) that is approved for the environment. Environment approvals are add-only: a later disapproval does not revoke them.
 
 ```bash
 docker run --rm \
@@ -181,7 +183,8 @@ docker run --rm \
     devops replacetags \
     -i api_id \
     -k api_key \
-    --env <environment_name> \
+    --product <product_uuid_or_name> \
+    --env PRODUCTION \
     --infile /values.yaml \
     --outfile /output_dir/output_values.yaml
 ```
@@ -191,15 +194,15 @@ docker run --rm \
 - **--outfile** - Output file with parsed values (optional, if not supplied - outputs to stdout)
 - **--indirectory** - Path to directory of input files to parse (either infile or indirectory is required)
 - **--outdirectory** - Path to directory of output files (required if indirectory is used)
-- **--tagsource** - Source file with tags (optional, specify either source file or instance/product/environment)
-- **--env** - Environment for which to generate tags (optional)
+- **--tagsource** - Source file with tags (optional, specify either source file, instance, or product)
+- **--env** - With `--product`: use the latest product release approved for this environment, one of DEV, BUILD, TEST, SIT, UAT, PAT, STAGING, PRODUCTION (optional)
 - **--instance** - Instance UUID for which to generate tags (optional)
 - **--instanceuri** - Instance URI for which to generate tags (optional)
 - **--revision** - Instance revision for which to generate tags (optional, default is -1 meaning current state)
 - **--statetype** - Instance state type: `PLAN` (approved/expected, default) or `ACTUAL` (currently deployed). Can be combined with `--revision` (optional)
 - **--namespace** - Specific namespace for replace tagging (optional)
-- **--product** - UUID or Name of product for which to generate tags (optional)
-- **--version** - Product version for which to generate tags (optional, required when using product)
+- **--product** - UUID of the product, or its name when it is unique among the org's active components and products (case-insensitive; unknown or ambiguous names error); needs `--version` or `--env` (optional)
+- **--version** - Exact product version for which to generate tags (optional; with `--product`, either this or `--env`)
 - **--defsource** - Source file for definitions, e.g. output of helm template command (optional)
 - **--type** - Type of source tags file: cyclonedx (default) or text
 - **--provenance** - Enable/disable adding provenance metadata to beginning of outfile (optional, default true)
