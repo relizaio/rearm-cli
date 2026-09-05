@@ -63,7 +63,11 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	body := map[string]interface{}{}
 
 	if len(component) > 0 {
-		body["component"] = component
+		if isUuidString(component) {
+			body["component"] = component
+		} else {
+			body["componentName"] = component
+		}
 	}
 
 	if len(product) > 0 {
@@ -157,7 +161,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 }
 
 func init() {
-	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM for which to obtain latest release")
+	getLatestReleaseCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM, or its name when it is unique in the org, for which to obtain latest release")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&product, "product", "", "Product UUID from ReARM to condition component release to this product (optional)")
 	getLatestReleaseCmd.PersistentFlags().StringVarP(&branch, "branch", "b", "", "Name of the Component branch -- or, for a Product, its Feature Set. Required for Components; a Product defaults to its base Feature Set when omitted")
 	getLatestReleaseCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "URI of VCS repository (optional)")

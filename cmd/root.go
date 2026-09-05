@@ -16,6 +16,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"github.com/google/uuid"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -893,6 +894,14 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
+// isUuidString reports whether v parses as a UUID; the CLI treats any other
+// non-empty component / product value as a name to be resolved by ReARM
+// (the name must match exactly one active component or product in the org).
+func isUuidString(v string) bool {
+	_, err := uuid.Parse(v)
+	return err == nil
+}
+
 var releaseByVersionCmd = &cobra.Command{
 	Use:   "releasebyversion",
 	Short: "Outputs the OBOM (CycloneDX 1.6) of an exact release version of a component or product",
@@ -905,13 +914,15 @@ var releaseByVersionCmd = &cobra.Command{
 		}
 
 		query := `
-			query ($version: String!, $componentId: ID!) {
-				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
+			query ($version: String!, $componentId: ID, $componentName: String) {
+				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId, componentName: $componentName)
 			}
 		`
-		variables := map[string]interface{}{
-			"version":     version,
-			"componentId": component,
+		variables := map[string]interface{}{"version": version}
+		if isUuidString(component) {
+			variables["componentId"] = component
+		} else {
+			variables["componentName"] = component
 		}
 
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
@@ -1101,7 +1112,7 @@ func init() {
 	// flags for release by version command
 	releaseByVersionCmd.PersistentFlags().StringVar(&version, "version", "", "Exact version of the release whose OBOM to output (required)")
 	releaseByVersionCmd.MarkPersistentFlagRequired("version")
-	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM (required)")
+	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID, or its name when it is unique in the org (required)")
 	releaseByVersionCmd.MarkPersistentFlagRequired("component")
 
 	rootCmd.AddCommand(loginCmd)

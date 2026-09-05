@@ -45,7 +45,7 @@ func init() {
 	replaceTagsCmd.PersistentFlags().StringVar(&definitionReferenceFile, "defsource", "", "Source file for definitions (optional). For helm, should be output of helm template command")
 	replaceTagsCmd.PersistentFlags().StringVar(&typeVal, "type", "cyclonedx", "Type of source tags file: cyclonedx (default) or text")
 	replaceTagsCmd.PersistentFlags().StringVar(&version, "version", "", "Exact product version for which to generate tags (optional - with --product, either this or --env is required)")
-	replaceTagsCmd.PersistentFlags().StringVar(&product, "product", "", "UUID of the product for which to generate tags, with --version or --env (optional)")
+	replaceTagsCmd.PersistentFlags().StringVar(&product, "product", "", "UUID, or unique name, of the product for which to generate tags, with --version or --env (optional)")
 	replaceTagsCmd.PersistentFlags().BoolVar(&productSpecificProps, "usenamespaceproduct", false, "Set to true for new behavior where namespace and product are used for prop resolution (optional, default is 'false')")
 	replaceTagsCmd.PersistentFlags().BoolVar(&provenance, "provenance", true, "Set --provenance=[true|false] flag to enable/disable adding provenance (metadata) to beginning of outfile. (optional)")
 	replaceTagsCmd.PersistentFlags().StringVar(&parseMode, "parsemode", "extended", "Use to set the parse mode to either extended, simple, or strict (optional)")

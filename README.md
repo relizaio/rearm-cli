@@ -413,7 +413,7 @@ Flags stand for:
 - **releasebyversion** - command that denotes we are retrieving release by version.
 - **-i** - flag for api id (required).
 - **-k** - flag for api key (required).
-- **--component** - flag to denote UUID of the Component or Product, UUID must be obtained from ReARM (required).
+- **--component** - UUID of the Component or Product, or its name. A name is matched case-insensitively against the active components and products of the key's organization and must match exactly one; otherwise the command errors (required).
 - **--version** - exact version of the release whose OBOM to output (required).
 
 ## 4. Use Case: Request Latest Release Per Component Or Product
@@ -438,7 +438,7 @@ Flags stand for:
 - **getlatestrelease** - command that denotes we are requesting latest release data for Component or Product from ReARM
 - **-i** - flag for api id which can be either api id for this component or organization-wide read API (required).
 - **-k** - flag for api key which can be either api key for this component or organization-wide read API (required).
-- **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component API key is used, either this or combination of vcsuri and repo-path must be set).
+- **--component** - UUID of the Component or Product, or its name when it is unique among the active components and products of the key's organization (matched case-insensitively; an unknown or ambiguous name errors). Optional if a component API key is used; either this or the combination of vcsuri and repo-path must be set.
 - **vcsuri** - flag to denote uri of vcs repository for the component (used if component API key is not used and explicit component UUID is not provided).
 - **--repo-path** - Repository path for monorepo components (optional, used in combination with vcsuri for component resolution).
 - **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).

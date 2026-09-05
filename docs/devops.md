@@ -165,7 +165,7 @@ docker run --rm \
     devops replacetags \
     -i api_id \
     -k api_key \
-    --product <product_uuid> \
+    --product <product_uuid_or_name> \
     --version <product_version> \
     --infile /values.yaml \
     --outfile /output_dir/output_values.yaml
@@ -183,7 +183,7 @@ docker run --rm \
     devops replacetags \
     -i api_id \
     -k api_key \
-    --product <product_uuid> \
+    --product <product_uuid_or_name> \
     --env PRODUCTION \
     --infile /values.yaml \
     --outfile /output_dir/output_values.yaml
@@ -201,7 +201,7 @@ docker run --rm \
 - **--revision** - Instance revision for which to generate tags (optional, default is -1 meaning current state)
 - **--statetype** - Instance state type: `PLAN` (approved/expected, default) or `ACTUAL` (currently deployed). Can be combined with `--revision` (optional)
 - **--namespace** - Specific namespace for replace tagging (optional)
-- **--product** - UUID of the product for which to generate tags (optional; needs `--version` or `--env`)
+- **--product** - UUID of the product, or its name when it is unique among the org's active components and products (case-insensitive; unknown or ambiguous names error); needs `--version` or `--env` (optional)
 - **--version** - Exact product version for which to generate tags (optional; with `--product`, either this or `--env`)
 - **--defsource** - Source file for definitions, e.g. output of helm template command (optional)
 - **--type** - Type of source tags file: cyclonedx (default) or text

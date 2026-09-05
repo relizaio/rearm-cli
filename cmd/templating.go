@@ -684,7 +684,7 @@ func scanTags(replaceTagsVars ReplaceTagsVars) map[string]string {
 // environment approval; only an admin override removes it.
 func getProductObomV1(product string, environment string, version string) []byte {
 	if len(product) <= 0 || (len(version) <= 0 && len(environment) <= 0) {
-		fmt.Println("Error: --product (UUID) and either --version or --env must be provided!")
+		fmt.Println("Error: --product (UUID or unique name) and either --version or --env must be provided!")
 		os.Exit(1)
 	}
 	var query string
@@ -692,11 +692,16 @@ func getProductObomV1(product string, environment string, version string) []byte
 	var field string
 	if len(version) > 0 {
 		query = `
-		query ($version: String!, $componentId: ID!) {
-			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
+		query ($version: String!, $componentId: ID, $componentName: String) {
+			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId, componentName: $componentName)
 		}
 	`
-		variables = map[string]interface{}{"version": version, "componentId": product}
+		variables = map[string]interface{}{"version": version}
+		if isUuidString(product) {
+			variables["componentId"] = product
+		} else {
+			variables["componentName"] = product
+		}
 		field = "getReleaseByReleaseVersionProgrammatic"
 	} else {
 		query = `
@@ -706,11 +711,16 @@ func getProductObomV1(product string, environment string, version string) []byte
 	`
 		// Tag replacement must never pick a cancelled or rejected release that
 		// was once approved, so the lifecycle floor is pinned to ASSEMBLED.
-		variables = map[string]interface{}{"GetLatestReleaseInput": map[string]interface{}{
-			"component":           product,
+		input := map[string]interface{}{
 			"approvedEnvironment": strings.ToUpper(environment),
 			"lifecycle":           "ASSEMBLED",
-		}}
+		}
+		if isUuidString(product) {
+			input["component"] = product
+		} else {
+			input["componentName"] = product
+		}
+		variables = map[string]interface{}{"GetLatestReleaseInput": input}
 		field = "getLatestReleaseProgrammaticCdx"
 	}
 
