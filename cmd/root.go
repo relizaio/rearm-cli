@@ -895,9 +895,10 @@ var checkReleaseByHashCmd = &cobra.Command{
 
 var releaseByVersionCmd = &cobra.Command{
 	Use:   "releasebyversion",
-	Short: "Gets release by version for a particular component",
-	Long: `This CLI command would connect to ReARM which would retrieve release data by version for the current component.
-			Component would be identified by the API key that is used`,
+	Short: "Outputs the OBOM (CycloneDX 1.6) of an exact release version of a component or product",
+	Long: `Looks up the release with exactly the given version on the component or product and prints its
+			OBOM: the release plus every dependency release unwound, with deliverables, as CycloneDX 1.6 JSON.
+			Prints {} when the version does not exist. Lifecycle and approvals are not consulted.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
@@ -1098,9 +1099,9 @@ func init() {
 	checkReleaseByHashCmd.MarkPersistentFlagRequired("component")
 
 	// flags for release by version command
-	releaseByVersionCmd.PersistentFlags().StringVar(&version, "version", "", "Version of release to retrieve (required)")
+	releaseByVersionCmd.PersistentFlags().StringVar(&version, "version", "", "Exact version of the release whose OBOM to output (required)")
 	releaseByVersionCmd.MarkPersistentFlagRequired("version")
-	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID from ReARM for which to retrieve release (required)")
+	releaseByVersionCmd.PersistentFlags().StringVar(&component, "component", "", "Component or Product UUID from ReARM (required)")
 	releaseByVersionCmd.MarkPersistentFlagRequired("component")
 
 	rootCmd.AddCommand(loginCmd)
