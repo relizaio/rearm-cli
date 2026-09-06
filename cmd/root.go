@@ -16,7 +16,6 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"github.com/google/uuid"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -894,14 +893,6 @@ var checkReleaseByHashCmd = &cobra.Command{
 	},
 }
 
-// isUuidString reports whether v parses as a UUID; the CLI treats any other
-// non-empty component / product value as a name to be resolved by ReARM
-// (the name must match exactly one active component or product in the org).
-func isUuidString(v string) bool {
-	_, err := uuid.Parse(v)
-	return err == nil
-}
-
 var releaseByVersionCmd = &cobra.Command{
 	Use:   "releasebyversion",
 	Short: "Outputs the OBOM (CycloneDX 1.6) of an exact release version of a component or product",
@@ -914,15 +905,15 @@ var releaseByVersionCmd = &cobra.Command{
 		}
 
 		query := `
-			query ($version: String!, $componentId: ID, $componentName: String) {
-				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId, componentName: $componentName)
+			query ($version: String!, $componentId: ID!) {
+				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
 			}
 		`
-		variables := map[string]interface{}{"version": version}
-		if isUuidString(component) {
-			variables["componentId"] = component
-		} else {
-			variables["componentName"] = component
+		// componentId takes the uuid or, with an org-scoped key, the unique name;
+		// ReARM resolves it.
+		variables := map[string]interface{}{
+			"version":     version,
+			"componentId": component,
 		}
 
 		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")

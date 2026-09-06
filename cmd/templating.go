@@ -692,16 +692,11 @@ func getProductObomV1(product string, environment string, version string) []byte
 	var field string
 	if len(version) > 0 {
 		query = `
-		query ($version: String!, $componentId: ID, $componentName: String) {
-			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId, componentName: $componentName)
+		query ($version: String!, $componentId: ID!) {
+			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
 		}
 	`
-		variables = map[string]interface{}{"version": version}
-		if isUuidString(product) {
-			variables["componentId"] = product
-		} else {
-			variables["componentName"] = product
-		}
+		variables = map[string]interface{}{"version": version, "componentId": product}
 		field = "getReleaseByReleaseVersionProgrammatic"
 	} else {
 		query = `
@@ -711,16 +706,11 @@ func getProductObomV1(product string, environment string, version string) []byte
 	`
 		// Tag replacement must never pick a cancelled or rejected release that
 		// was once approved, so the lifecycle floor is pinned to ASSEMBLED.
-		input := map[string]interface{}{
+		variables = map[string]interface{}{"GetLatestReleaseInput": map[string]interface{}{
+			"component":           product, // uuid or unique name; ReARM resolves it
 			"approvedEnvironment": strings.ToUpper(environment),
 			"lifecycle":           "ASSEMBLED",
-		}
-		if isUuidString(product) {
-			input["component"] = product
-		} else {
-			input["componentName"] = product
-		}
-		variables = map[string]interface{}{"GetLatestReleaseInput": input}
+		}}
 		field = "getLatestReleaseProgrammaticCdx"
 	}
 

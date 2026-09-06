@@ -63,11 +63,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	body := map[string]interface{}{}
 
 	if len(component) > 0 {
-		if isUuidString(component) {
-			body["component"] = component
-		} else {
-			body["componentName"] = component
-		}
+		body["component"] = component // uuid, or the unique name with an org-scoped key
 	}
 
 	if len(product) > 0 {
