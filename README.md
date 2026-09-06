@@ -395,7 +395,7 @@ Flags stand for:
 
 ## 3b. Use Case: Get Release By Version
 
-This command retrieves release data for a specific version of a component. It returns the release details as a CycloneDX 1.6 BOM string.
+This command outputs the OBOM of an exact release version of a component or product: the release plus every dependency release unwound, with deliverables, as a CycloneDX 1.6 JSON string. It prints `{}` when the version does not exist. Lifecycle and approvals are not consulted: the named version is returned as is. For "latest release matching gates" see `getlatestrelease` below.
 
 Sample command:
 
@@ -413,8 +413,8 @@ Flags stand for:
 - **releasebyversion** - command that denotes we are retrieving release by version.
 - **-i** - flag for api id (required).
 - **-k** - flag for api key (required).
-- **--component** - flag to denote UUID of specific Component, UUID must be obtained from ReARM (required).
-- **--version** - flag to denote the version of the release to retrieve (required).
+- **--component** - UUID of the Component or Product, or its name. A name is matched case-insensitively against the active components and products of the key's organization and must match exactly one; otherwise the command errors (required).
+- **--version** - exact version of the release whose OBOM to output (required).
 
 ## 4. Use Case: Request Latest Release Per Component Or Product
 
@@ -438,16 +438,16 @@ Flags stand for:
 - **getlatestrelease** - command that denotes we are requesting latest release data for Component or Product from ReARM
 - **-i** - flag for api id which can be either api id for this component or organization-wide read API (required).
 - **-k** - flag for api key which can be either api key for this component or organization-wide read API (required).
-- **--component** - flag to denote UUID of specific Component or Product, UUID must be obtained from [ReARM](https://relizahub.com) (optional if component API key is used, either this or combination of vcsuri and repo-path must be set).
+- **--component** - UUID of the Component or Product, or its name when it is unique among the active components and products of the key's organization (matched case-insensitively; an unknown or ambiguous name errors). Optional if a component API key is used; either this or the combination of vcsuri and repo-path must be set.
 - **vcsuri** - flag to denote uri of vcs repository for the component (used if component API key is not used and explicit component UUID is not provided).
 - **--repo-path** - Repository path for monorepo components (optional, used in combination with vcsuri for component resolution).
 - **--product** - flag to denote UUID of Product which packages Component or Product for which we inquiry about its version via --component flag, UUID must be obtained from [ReARM](https://relizahub.com) (optional).
-- **--branch** - name of the chosen Component's branch — or, for a Product, its Feature Set (a Product's Feature Set is the product-level equivalent of a Component branch) (required).
+- **--branch** - name of the chosen Component's branch -- or, for a Product, its Feature Set (a Product's Feature Set is the product-level equivalent of a Component branch). Required for Components; for a Product it defaults to the base Feature Set when omitted.
+- **--env** - only consider releases approved for this environment: one of DEV, BUILD, TEST, SIT, UAT, PAT, STAGING, PRODUCTION (optional). Orthogonal to `--lifecycle` and the approval-entry conditions: each filter you pass is applied on top of the others. A release is approved for an environment when an approval policy's `ADD_APPROVED_ENVIRONMENT` trigger fired for it or an admin set it on the release page. **Environment approvals are add-only**: a later disapproval does not revoke them, so combine with `--approvalentry` / `--approvalstate` when the current approval state matters. With `--cdx` this returns the OBOM of that release, the ReARM equivalent of the old Reliza Hub `exportbundle --env`.
 - **--lifecycle** - Lifecycle of the last known release to return, default is 'ASSEMBLED' (optional, can be - [CANCELLED, REJECTED, PENDING, DRAFT, ASSEMBLED, GENERAL_AVAILABILITY, END_OF_SUPPORT]). Will include all higher level lifecycles, i.e. if set to CANCELLED, will return releases in any lifecycle.
 - **--operator** - Match operator for a list of approvals, 'AND' or 'OR', default is 'AND' (optional).
 - **--approvalentry** - Approval entry names or IDs (optional, multiple allowed).
 - **--approvalstate** - Approval states corresponding to approval entries, can be 'APPROVED', 'DISAPPROVED' or 'UNSET' (optional, multiple allowed, required if approval entries are present).
-- **--env** - Environment to obtain approvals details from (optional).
 - **--instance** - Instance ID for which to check release (optional).
 - **--namespace** - Namespace within instance for which to check release, only matters if instance is supplied (optional).
 - **--tagkey** - Tag key to use for picking artifact (optional).
