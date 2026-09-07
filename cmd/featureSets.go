@@ -20,7 +20,6 @@ package cmd
 import (
 	"encoding/json"
 	"strings"
-	"encoding/json"
 	"fmt"
 	"os"
 
