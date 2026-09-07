@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"strings"
 	"fmt"
 	"os"
 
@@ -55,7 +56,30 @@ value passed is ignored.`,
 			fmt.Fprintln(os.Stderr, "either --instance or --instanceuri must be supplied")
 			os.Exit(1)
 		}
+		// Release-aware selection (backend 26.09+): per product the plan's
+		// integrate type, the release it aims at, the release actually
+		// deployed, and the deployable releases of every available feature
+		// set -- what switchfeatureset --release accepts. Falls back to the
+		// legacy names-only selection when the backend does not know the
+		// fields yet, so the command keeps working against older servers.
 		query := `
+			query ($instanceUuid: ID, $instanceUri: String, $namespace: String) {
+				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, namespace: $namespace) {
+					namespace
+					product { uuid name }
+					currentFeatureSet { uuid name }
+					integrateType
+					targetRelease { uuid version lifecycle createdDate approvedForInstanceEnvironment }
+					deployedRelease { uuid version lifecycle createdDate approvedForInstanceEnvironment }
+					availableFeatureSets {
+						uuid
+						name
+						releases { uuid version lifecycle createdDate approvedForInstanceEnvironment }
+					}
+				}
+			}
+		`
+		legacyQuery := `
 			query ($instanceUuid: ID, $instanceUri: String, $namespace: String) {
 				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, namespace: $namespace) {
 					namespace
@@ -75,8 +99,29 @@ value passed is ignored.`,
 		if namespace != "" {
 			variables["namespace"] = namespace
 		}
-		fmt.Println(sendRequest(query, variables, "listInstanceProductFeatureSets"))
+		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		if err != nil && isFieldUndefinedError(err) {
+			if debug == "true" {
+				fmt.Println("Backend predates release fields on listInstanceProductFeatureSets, using legacy selection")
+			}
+			data, err = sendGraphQLRequest(legacyQuery, variables, rearmUri+"/graphql")
+		}
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		jsonResponse, _ := json.Marshal(data["listInstanceProductFeatureSets"])
+		fmt.Println(string(jsonResponse))
 	},
+}
+
+// isFieldUndefinedError reports whether a GraphQL error is the server's
+// validation failure for a field the schema does not define -- the signal
+// that the backend is older than the selection we asked for.
+func isFieldUndefinedError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "fieldundefined") || strings.Contains(msg, "is undefined") ||
+		strings.Contains(msg, "unknown field") || strings.Contains(msg, "validation error")
 }
 
 var switchFeatureSetCmd = &cobra.Command{
@@ -86,6 +131,13 @@ var switchFeatureSetCmd = &cobra.Command{
 instance plan. The new feature set must be a branch on the same product.
 Requires a FREEFORM API key with DEVOPS_WRITE permission on the instance
 (or its parent cluster).
+
+By default the plan entry keeps its integrate type and follows the newest
+release of the new feature set approved for the instance environment.
+Pass --release <uuid or version> to pin a specific release (the entry
+becomes TARGET), or --follow to return a pinned entry to FOLLOW. Valid
+--release values are listed by listfeaturesets under
+availableFeatureSets[].releases[].
 
 Identify the instance by UUID via --instance OR by URI via --instanceuri
 (URI is resolved against the FREEFORM key's org).
@@ -103,20 +155,32 @@ ignored.`,
 			fmt.Fprintln(os.Stderr, "either --instance or --instanceuri must be supplied")
 			os.Exit(1)
 		}
+		if switchRelease != "" && switchFollow {
+			fmt.Fprintln(os.Stderr, "--release and --follow are mutually exclusive")
+			os.Exit(1)
+		}
 		query := `
-			mutation ($instanceUuid: ID, $instanceUri: String, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String) {
+			mutation ($instanceUuid: ID, $instanceUri: String, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String, $release: String, $follow: Boolean) {
 				switchInstanceProductFeatureSet(
 					instanceUuid: $instanceUuid,
 					instanceUri: $instanceUri,
 					productUuid: $productUuid,
 					featureSetUuid: $featureSetUuid,
-					namespace: $namespace
+					namespace: $namespace,
+					release: $release,
+					follow: $follow
 				) { uuid name }
 			}
 		`
 		variables := map[string]interface{}{
 			"productUuid":    productId,
 			"featureSetUuid": featureSetId,
+		}
+		if switchRelease != "" {
+			variables["release"] = switchRelease
+		}
+		if switchFollow {
+			variables["follow"] = true
 		}
 		if instance != "" {
 			variables["instanceUuid"] = instance
@@ -133,6 +197,8 @@ ignored.`,
 
 var productId string
 var featureSetId string
+var switchRelease string
+var switchFollow bool
 
 func init() {
 	listFeatureSetsCmd.PersistentFlags().StringVar(&instance, "instance", "", "UUID of the instance whose plan to inspect (either this or --instanceuri must be supplied)")
@@ -144,6 +210,8 @@ func init() {
 	switchFeatureSetCmd.PersistentFlags().StringVar(&productId, "product", "", "UUID of the product (component) whose deployment to switch (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&featureSetId, "featureset", "", "UUID of the feature set (branch) to switch the deployment to (required)")
 	switchFeatureSetCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace of the deployment to switch (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE)")
+	switchFeatureSetCmd.PersistentFlags().StringVar(&switchRelease, "release", "", "Pin the deployment to this release of the new feature set: uuid or exact version, one of availableFeatureSets[].releases[] from listfeaturesets (optional; the plan entry becomes TARGET). Requires backend 26.09+")
+	switchFeatureSetCmd.PersistentFlags().BoolVar(&switchFollow, "follow", false, "Return the deployment to FOLLOW: newest release of the feature set approved for the instance environment (optional, mutually exclusive with --release). Requires backend 26.09+")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("product")
 	switchFeatureSetCmd.MarkPersistentFlagRequired("featureset")
 
