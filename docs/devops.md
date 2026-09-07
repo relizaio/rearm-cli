@@ -360,11 +360,21 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
 - **--instanceuri** - Instance URI; resolved against the FREEFORM key's org (either this or `--instance` is required).
 - **--namespace** - Namespace whose deployments to inspect (required for STANDALONE_INSTANCE and CLUSTER; ignored for CLUSTER_INSTANCE — the server pins the namespace to the instance's own namespace and any value passed is ignored).
 
-**Output:** JSON array; one entry per product deployed in the namespace. Each entry has `product { uuid, name }`, `currentFeatureSet { uuid, name }`, and `availableFeatureSets [{ uuid, name }]`.
+**Output:** JSON array; one entry per product deployed in the namespace. Each entry has:
+
+- `product { uuid, name }` and `currentFeatureSet { uuid, name }`;
+- `integrateType` - the plan entry's mode: `FOLLOW` (newest release approved for the instance environment), `TARGET` (pinned release), `INTEGRATE`, `NONE` or `UNINSTALL`;
+- `targetRelease` - the release the plan currently aims at (FOLLOW-resolved or pinned), `null` when nothing is selected;
+- `deployedRelease` - the release the instance actually reports as running for this product (matched from agent data), `null` until something matched. This answers "what version is deployed" without any read access to the product;
+- `availableFeatureSets [{ uuid, name, releases [...] }]` - every feature set the deployment could be switched to, each with its deployable releases, newest first (`ASSEMBLED` or later, capped at 20). Every release carries `uuid`, `version`, `lifecycle`, `createdDate` and `approvedForInstanceEnvironment`; any of them is a valid `--release` value for [switchfeatureset](#1510-switch-product-feature-set-on-an-instance).
+
+The release fields require ReARM backend 26.09 or newer and rearm-cli **26.09.1 or newer**; against an older backend the CLI transparently falls back to the names-only output.
 
 ## 15.10 Switch Product Feature Set on an Instance
 
-The `devops switchfeatureset` command changes which feature set is deployed for a given product on an instance plan. The new feature set must be a branch on the same product. ReARM CD picks the change up on its next reconcile, so the sandbox / instance rolls to whatever release is current on the new feature set.
+The `devops switchfeatureset` command changes which feature set is deployed for a given product on an instance plan. The new feature set must be a branch on the same product. ReARM CD picks the change up on its next reconcile.
+
+Which release rolls depends on the plan entry's integrate type. By default the entry keeps its type and `FOLLOW` resolves to the newest release of the new feature set that is approved for the instance environment - you do not pick the version. To deploy a **specific release**, pass `--release` with one of the candidates returned by [listfeaturesets](#159-list-product-feature-sets-on-an-instance-plan) under `availableFeatureSets[].releases[]` (uuid or exact version): the entry becomes `TARGET`, pinned to that release, until changed. Pass `--follow` to return a pinned entry to `FOLLOW`. The server rejects a release that is not `ASSEMBLED` or later or that does not belong to the new feature set. `--release` and `--follow` need rearm-cli **26.09.1 or newer** and a 26.09+ backend.
 
 **FREEFORM-only**: requires a FREEFORM API key with `DEVOPS_WRITE` on the instance (or its parent cluster).
 
@@ -381,12 +391,28 @@ docker run --rm registry.relizahub.com/library/rearm-cli \
     --namespace "production"
 ```
 
+Pin a specific release of the feature set (version or uuid from `listfeaturesets`):
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli \
+    devops switchfeatureset \
+    -i freeform_api_id \
+    -k freeform_api_key \
+    --instanceuri "https://my.sandbox.example.com" \
+    --product "product-uuid" \
+    --featureset "feature-set-uuid" \
+    --release "26.09.4" \
+    --namespace "production"
+```
+
 **Flags:**
 - **--instance** - Instance UUID (either this or `--instanceuri` is required).
 - **--instanceuri** - Instance URI; resolved against the FREEFORM key's org (either this or `--instance` is required).
 - **--product** - UUID of the PRODUCT component whose deployment to switch (required).
 - **--featureset** - UUID of the new feature set (branch on the same product) to switch the deployment to (required).
 - **--namespace** - Namespace of the deployment to switch (required for STANDALONE_INSTANCE / CLUSTER; ignored for CLUSTER_INSTANCE).
+- **--release** - Pin the deployment to this release of the new feature set: uuid or exact version, one of `availableFeatureSets[].releases[]` from `listfeaturesets` (optional; the plan entry becomes `TARGET`).
+- **--follow** - Return the deployment to `FOLLOW`: newest release approved for the instance environment (optional, mutually exclusive with `--release`).
 
 **Output:** JSON of the updated instance.
 
