@@ -160,7 +160,7 @@ func ensureAccessToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if resp.IsError() {
+	if e, _ := out["error"].(string); e != "" || resp.IsError() {
 		return "", fmt.Errorf("session refresh failed (%s): run `rearm login` again", errorDescription(out))
 	}
 	tok, _ := out["access_token"].(string)
@@ -262,7 +262,8 @@ func browserLogin() error {
 		if err != nil {
 			return err
 		}
-		if r.IsError() {
+		// outcomes arrive as 200 with an error member (the ingress in front of ReARM rewrites 4xx bodies), so read the member first
+		if e, _ := out["error"].(string); e != "" || r.IsError() {
 			switch out["error"] {
 			case "authorization_pending":
 				continue
