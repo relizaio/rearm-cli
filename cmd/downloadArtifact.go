@@ -90,7 +90,7 @@ func downloadArtifactFunc() {
 	req := client.R().
 		SetHeader("User-Agent", "ReARM CLI").
 		SetHeader("Accept-Encoding", "identity"). // disable compression so Body() is raw bytes
-		SetBasicAuth(apiKeyId, apiKey)
+		SetHeader("Authorization", authorizationHeader())
 
 	if artifactVersion > 0 {
 		req = req.SetQueryParam("version", strconv.Itoa(artifactVersion))

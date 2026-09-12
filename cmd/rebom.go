@@ -172,7 +172,7 @@ func attachToRebomFunc() {
 		SetHeader("Accept-Encoding", "gzip, deflate").
 		SetFile("file", infile).
 		SetFormData(body).
-		SetBasicAuth(apiKeyId, apiKey).
+		SetHeader("Authorization", authorizationHeader()).
 		Post(rearmUri + "/api/programmatic/v1/sbom/upload")
 
 	handleResponse(err, resp)

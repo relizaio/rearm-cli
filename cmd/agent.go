@@ -536,8 +536,8 @@ CEL session.* policy surface.`,
 				"operations": string(opsJson),
 				"map":        string(mapJson),
 			}).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/graphql")
+			SetHeader("Authorization", authorizationHeader()).
+			Post(rearmUri + graphqlPath())
 		handleResponse(err, resp)
 	},
 }

@@ -137,8 +137,8 @@ Example batch.json (one element shown):
 			SetHeader("Apollo-Require-Preflight", "true").
 			SetMultipartFormData(operations).
 			SetMultipartFormData(fileMapFd).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/graphql")
+			SetHeader("Authorization", authorizationHeader()).
+			Post(rearmUri + graphqlPath())
 
 		handleResponse(err, resp)
 	},

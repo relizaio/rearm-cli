@@ -266,9 +266,20 @@ var printversionCmd = &cobra.Command{
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Persisits API Key Id and API Key Secret",
-	Long:  "This CLI command takes API Key Id and API Key Secret and writes them to a configuration file in home directory",
+	Short: "Sign in: browser login, or persist an API Key Id and Secret",
+	Long: `Without --apikeyid/--apikey this opens the browser: approve the sign-in in ReARM and choose
+which key the CLI acts as (a personal key created for the session, one of your personal keys, or a
+Free Form key you hold). Tokens only, no secret is stored; the session slides 30 days per use, up to 90.
+With --apikeyid and --apikey the given credentials are written to the configuration file as before.
+The configuration file is $HOME/.rearm.env, mode 0600.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if apiKeyId == "" && apiKey == "" {
+			if err := browserLogin(); err != nil {
+				fmt.Println("Error:", err)
+				os.Exit(1)
+			}
+			return
+		}
 
 		home, err := homedir.Dir()
 
@@ -288,13 +299,14 @@ var loginCmd = &cobra.Command{
 			}
 		}
 
-		viper.Set("apikey", apiKey)
-		viper.Set("apikeyid", apiKeyId)
-		viper.Set("uri", rearmUri)
+		_ = configPath
 
-		if err := viper.WriteConfigAs(configPath); err != nil {
+		if err := writeCredentials(map[string]string{"URI": rearmUri, "APIKEYID": apiKeyId, "APIKEY": apiKey}); err != nil {
+
 			fmt.Println(err)
+
 			os.Exit(1)
+
 		}
 	},
 }
@@ -555,8 +567,8 @@ var addODeliverableCmd = &cobra.Command{
 			SetHeader("Apollo-Require-Preflight", "true").
 			SetMultipartFormData(operations).
 			SetMultipartFormData(fileMapFd).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/graphql")
+			SetHeader("Authorization", authorizationHeader()).
+			Post(rearmUri + graphqlPath())
 
 		handleResponse(err, resp)
 	},
@@ -1204,8 +1216,8 @@ func sendGraphQLMultipart(query string, variables map[string]interface{}, operat
 		SetHeader("Apollo-Require-Preflight", "true").
 		SetMultipartFormData(operations).
 		SetMultipartFormData(fileMapFd).
-		SetBasicAuth(apiKeyId, apiKey).
-		Post(rearmUri + "/graphql")
+		SetHeader("Authorization", authorizationHeader()).
+		Post(rearmUri + graphqlPath())
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "multipart request failed: %v\n", err)
@@ -1330,7 +1342,21 @@ func initConfig(cmd *cobra.Command) {
 	v.BindEnv("apikeyid", "REARM_APIKEYID", "REARM_API_ID")
 	v.BindEnv("apikey", "REARM_APIKEY", "REARM_API_KEY")
 
+	// browser-login session (rearm login with no key arguments)
+
+	v.BindEnv("refreshtoken", "REARM_REFRESHTOKEN")
+
+	v.BindEnv("accesstoken", "REARM_ACCESSTOKEN")
+
+	v.BindEnv("accesstokenexpiry", "REARM_ACCESSTOKENEXPIRY")
+
+	v.BindEnv("sessionexpiry", "REARM_SESSIONEXPIRY")
+
+	v.BindEnv("org", "REARM_ORG")
+
 	bindFlags(cmd, v)
+
+	loadSessionConfig(v)
 
 }
 
@@ -1447,6 +1473,9 @@ func sendGraphQLRequest(query string, variables map[string]interface{}, endpoint
 }
 
 func applySessionToRestyClient(client *resty.Client) {
+	if inSessionMode() {
+		return
+	}
 	session, _ := getSession()
 	if session != nil {
 		client.SetHeader("X-XSRF-TOKEN", session.XsrfToken)
