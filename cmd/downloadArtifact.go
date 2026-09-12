@@ -18,18 +18,19 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
 var (
-	dlArtifactUuid    string
+	dlArtifactUuid  string
 	artifactVersion int
 	rawDownload     bool
 )
@@ -74,47 +75,24 @@ Examples:
 }
 
 func downloadArtifactFunc() {
-	endpoint := "/download"
-	if rawDownload {
-		endpoint = "/rawdownload"
-	}
-	url := rearmUri + "/api/programmatic/v1/artifact/" + dlArtifactUuid + endpoint
-
 	if debug == "true" {
 		fmt.Println("Using ReARM at", rearmUri)
-		fmt.Println("Downloading artifact", dlArtifactUuid, "from", url)
+		fmt.Println("Downloading artifact", dlArtifactUuid, "raw:", rawDownload, "version:", artifactVersion)
 	}
-
-	client := resty.New()
-	applySessionToRestyClient(client)
-	req := client.R().
-		SetHeader("User-Agent", "ReARM CLI").
-		SetHeader("Accept-Encoding", "identity"). // disable compression so Body() is raw bytes
-		SetBasicAuth(apiKeyId, apiKey)
-
-	if artifactVersion > 0 {
-		req = req.SetQueryParam("version", strconv.Itoa(artifactVersion))
+	body, contentDisposition, err := rearm.DownloadArtifact(context.Background(), rearmClient(), dlArtifactUuid, rawDownload, artifactVersion)
+	if err != nil {
+		fmt.Println("Error downloading artifact:", describeError(err))
+		os.Exit(1)
 	}
-
-	resp, err := req.Get(url)
+	defer body.Close()
+	content, err := io.ReadAll(body)
 	if err != nil {
 		fmt.Println("Error downloading artifact:", err)
 		os.Exit(1)
 	}
-
-	if resp.StatusCode() != 200 {
-		fmt.Println("Error: server returned status", resp.Status())
-		if debug == "true" {
-			fmt.Println("Response body:", resp.String())
-		}
-		os.Exit(1)
-	}
-
-	// Determine output filename
 	filename := outfile
 	if filename == "" {
-		cd := resp.Header().Get("Content-Disposition")
-		for _, part := range strings.Split(cd, ";") {
+		for _, part := range strings.Split(contentDisposition, ";") {
 			part = strings.TrimSpace(part)
 			if strings.HasPrefix(part, "filename=") {
 				filename = strings.Trim(strings.TrimPrefix(part, "filename="), `"`)
@@ -125,23 +103,18 @@ func downloadArtifactFunc() {
 	if filename == "" {
 		filename = dlArtifactUuid + ".bin"
 	}
-
 	if debug == "true" {
-		fmt.Println("Content-Disposition:", resp.Header().Get("Content-Disposition"))
+		fmt.Println("Content-Disposition:", contentDisposition)
 		fmt.Println("Writing to filename:", filename)
 	}
-
-	// Ensure output directory exists
 	if err := os.MkdirAll(outDirectory, 0755); err != nil {
 		fmt.Println("Error creating output directory:", err)
 		os.Exit(1)
 	}
-
 	outPath := filepath.Join(outDirectory, filename)
-	if err := os.WriteFile(outPath, resp.Body(), 0644); err != nil {
+	if err := os.WriteFile(outPath, content, 0644); err != nil {
 		fmt.Println("Error writing file:", err)
 		os.Exit(1)
 	}
-
 	fmt.Println(outPath)
 }

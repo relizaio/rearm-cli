@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -67,11 +68,7 @@ var approveReleaseCmd = &cobra.Command{
 			fmt.Println("Request body = ", string(jsonBody))
 		}
 
-		query := `
-			mutation approveReleaseProgrammatic($releaseApprovals: ReleaseApprovalProgrammaticInput!) {
-				approveReleaseProgrammatic(releaseApprovals:$releaseApprovals) {` + RELEASE_GQL_DATA + `}
-			}
-		`
+		query := rearm.ApproveReleaseProgrammatic_Operation
 		variables := map[string]interface{}{"releaseApprovals": body}
 		fmt.Println(sendRequest(query, variables, "approveReleaseProgrammatic"))
 	},

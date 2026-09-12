@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -118,24 +119,16 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 	var query string
 	var endpoint string
 	if cdxOutput {
-		query = `
-			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
-				getLatestReleaseProgrammaticCdx(release:$GetLatestReleaseInput)
-			}
-		`
+		query = rearm.GetLatestReleaseProgrammaticCdx_Operation
 		endpoint = "getLatestReleaseProgrammaticCdx"
 	} else {
-		query = `
-			query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
-				getLatestReleaseProgrammatic(release:$GetLatestReleaseInput) {` + FULL_RELEASE_GQL_DATA + `}
-			}
-		`
+		query = rearm.GetLatestReleaseProgrammatic_Operation
 		endpoint = "getLatestReleaseProgrammatic"
 	}
 
 	variables := map[string]interface{}{"GetLatestReleaseInput": body}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

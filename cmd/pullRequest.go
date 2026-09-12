@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -117,18 +118,7 @@ run (e.g. once per component in a monorepo).`,
 			fmt.Println("Request input =", string(jsonBody))
 		}
 
-		query := `
-			mutation upsertPullRequestProgrammatic($input: PullRequestUpsertProgrammaticInput!) {
-				upsertPullRequestProgrammatic(input: $input) {
-					uuid
-					identity
-					state
-					title
-					targetVcsRepository
-					commits
-				}
-			}
-		`
+		query := rearm.UpsertPullRequestProgrammatic_Operation
 		variables := map[string]interface{}{"input": input}
 		fmt.Println(sendRequest(query, variables, "upsertPullRequestProgrammatic"))
 	},

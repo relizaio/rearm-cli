@@ -17,15 +17,13 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -78,27 +76,7 @@ omitted, the server defaults it to the new row's uuid. Calling init
 twice with the same --client-session-id on an OPEN session is
 idempotent — the existing session is returned.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			mutation ($sessionInit: SessionInitializeInput!) {
-				sessionInitializeProgrammatic(sessionInit: $sessionInit) {
-					uuid
-					agent
-					clientSessionId
-					status
-					title
-					startedAt
-					policyEvents {
-						policyName
-						kind
-						state
-						severity
-						message
-						evaluatedAt
-						policy { uuid name cel description enabled severity kind }
-					}
-				}
-			}
-		`
+		query := rearm.SessionInitializeProgrammatic_Operation
 		input := map[string]interface{}{
 			"agentName": agentName,
 		}
@@ -124,7 +102,7 @@ idempotent — the existing session is returned.`,
 			input["title"] = sessionTitle
 		}
 		variables := map[string]interface{}{"sessionInit": input}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -138,17 +116,9 @@ var agentSessionTouchCmd = &cobra.Command{
 	Short: "Heartbeat — bump lastActivityAt on the session so the dashboard stays honest",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			mutation ($sessionUuid: ID!) {
-				sessionTouchProgrammatic(sessionUuid: $sessionUuid) {
-					uuid
-					status
-					lastActivityAt
-				}
-			}
-		`
+		query := rearm.SessionTouchProgrammatic_Operation
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -162,17 +132,9 @@ var agentSessionCloseCmd = &cobra.Command{
 	Short: "Close the session (terminal — re-init creates a new row)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			mutation ($sessionUuid: ID!) {
-				sessionCloseProgrammatic(sessionUuid: $sessionUuid) {
-					uuid
-					status
-					closedAt
-				}
-			}
-		`
+		query := rearm.SessionCloseProgrammatic_Operation
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -193,24 +155,9 @@ each inbox event — the inbox tells you what changed, this tells you
 the current full state.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			query ($sessionUuid: ID!) {
-				sessionProgrammatic(sessionUuid: $sessionUuid) {
-					uuid clientSessionId status startedAt closedAt lastActivityAt
-					agent title parentSession
-					artifacts
-					commits
-					policyEvents {
-						policyName kind state severity message evaluatedAt
-						policy { uuid name cel description enabled severity kind }
-					}
-					releases { uuid version lifecycle }
-					pullRequests { uuid identity title state }
-				}
-			}
-		`
+		query := rearm.SessionProgrammatic_Operation
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -271,59 +218,7 @@ permission on its component/product.`,
 			fmt.Fprintln(os.Stderr, "--session or --client-session-id is required")
 			os.Exit(1)
 		}
-		// Per-artifact metrics fragment — each artifact (BOM, SARIF /
-		// CODE_SCANNING_RESULT, VDR, …) carries its own scan metrics, so a
-		// release with a clean source-code SBOM but a vulnerable deliverable
-		// SBOM is legible by walking the artifacts, not just the aggregate.
-		artifactMetrics := `
-			uuid displayIdentifier type bomFormat tags { key value }
-			metrics {
-				firstScanned lastScanned
-				critical high medium low unassigned
-				policyViolationsSecurityTotal policyViolationsLicenseTotal policyViolationsOperationalTotal
-				vulnerabilityDetails { purl vulnId severity analysisState }
-				violationDetails { purl type license violationDetails analysisState }
-			}`
-		query := `
-			query ($releaseUuid: ID!, $sessionUuid: ID, $clientSessionId: String) {
-				agenticReleaseProgrammatic(releaseUuid: $releaseUuid, sessionUuid: $sessionUuid, clientSessionId: $clientSessionId) {
-					uuid version lifecycle
-					updateEvents { rus rua oldValue newValue message date }
-					approvalEvents { approvalEntry approvalRoleId state comment date }
-					sourceCodeEntryDetails {
-						uuid commit attributionState attributionReason
-						# Latest signature-verification verdict (null when no
-						# SIGNATURE artifact was ever attached to this commit).
-						# Independent of attribution: RESOLVED attribution does
-						# NOT imply a VERIFIED signature — this is the field
-						# that tells them apart.
-						signature { state format signedByOwnerType signedByOwnerUuid verifiedAt keyFingerprint }
-						artifactDetails { ` + artifactMetrics + ` }
-					}
-					# Release-level metrics are the AGGREGATE, reflecting any
-					# release-scope vulnerability suppressions; per-artifact
-					# metrics below are raw (artifact scope), so the two detail
-					# lists can differ — keep both.
-					metrics {
-						lastScanned firstScanned
-						critical high medium low unassigned
-						policyViolationsSecurityTotal policyViolationsLicenseTotal policyViolationsOperationalTotal
-						vulnerabilityDetails { purl vulnId severity analysisState }
-						violationDetails { purl type license violationDetails analysisState }
-					}
-					# Release-level artifacts (e.g. an aggregated SBOM / SARIF
-					# attached straight to the release).
-					artifactDetails { ` + artifactMetrics + ` }
-					# Deliverable SBOMs / scan results, per variant.
-					variantDetails {
-						outboundDeliverableDetails {
-							uuid displayIdentifier
-							artifactDetails { ` + artifactMetrics + ` }
-						}
-					}
-				}
-			}
-		`
+		query := rearm.AgenticReleaseProgrammatic_Operation
 		variables := map[string]interface{}{"releaseUuid": args[0]}
 		if releaseShowSessionUuid != "" {
 			variables["sessionUuid"] = releaseShowSessionUuid
@@ -331,7 +226,7 @@ permission on its component/product.`,
 		if releaseShowClientSessionId != "" {
 			variables["clientSessionId"] = releaseShowClientSessionId
 		}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -365,22 +260,7 @@ Pair with a sleep loop on the agent side — 30-60s between polls is the
 recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			query ($inboxRequest: AgentSessionInboxInput!) {
-				agentSessionInboxProgrammatic(inboxRequest: $inboxRequest) {
-					cursor
-					occurredAt
-					kind
-					release { uuid version lifecycle }
-					oldValue
-					newValue
-					reason
-					source
-					actorUuid
-					actorRoleId
-				}
-			}
-		`
+		query := rearm.AgentSessionInboxProgrammatic_Operation
 		inboxRequest := map[string]interface{}{"sessionUuid": args[0]}
 		if inboxSince != "" {
 			inboxRequest["since"] = inboxSince
@@ -392,7 +272,7 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 			inboxRequest["limit"] = inboxLimit
 		}
 		variables := map[string]interface{}{"inboxRequest": inboxRequest}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -403,11 +283,11 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 
 // session add-artifact flags
 var (
-	addArtifactFile          string
-	addArtifactType          string
-	addArtifactDisplayId     string
-	addArtifactTags          []string
-	addArtifactDigests       []string
+	addArtifactFile      string
+	addArtifactType      string
+	addArtifactDisplayId string
+	addArtifactTags      []string
+	addArtifactDigests   []string
 )
 
 var agentSessionAddArtifactCmd = &cobra.Command{
@@ -464,9 +344,9 @@ CEL session.* policy surface.`,
 		// Build the single ArtifactInput. file:null is the placeholder
 		// that the multipart map[] rewrites to the uploaded part.
 		art := map[string]interface{}{
-			"type":              addArtifactType,
-			"storedIn":          "REARM",
-			"file":              nil,
+			"type":     addArtifactType,
+			"storedIn": "REARM",
+			"file":     nil,
 		}
 		if addArtifactDisplayId != "" {
 			art["displayIdentifier"] = addArtifactDisplayId
@@ -480,16 +360,7 @@ CEL session.* policy surface.`,
 			art["digestRecords"] = addArtifactDigests
 		}
 
-		mutation := `
-			mutation SessionAddArtifact($addArtifact: SessionAddArtifactInput!) {
-				sessionAddArtifactProgrammatic(addArtifact: $addArtifact) {
-					uuid
-					status
-					artifacts
-					policyEvents { policyName state severity message evaluatedAt }
-				}
-			}
-		`
+		mutation := rearm.SessionAddArtifact_Operation
 		variables := map[string]interface{}{
 			"addArtifact": map[string]interface{}{
 				"sessionUuid": args[0],
@@ -497,48 +368,9 @@ CEL session.* policy surface.`,
 			},
 		}
 
-		// Apollo multipart spec: operations + map + files keyed "0", "1", ...
-		operations := map[string]interface{}{
-			"operationName": "SessionAddArtifact",
-			"query":         mutation,
-			"variables":     variables,
-		}
-		opsJson, _ := json.Marshal(operations)
-		// Apollo spec: map value is an array of dot-separated paths.
-		locationMap := map[string][]string{
-			"0": {"variables.addArtifact.artifacts.0.file"},
-		}
-		mapJson, _ := json.Marshal(locationMap)
-
-		if debug == "true" {
-			fmt.Println("GraphQL operations:", string(opsJson))
-			fmt.Println("Multipart map:", string(mapJson))
-		}
-
-		// Standard CLI multipart pattern: applySessionToRestyClient
-		// fetches the CSRF token + cookie pair and sets both on the
-		// client; resty propagates them onto the multipart POST. Then
-		// add the Basic-auth header and the Apollo-Require-Preflight
-		// signal Spring needs for multipart-upload validation.
-		client := resty.New()
-		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
-		}
-		resp, err := client.R().
-			SetFileReader("0", fileName, bytes.NewReader(fileBytes)).
-			SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "ReARM CLI").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetHeader("Apollo-Require-Preflight", "true").
-			SetMultipartFormData(map[string]string{
-				"operations": string(opsJson),
-				"map":        string(mapJson),
-			}).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/graphql")
-		handleResponse(err, resp)
+		printGraphQLMultipart(mutation, variables,
+			map[string][]string{"0": {"variables.addArtifact.artifacts.0.file"}},
+			map[string]interface{}{"0": FileData{Bytes: fileBytes, Filename: fileName}})
 	},
 }
 

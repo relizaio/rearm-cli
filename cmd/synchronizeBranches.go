@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -90,11 +91,7 @@ var synchronizeBranchesCmd = &cobra.Command{
 			fmt.Println("Request body = ", string(jsonBody))
 		}
 
-		query := `
-			mutation synchronizeLiveBranches($synchronizeBranchInput: SynchronizeBranchInput!) {
-				synchronizeLiveBranches(synchronizeBranchInput: $synchronizeBranchInput)
-			}
-		`
+		query := rearm.SynchronizeLiveBranches_Operation
 		variables := map[string]interface{}{"synchronizeBranchInput": sbi}
 		fmt.Println(sendRequest(query, variables, "synchronizeLiveBranches"))
 	},

@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -83,9 +84,9 @@ var secretPatterns = []*regexp.Regexp{
 // reconcile. They are NOT removed from the transmitted message/detail.
 var volatilePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`), // uuids
-	regexp.MustCompile(`(?i)\bsha256:[0-9a-f]{8,64}\b`),                                                // digests
-	regexp.MustCompile(`(?i)\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\S*`),                              // timestamps
-	regexp.MustCompile(`\b\d+\b`),                                                                      // counters, ports, epochs
+	regexp.MustCompile(`(?i)\bsha256:[0-9a-f]{8,64}\b`),                                               // digests
+	regexp.MustCompile(`(?i)\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\S*`),                             // timestamps
+	regexp.MustCompile(`\b\d+\b`),                                                                     // counters, ports, epochs
 }
 
 // redactSecrets replaces credential-looking material with a marker.
@@ -311,11 +312,7 @@ Single event:
 			fmt.Println(events)
 		}
 
-		query := `
-			mutation ($events: [InstanceDeploymentEventInput!]!) {
-				instanceDeploymentEventsProgrammatic(events:$events)
-			}
-		`
+		query := rearm.InstanceDeploymentEventsProgrammatic_Operation
 		variables := map[string]interface{}{"events": events}
 		fmt.Println(sendRequest(query, variables, "instanceDeploymentEventsProgrammatic"))
 	},

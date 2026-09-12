@@ -18,15 +18,13 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -105,42 +103,7 @@ Example batch.json (one element shown):
 			fmt.Println(string(jsonReleases))
 		}
 
-		od := make(map[string]interface{})
-		od["operationName"] = "addReleasesProgrammatic"
-		od["variables"] = map[string]interface{}{"releaseInputsProg": releases}
-		od["query"] = `mutation addReleasesProgrammatic($releaseInputsProg: [ReleaseInputProg!]!) {addReleasesProgrammatic(releases:$releaseInputsProg) {` + RELEASE_GQL_DATA + `}}`
-
-		jsonOd, _ := json.Marshal(od)
-		operations := map[string]string{"operations": string(jsonOd)}
-
-		fileMapJson, _ := json.Marshal(locationMap)
-		fileMapFd := map[string]string{"map": string(fileMapJson)}
-
-		client := resty.New()
-		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
-		}
-		c := client.R()
-		for key, value := range filesMap {
-			if fileData, ok := value.(FileData); ok {
-				c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
-			} else {
-				fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
-			}
-		}
-
-		resp, err := c.SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "ReARM CLI").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetHeader("Apollo-Require-Preflight", "true").
-			SetMultipartFormData(operations).
-			SetMultipartFormData(fileMapFd).
-			SetBasicAuth(apiKeyId, apiKey).
-			Post(rearmUri + "/graphql")
-
-		handleResponse(err, resp)
+		printGraphQLMultipart(rearm.AddReleasesProgrammatic_Operation, map[string]interface{}{"releaseInputsProg": releases}, locationMap, filesMap)
 	},
 }
 

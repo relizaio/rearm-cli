@@ -19,10 +19,11 @@ package cmd
 
 import (
 	"encoding/json"
-	"strings"
 	"fmt"
 	"os"
+	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -62,33 +63,8 @@ value passed is ignored.`,
 		// set -- what switchfeatureset --release accepts. Falls back to the
 		// legacy names-only selection when the backend does not know the
 		// fields yet, so the command keeps working against older servers.
-		query := `
-			query ($instanceUuid: ID, $instanceUri: String, $namespace: String) {
-				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, namespace: $namespace) {
-					namespace
-					product { uuid name }
-					currentFeatureSet { uuid name }
-					integrateType
-					targetRelease { uuid version lifecycle createdDate approvedForInstanceEnvironment }
-					deployedRelease { uuid version lifecycle createdDate approvedForInstanceEnvironment }
-					availableFeatureSets {
-						uuid
-						name
-						releases { uuid version lifecycle createdDate approvedForInstanceEnvironment }
-					}
-				}
-			}
-		`
-		legacyQuery := `
-			query ($instanceUuid: ID, $instanceUri: String, $namespace: String) {
-				listInstanceProductFeatureSets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, namespace: $namespace) {
-					namespace
-					product { uuid name }
-					currentFeatureSet { uuid name }
-					availableFeatureSets { uuid name }
-				}
-			}
-		`
+		query := rearm.ListInstanceProductFeatureSets_Operation
+		legacyQuery := rearm.ListInstanceProductFeatureSetsFeaturesets_Operation
 		variables := map[string]interface{}{}
 		if instance != "" {
 			variables["instanceUuid"] = instance
@@ -99,12 +75,12 @@ value passed is ignored.`,
 		if namespace != "" {
 			variables["namespace"] = namespace
 		}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil && isFieldUndefinedError(err) {
 			if debug == "true" {
 				fmt.Println("Backend predates release fields on listInstanceProductFeatureSets, using legacy selection")
 			}
-			data, err = sendGraphQLRequest(legacyQuery, variables, rearmUri+"/graphql")
+			data, err = sendGraphQLRequest(legacyQuery, variables)
 		}
 		if err != nil {
 			printGqlError(err)
@@ -159,19 +135,7 @@ ignored.`,
 			fmt.Fprintln(os.Stderr, "--release and --follow are mutually exclusive")
 			os.Exit(1)
 		}
-		query := `
-			mutation ($instanceUuid: ID, $instanceUri: String, $productUuid: ID!, $featureSetUuid: ID!, $namespace: String, $release: String, $follow: Boolean) {
-				switchInstanceProductFeatureSet(
-					instanceUuid: $instanceUuid,
-					instanceUri: $instanceUri,
-					productUuid: $productUuid,
-					featureSetUuid: $featureSetUuid,
-					namespace: $namespace,
-					release: $release,
-					follow: $follow
-				) { uuid name }
-			}
-		`
+		query := rearm.SwitchInstanceProductFeatureSet_Operation
 		variables := map[string]interface{}{
 			"productUuid":    productId,
 			"featureSetUuid": featureSetId,
@@ -253,13 +217,7 @@ function on the product.`,
 			fmt.Fprintln(os.Stderr, "Failed to parse --overrides JSON:", err)
 			os.Exit(1)
 		}
-		query := `
-			mutation ($productUuid: ID!, $overrides: [VersionFeatureSetOverride!]!) {
-				versionFeatureSet(productUuid: $productUuid, overrides: $overrides) {
-					uuid name component autoIntegrate
-				}
-			}
-		`
+		query := rearm.VersionFeatureSet_Operation
 		variables := map[string]interface{}{
 			"productUuid": versionFsProduct,
 			"overrides":   overrides,
