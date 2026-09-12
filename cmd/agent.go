@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -124,7 +123,7 @@ idempotent — the existing session is returned.`,
 			input["title"] = sessionTitle
 		}
 		variables := map[string]interface{}{"sessionInit": input}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -148,7 +147,7 @@ var agentSessionTouchCmd = &cobra.Command{
 			}
 		`
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -172,7 +171,7 @@ var agentSessionCloseCmd = &cobra.Command{
 			}
 		`
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -210,7 +209,7 @@ the current full state.`,
 			}
 		`
 		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -331,7 +330,7 @@ permission on its component/product.`,
 		if releaseShowClientSessionId != "" {
 			variables["clientSessionId"] = releaseShowClientSessionId
 		}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -392,7 +391,7 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 			inboxRequest["limit"] = inboxLimit
 		}
 		variables := map[string]interface{}{"inboxRequest": inboxRequest}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -522,9 +521,8 @@ CEL session.* policy surface.`,
 		// signal Spring needs for multipart-upload validation.
 		client := resty.New()
 		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
+		if h := authorizationHeader(); h != "" {
+			client.SetHeader("Authorization", h)
 		}
 		resp, err := client.R().
 			SetFileReader("0", fileName, bytes.NewReader(fileBytes)).

@@ -105,7 +105,7 @@ func runEnrollkey(ownerUuid, format, pubkeyFile, pubKey, fingerprint, identity s
 		input["identity"] = identity
 	}
 	variables := map[string]interface{}{argName: input}
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

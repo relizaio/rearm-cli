@@ -129,6 +129,15 @@ func graphqlPath() string {
 	return "/graphql"
 }
 
+// sessionAwareUri routes a /graphql target to the programmatic endpoint in session mode, so a
+// caller that still builds the legacy URL cannot send a session token where it is not honoured.
+func sessionAwareUri(uri string) string {
+	if inSessionMode() && strings.HasSuffix(uri, "/graphql") && !strings.HasSuffix(uri, programmaticGraphQL) {
+		return strings.TrimSuffix(uri, "/graphql") + programmaticGraphQL
+	}
+	return uri
+}
+
 // authorizationHeader is what every request sends: Basic for a key secret, Bearer for a session.
 func authorizationHeader() string {
 	if inSessionMode() {

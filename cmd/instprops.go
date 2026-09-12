@@ -103,7 +103,7 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 			"productSpecificProps": productSpecificProps,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)

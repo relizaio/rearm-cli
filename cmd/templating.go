@@ -714,7 +714,7 @@ func getProductObomV1(product string, environment string, version string) []byte
 		field = "getLatestReleaseProgrammaticCdx"
 	}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

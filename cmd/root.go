@@ -42,7 +42,7 @@ var product string
 var cfgFile string
 var commit string
 var commitMessage string
-var commits string // base64-encoded list of commits obtained with: git log $LATEST_COMMIT..$CURRENT_COMMIT --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0
+var commits string     // base64-encoded list of commits obtained with: git log $LATEST_COMMIT..$CURRENT_COMMIT --date=iso-strict --pretty='%H|||%ad|||%s' | base64 -w 0
 var commitsFile string // path to a file containing the base64-encoded commits string (alternative to --commits for large inputs)
 var dateActual string
 var dateStart []string
@@ -85,6 +85,7 @@ var tagKey string
 var tagVal string
 
 var tagsArr []string
+
 // PR-data flags shared by getversion and addrelease — populated by
 // CI when a build is running against a PR. Forwards to ReARM's
 // pullRequest input on the corresponding mutations, which upsert a
@@ -547,9 +548,8 @@ var addODeliverableCmd = &cobra.Command{
 		// write a wrapper to send the gql upload request via post form data
 		client := resty.New()
 		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
+		if h := authorizationHeader(); h != "" {
+			client.SetHeader("Authorization", h)
 		}
 		c := client.R()
 		for key, value := range filesMap {
@@ -893,7 +893,7 @@ var checkReleaseByHashCmd = &cobra.Command{
 			variables["componentId"] = component
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -928,7 +928,7 @@ var releaseByVersionCmd = &cobra.Command{
 			"componentId": component,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -1158,10 +1158,11 @@ func buildPullRequestInfoBody() map[string]interface{} {
 }
 
 func sendRequest(query string, variables map[string]interface{}, endpoint string) string {
-	return sendRequestWithUri(query, variables, endpoint, rearmUri+"/graphql")
+	return sendRequestWithUri(query, variables, endpoint, rearmUri+graphqlPath())
 }
 
 func sendRequestWithUri(query string, variables map[string]interface{}, endpoint string, uri string) string {
+	uri = sessionAwareUri(uri)
 	data, err := sendGraphQLRequest(query, variables, uri)
 	if err != nil {
 		printGqlError(err)
@@ -1197,9 +1198,8 @@ func sendGraphQLMultipart(query string, variables map[string]interface{}, operat
 
 	client := resty.New()
 	applySessionToRestyClient(client)
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		client.SetHeader("Authorization", "Basic "+auth)
+	if h := authorizationHeader(); h != "" {
+		client.SetHeader("Authorization", h)
 	}
 	c := client.R()
 	for key, value := range filesMap {
@@ -1437,9 +1437,8 @@ func sendGraphQLRequest(query string, variables map[string]interface{}, endpoint
 
 	client := resty.New()
 	applySessionToRestyClient(client)
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-		client.SetHeader("Authorization", "Basic "+auth)
+	if h := authorizationHeader(); h != "" {
+		client.SetHeader("Authorization", h)
 	}
 
 	var result map[string]interface{}

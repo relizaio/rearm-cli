@@ -536,9 +536,8 @@ var addreleaseCmd = &cobra.Command{
 		// write a wrapper to send the gql upload request via post form data
 		client := resty.New()
 		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
+		if h := authorizationHeader(); h != "" {
+			client.SetHeader("Authorization", h)
 		}
 		c := client.R()
 		for key, value := range filesMap {

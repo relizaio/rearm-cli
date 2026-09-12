@@ -250,7 +250,7 @@ func runProbeAttempt(sbomContent string) error {
 		variables["branchUuid"] = sbomBranchUuid
 	}
 
-	data, err := sendGraphQLRequest(mutation, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(mutation, variables, rearmUri+graphqlPath())
 	if err != nil {
 		return fmt.Errorf("submission failed: %w", err)
 	}
@@ -384,7 +384,7 @@ func runProbeAttempt(sbomContent string) error {
 		default:
 		}
 
-		pollData, err := sendGraphQLRequest(pollQuery, pollVars, rearmUri+"/graphql")
+		pollData, err := sendGraphQLRequest(pollQuery, pollVars, rearmUri+graphqlPath())
 		if err != nil {
 			stopSpinner()
 			return fmt.Errorf("poll failed: %w", err)

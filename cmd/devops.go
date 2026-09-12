@@ -73,7 +73,7 @@ var setInstSecretCertCmd = &cobra.Command{
 		`
 		variables := map[string]interface{}{"sealedCert": sealedCert}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -124,7 +124,7 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, instance string, revi
 		"stateType":    stateType,
 	}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

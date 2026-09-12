@@ -75,7 +75,7 @@ var deliverableGetSecrets = &cobra.Command{
 			"namespace":         namespace,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -112,7 +112,7 @@ var isInstHasSecretCertCmd = &cobra.Command{
 			"instanceUri":  instanceURI,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)

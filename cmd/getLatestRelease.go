@@ -135,7 +135,7 @@ func getLatestReleaseFunc(debug string, rearmUri string, component string, produ
 
 	variables := map[string]interface{}{"GetLatestReleaseInput": body}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

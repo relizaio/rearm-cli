@@ -19,7 +19,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -118,9 +117,8 @@ Example batch.json (one element shown):
 
 		client := resty.New()
 		applySessionToRestyClient(client)
-		if len(apiKeyId) > 0 && len(apiKey) > 0 {
-			auth := base64.StdEncoding.EncodeToString([]byte(apiKeyId + ":" + apiKey))
-			client.SetHeader("Authorization", "Basic "+auth)
+		if h := authorizationHeader(); h != "" {
+			client.SetHeader("Authorization", h)
 		}
 		c := client.R()
 		for key, value := range filesMap {

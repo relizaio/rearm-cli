@@ -99,12 +99,12 @@ value passed is ignored.`,
 		if namespace != "" {
 			variables["namespace"] = namespace
 		}
-		data, err := sendGraphQLRequest(query, variables, rearmUri+"/graphql")
+		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
 		if err != nil && isFieldUndefinedError(err) {
 			if debug == "true" {
 				fmt.Println("Backend predates release fields on listInstanceProductFeatureSets, using legacy selection")
 			}
-			data, err = sendGraphQLRequest(legacyQuery, variables, rearmUri+"/graphql")
+			data, err = sendGraphQLRequest(legacyQuery, variables, rearmUri+graphqlPath())
 		}
 		if err != nil {
 			printGqlError(err)
