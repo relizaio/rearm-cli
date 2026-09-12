@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"io"
+
+	rearm "github.com/relizaio/rearm-client-go"
 )
 
 /*
@@ -691,19 +693,11 @@ func getProductObomV1(product string, environment string, version string) []byte
 	var variables map[string]interface{}
 	var field string
 	if len(version) > 0 {
-		query = `
-		query ($version: String!, $componentId: ID!) {
-			getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
-		}
-	`
+		query = rearm.GetReleaseByReleaseVersionProgrammatic_Operation
 		variables = map[string]interface{}{"version": version, "componentId": product}
 		field = "getReleaseByReleaseVersionProgrammatic"
 	} else {
-		query = `
-		query ($GetLatestReleaseInput: GetLatestReleaseInput!) {
-			getLatestReleaseProgrammaticCdx(release: $GetLatestReleaseInput)
-		}
-	`
+		query = rearm.GetLatestReleaseProgrammaticCdx_Operation
 		// Tag replacement must never pick a cancelled or rejected release that
 		// was once approved, so the lifecycle floor is pinned to ASSEMBLED.
 		variables = map[string]interface{}{"GetLatestReleaseInput": map[string]interface{}{
@@ -714,7 +708,7 @@ func getProductObomV1(product string, environment string, version string) []byte
 		field = "getLatestReleaseProgrammaticCdx"
 	}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -89,11 +90,7 @@ var instDataCmd = &cobra.Command{
 			fmt.Println(body)
 		}
 
-		query := `
-			mutation ($InstanceDataInput: InstanceDataInput!) {
-				instData(instance:$InstanceDataInput)
-			}
-		`
+		query := rearm.InstData_Operation
 		variables := map[string]interface{}{"InstanceDataInput": body}
 		fmt.Println(sendRequest(query, variables, "instData"))
 	},

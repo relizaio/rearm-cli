@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -75,21 +76,7 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 			namespace = "default"
 		}
 
-		query := `
-			query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String!, $properties: [String], $secrets: [String], $product: ID, $productSpecificProps: Boolean) {
-				getInstancePropSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, properties: $properties, secrets: $secrets, product: $product, productSpecificProps: $productSpecificProps) {
-					properties {
-						key
-						value
-					}
-					secrets {
-						key
-						value
-						lastUpdated
-					}
-				}
-			}
-		`
+		query := rearm.GetInstancePropSecrets_Operation
 
 		intRevision, _ := strconv.Atoi(revision)
 		variables := map[string]interface{}{
@@ -103,7 +90,7 @@ func retrieveInstancePropsSecrets(props []string, secrs []string) SecretPropsRHR
 			"productSpecificProps": productSpecificProps,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)

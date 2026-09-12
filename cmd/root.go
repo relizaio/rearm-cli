@@ -16,7 +16,6 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -25,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/mitchellh/go-homedir"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -128,118 +127,6 @@ const (
 	envPrefix             = "rearm"
 	configType            = "env"
 )
-
-type ErrorBody struct {
-	Timestamp string
-	Status    int
-	Error     string
-	Message   string
-	Path      string
-}
-
-type GraphQLResponse struct {
-	Data   json.RawMessage `json:"data"`
-	Errors []GraphQLError  `json:"errors"`
-}
-
-type GraphQLError struct {
-	Message    string                 `json:"message"`
-	Locations  []GraphQLErrorLocation `json:"locations,omitempty"`
-	Path       []interface{}          `json:"path,omitempty"`
-	Extensions map[string]interface{} `json:"extensions,omitempty"`
-}
-
-type GraphQLErrorLocation struct {
-	Line   int `json:"line"`
-	Column int `json:"column"`
-}
-
-const RELEASE_GQL_DATA = `
-	uuid
-	createdType
-	lastUpdatedBy
-	createdDate
-	version
-	lifecycle
-	org
-	component
-	branch
-	parentReleases {
-		release
-	}
-	sourceCodeEntry
-	artifacts
-	notes
-	endpoint
-	commits
-`
-
-const FULL_RELEASE_GQL_DATA = RELEASE_GQL_DATA + `
-	sourceCodeEntryDetails {
-		uuid
-		branch
-		vcsUuid
-		vcsBranch
-		commit
-		commits
-		commitMessage
-		vcsTag
-		notes
-		org
-		dateActual
-	}
-	vcsRepository {
-		uuid
-		name
-		org
-		uri
-		type
-	}
-	artifactDetails {
-		uuid
-		displayIdentifier
-		org
-		branch
-		buildId
-		buildUri
-		cicdMeta
-		isInternal
-		type
-		notes
-		tags {
-            key
-            value
-        }
-		dateFrom
-		dateTo
-		duration
-		packageType
-		version
-		publisher
-		group
-		dependencies
-	}
-	componentDetails {
-		uuid
-		name
-	}
-`
-
-const COMPONENT_GQL_DATA = `
-	uuid
-	name
-	org
-	type
-	versionSchema
-	vcsRepositoryDetails {
-		uri
-		type
-	}
-	featureBranchVersioning
-	status
-	apiKeyId
-	apiKey
-`
 
 type TagRecord struct {
 	Key   string `json:"key"`
@@ -535,42 +422,7 @@ var addODeliverableCmd = &cobra.Command{
 			fmt.Println(string(jsonBody))
 		}
 
-		od := make(map[string]interface{})
-		od["operationName"] = "addOutboundDeliverablesProgrammatic"
-		od["variables"] = map[string]interface{}{"addODeliverableInput": body}
-		od["query"] = `mutation addOutboundDeliverablesProgrammatic($addODeliverableInput: AddODeliverableInput!) {addOutboundDeliverablesProgrammatic(deliverables:$addODeliverableInput) {` + RELEASE_GQL_DATA + `}}`
-
-		jsonOd, _ := json.Marshal(od)
-		operations := map[string]string{"operations": string(jsonOd)}
-
-		fileMapJson, _ := json.Marshal(locationMap)
-		fileMapFd := map[string]string{"map": string(fileMapJson)}
-		// write a wrapper to send the gql upload request via post form data
-		client := resty.New()
-		applySessionToRestyClient(client)
-		if h := authorizationHeader(); h != "" {
-			client.SetHeader("Authorization", h)
-		}
-		c := client.R()
-		for key, value := range filesMap {
-			if fileData, ok := value.(FileData); ok {
-				c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
-			} else {
-				// Handle error case: value is not FileData
-				fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
-			}
-		}
-
-		resp, err := c.SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "ReARM CLI").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetHeader("Apollo-Require-Preflight", "true").
-			SetMultipartFormData(operations).
-			SetMultipartFormData(fileMapFd).
-			SetHeader("Authorization", authorizationHeader()).
-			Post(rearmUri + graphqlPath())
-
-		handleResponse(err, resp)
+		printGraphQLMultipart(rearm.AddOutboundDeliverablesProgrammatic_Operation, map[string]interface{}{"addODeliverableInput": body}, locationMap, filesMap)
 	},
 }
 
@@ -624,19 +476,11 @@ var createComponentCmd = &cobra.Command{
 		variables := map[string]interface{}{"CreateComponentInput": body}
 		var opName string
 		if len(perspective) > 0 {
-			query = `
-				mutation ($CreateComponentInput: CreateComponentInput!, $perspectiveUuid: ID!) {
-					createComponentInPerspectiveProgrammatic(component:$CreateComponentInput, perspectiveUuid:$perspectiveUuid) {` + COMPONENT_GQL_DATA + `}
-				}
-			`
+			query = rearm.CreateComponentInPerspectiveProgrammatic_Operation
 			variables["perspectiveUuid"] = perspective
 			opName = "createComponentInPerspectiveProgrammatic"
 		} else {
-			query = `
-				mutation ($CreateComponentInput: CreateComponentInput!) {
-					createComponentProgrammatic(component:$CreateComponentInput) {` + COMPONENT_GQL_DATA + `}
-				}
-			`
+			query = rearm.CreateComponentProgrammatic_Operation
 			opName = "createComponentProgrammatic"
 		}
 		fmt.Println(sendRequest(query, variables, opName))
@@ -798,20 +642,10 @@ var getVersionCmd = &cobra.Command{
 		// it behind --include-lifecycle (default off) and let callers
 		// who know they're paired with a recent enough backend
 		// (e.g. the rearm-actions initialize step) opt in.
-		lifecycleField := ""
+		query := rearm.GetNewVersionProgrammatic_Operation
 		if includeLifecycle {
-			lifecycleField = "lifecycle"
+			query = rearm.GetNewVersionProgrammaticWithLifecycle_Operation
 		}
-		query := `
-			mutation getNewVersionProgrammatic ($GetNewVersionInput: GetNewVersionInput!) {
-				getNewVersionProgrammatic(newVersionInput:$GetNewVersionInput) {
-					version
-					dockerTagSafeVersion
-					releaseAlreadyExists
-					` + lifecycleField + `
-				}
-			}
-		`
 		variables := map[string]interface{}{"GetNewVersionInput": body}
 
 		// --scearts lets initialize-time callers attach signature /
@@ -868,7 +702,7 @@ var getVersionCmd = &cobra.Command{
 		}
 		body["sourceCodeEntry"] = attachArtifactsToSourceCodeEntry(body["sourceCodeEntry"], processed)
 
-		fmt.Println(sendGraphQLMultipart(query, variables, "getNewVersionProgrammatic", locationMap, filesMap))
+		fmt.Println(sendGraphQLMultipart(query, variables, locationMap, filesMap))
 	},
 }
 
@@ -883,17 +717,13 @@ var checkReleaseByHashCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
-		query := `
-			query ($hash: String!, $componentId: ID) {
-				getReleaseByHashProgrammatic(hash: $hash, componentId: $componentId)
-			}
-		`
+		query := rearm.GetReleaseByHashProgrammatic_Operation
 		variables := map[string]interface{}{"hash": hash}
 		if len(component) > 0 {
 			variables["componentId"] = component
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -916,11 +746,7 @@ var releaseByVersionCmd = &cobra.Command{
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
-		query := `
-			query ($version: String!, $componentId: ID!) {
-				getReleaseByReleaseVersionProgrammatic(version: $version, componentId: $componentId)
-			}
-		`
+		query := rearm.GetReleaseByReleaseVersionProgrammatic_Operation
 		// componentId takes the uuid or, with an org-scoped key, the unique name;
 		// ReARM resolves it.
 		variables := map[string]interface{}{
@@ -928,7 +754,7 @@ var releaseByVersionCmd = &cobra.Command{
 			"componentId": component,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -949,7 +775,7 @@ var releasecompletionfinalizerCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		query := `mutation releasecompletionfinalizerProgrammatic($release: ID!) { releasecompletionfinalizerProgrammatic(release: $release) }`
+		query := rearm.ReleasecompletionfinalizerProgrammatic_Operation
 		variables := map[string]interface{}{"release": releaseId}
 
 		fmt.Println(sendRequest(query, variables, "releasecompletionfinalizerProgrammatic"))
@@ -1157,146 +983,6 @@ func buildPullRequestInfoBody() map[string]interface{} {
 	return pr
 }
 
-func sendRequest(query string, variables map[string]interface{}, endpoint string) string {
-	return sendRequestWithUri(query, variables, endpoint, rearmUri+graphqlPath())
-}
-
-func sendRequestWithUri(query string, variables map[string]interface{}, endpoint string, uri string) string {
-	uri = sessionAwareUri(uri)
-	data, err := sendGraphQLRequest(query, variables, uri)
-	if err != nil {
-		printGqlError(err)
-		os.Exit(1)
-	}
-
-	jsonResponse, _ := json.Marshal(data[endpoint])
-	return string(jsonResponse)
-}
-
-// sendGraphQLMultipart sends a GraphQL request via the graphql-multipart-request-spec
-// upload pipeline (operations + map + numbered file parts) and returns the
-// marshaled `data[operationName]` portion of the response as a JSON string —
-// same return shape as sendRequest, so callers that already pipe through jq
-// (e.g. CI scripts reading getversion output) don't need to change.
-//
-// Use this path when the GraphQL input carries any `file: Upload` references.
-// The locationMap and filesMap are populated by processArtifactsInput / its
-// kin — keys are the file-part name ("0", "1", …) and the location map points
-// at the JSON variable slot the part should fill in.
-func sendGraphQLMultipart(query string, variables map[string]interface{}, operationName string,
-	locationMap map[string][]string, filesMap map[string]interface{}) string {
-
-	od := map[string]interface{}{
-		"operationName": operationName,
-		"variables":     variables,
-		"query":         query,
-	}
-	jsonOd, _ := json.Marshal(od)
-	operations := map[string]string{"operations": string(jsonOd)}
-	fileMapJson, _ := json.Marshal(locationMap)
-	fileMapFd := map[string]string{"map": string(fileMapJson)}
-
-	client := resty.New()
-	applySessionToRestyClient(client)
-	if h := authorizationHeader(); h != "" {
-		client.SetHeader("Authorization", h)
-	}
-	c := client.R()
-	for key, value := range filesMap {
-		if fileData, ok := value.(FileData); ok {
-			c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
-		} else {
-			fmt.Printf("Warning: Value for key '%s' is not FileData\n", key)
-		}
-	}
-
-	resp, err := c.SetHeader("Content-Type", "multipart/form-data").
-		SetHeader("User-Agent", "ReARM CLI").
-		SetHeader("Accept-Encoding", "gzip, deflate").
-		SetHeader("Apollo-Require-Preflight", "true").
-		SetMultipartFormData(operations).
-		SetMultipartFormData(fileMapFd).
-		SetHeader("Authorization", authorizationHeader()).
-		Post(rearmUri + graphqlPath())
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "multipart request failed: %v\n", err)
-		os.Exit(1)
-	}
-	if resp.StatusCode() != 200 {
-		fmt.Fprintf(os.Stderr, "multipart request returned %d: %s\n", resp.StatusCode(), resp.String())
-		os.Exit(1)
-	}
-	var gqlResp struct {
-		Data   map[string]interface{} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-	if jsonErr := json.Unmarshal(resp.Body(), &gqlResp); jsonErr != nil {
-		fmt.Fprintf(os.Stderr, "failed to unmarshal multipart response: %v\n", jsonErr)
-		os.Exit(1)
-	}
-	if len(gqlResp.Errors) > 0 {
-		fmt.Fprintln(os.Stderr, "GraphQL returned errors:")
-		for _, e := range gqlResp.Errors {
-			fmt.Fprintf(os.Stderr, "- %s\n", e.Message)
-		}
-		os.Exit(1)
-	}
-	out, _ := json.Marshal(gqlResp.Data[operationName])
-	return string(out)
-}
-
-func handleResponse(err error, resp *resty.Response) {
-	if debug == "true" {
-		// Explore response object
-		fmt.Println("Response Info:")
-		fmt.Println("Error      :", err)
-		fmt.Println("Status Code:", resp.StatusCode())
-		fmt.Println("Status     :", resp.Status())
-		fmt.Println("Time       :", resp.Time())
-		fmt.Println("Received At:", resp.ReceivedAt())
-		fmt.Println("Body       :\n", resp)
-		fmt.Println()
-	} else {
-		fmt.Println(resp)
-	}
-
-	if resp.StatusCode() != 200 {
-		fmt.Println("Error Response Info:")
-		fmt.Println("Error      :", err)
-		var jsonError ErrorBody
-		errJson := json.Unmarshal(resp.Body(), &jsonError)
-		if errJson != nil {
-			fmt.Println("Error when decoding error json data: ", errJson)
-		}
-		fmt.Println("Error Message:", jsonError.Message)
-		fmt.Println("Status Code:", resp.StatusCode())
-		fmt.Println("Status     :", resp.Status())
-		fmt.Println("Time       :", resp.Time())
-		fmt.Println("Received At:", resp.ReceivedAt())
-		os.Exit(1)
-	}
-	if err != nil {
-		fmt.Println("Error      :", err)
-		os.Exit(1)
-	}
-	var gqlResp GraphQLResponse
-	gqlErr := json.Unmarshal(resp.Body(), &gqlResp)
-	if gqlErr != nil {
-		fmt.Printf("failed to unmarshal response: %v\n", gqlErr)
-		os.Exit(1)
-	}
-	if len(gqlResp.Errors) > 0 {
-		fmt.Println("GraphQL returned errors:")
-		for _, e := range gqlResp.Errors {
-			fmt.Printf("- %s\n", e.Message)
-		}
-		os.Exit(1)
-	}
-}
-
 // initConfig reads in config file and ENV variables if set.
 func initConfig(cmd *cobra.Command) {
 	v := viper.New()
@@ -1395,134 +1081,4 @@ func resolveCommitsInput() {
 		os.Exit(1)
 	}
 	commits = strings.TrimSpace(string(data))
-}
-
-func printGqlError(err error) {
-	raw := err.Error()
-	const prefix = "GraphQL errors: "
-	payload := raw
-	if strings.HasPrefix(raw, prefix) {
-		payload = raw[len(prefix):]
-	}
-	var gqlErrs []struct {
-		Message string `json:"message"`
-	}
-	if jsonErr := json.Unmarshal([]byte(payload), &gqlErrs); jsonErr == nil && len(gqlErrs) > 0 {
-		messages := make([]string, 0, len(gqlErrs))
-		for _, e := range gqlErrs {
-			if e.Message != "" {
-				messages = append(messages, e.Message)
-			}
-		}
-		if len(messages) > 0 {
-			fmt.Println("Error:", strings.Join(messages, "; "))
-			return
-		}
-	}
-	fmt.Println("Error:", raw)
-}
-
-// GraphQLRequest represents a GraphQL request with query and variables
-type GraphQLRequest struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables"`
-}
-
-// sendGraphQLRequest sends a GraphQL request using resty and returns the response data
-func sendGraphQLRequest(query string, variables map[string]interface{}, endpoint string) (map[string]interface{}, error) {
-	gqlReq := GraphQLRequest{
-		Query:     query,
-		Variables: variables,
-	}
-
-	client := resty.New()
-	applySessionToRestyClient(client)
-	if h := authorizationHeader(); h != "" {
-		client.SetHeader("Authorization", h)
-	}
-
-	var result map[string]interface{}
-	resp, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "ReARM CLI").
-		SetHeader("Accept-Encoding", "gzip, deflate").
-		SetBody(gqlReq).
-		SetResult(&result).
-		Post(endpoint)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	// Check for GraphQL errors
-	if errors, ok := result["errors"]; ok {
-		errorsJSON, _ := json.Marshal(errors)
-		return nil, fmt.Errorf("GraphQL errors: %s", string(errorsJSON))
-	}
-
-	if data, ok := result["data"].(map[string]interface{}); ok {
-		return data, nil
-	}
-
-	return result, nil
-}
-
-func applySessionToRestyClient(client *resty.Client) {
-	if inSessionMode() {
-		return
-	}
-	session, _ := getSession()
-	if session != nil {
-		client.SetHeader("X-XSRF-TOKEN", session.XsrfToken)
-		client.SetHeader("Cookie", "JSESSIONID="+session.JSessionId+"; XSRF-TOKEN="+session.XsrfToken)
-	}
-}
-
-func getSession() (*RequestSession, error) {
-	client := resty.New()
-	resp, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("User-Agent", "ReARM CLI").
-		SetHeader("Accept-Encoding", "gzip, deflate").
-		Get(rearmUri + "/api/manual/v1/fetchCsrf")
-
-	if err != nil {
-		return nil, err
-	}
-	// Extract cookies
-	session, err := extractSessionCookies(resp)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return session, err
-}
-
-func extractSessionCookies(resp *resty.Response) (*RequestSession, error) {
-	cookies := resp.Cookies()
-	var jsessionid string
-	var xsrfToken string
-	for _, cookie := range cookies {
-		if cookie.Name == "JSESSIONID" {
-			jsessionid = cookie.Value
-		} else if cookie.Name == "XSRF-TOKEN" {
-			xsrfToken = cookie.Value
-		}
-	}
-
-	if xsrfToken == "" {
-		return nil, fmt.Errorf("XSRF-TOKEN cookie not found")
-	}
-
-	return &RequestSession{JSessionId: jsessionid, XsrfToken: xsrfToken}, nil
-}
-
-type RequestSession struct {
-	JSessionId string
-	XsrfToken  string
 }

@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -232,14 +233,7 @@ func probeSbomFunc() {
 
 func runProbeAttempt(sbomContent string) error {
 	// Step 1: Submit SBOM for probing
-	mutation := `
-		mutation probeSbomProgrammatic($sbom: String!, $componentUuid: ID, $branchUuid: ID) {
-			probeSbomProgrammatic(sbom: $sbom, componentUuid: $componentUuid, branchUuid: $branchUuid) {
-				runId
-				status
-			}
-		}
-	`
+	mutation := rearm.ProbeSbomProgrammatic_Operation
 	variables := map[string]any{
 		"sbom": sbomContent,
 	}
@@ -250,7 +244,7 @@ func runProbeAttempt(sbomContent string) error {
 		variables["branchUuid"] = sbomBranchUuid
 	}
 
-	data, err := sendGraphQLRequest(mutation, variables, rearmUri+graphqlPath())
+	data, err := sendGraphQLRequest(mutation, variables)
 	if err != nil {
 		return fmt.Errorf("submission failed: %w", err)
 	}
@@ -302,63 +296,7 @@ func runProbeAttempt(sbomContent string) error {
 	}()
 
 	// Step 3: Poll every 10 seconds with 60-minute deadline
-	pollQuery := `
-		query getSbomProbingResult($runId: String!) {
-			getSbomProbingResult(runId: $runId) {
-				status
-				metrics {
-					dependencyTrackFullUri
-					dtrackSubmissionFailed
-					dtrackSubmissionAttempts
-					dtrackSubmissionFailureReason
-					lastScanned
-					firstScanned
-					critical
-					high
-					medium
-					low
-					unassigned
-					vulnerabilities
-					vulnerableComponents
-					components
-					suppressed
-					findingsTotal
-					findingsAudited
-					findingsUnaudited
-					inheritedRiskScore
-					policyViolationsFail
-					policyViolationsWarn
-					policyViolationsInfo
-					policyViolationsTotal
-					policyViolationsAudited
-					policyViolationsUnaudited
-					policyViolationsSecurityTotal
-					policyViolationsSecurityAudited
-					policyViolationsSecurityUnaudited
-					policyViolationsLicenseTotal
-					policyViolationsLicenseAudited
-					policyViolationsLicenseUnaudited
-					policyViolationsOperationalTotal
-					policyViolationsOperationalAudited
-					policyViolationsOperationalUnaudited
-					vulnerabilityDetails {
-						purl vulnId severity analysisState analysisDate attributedAt
-						aliases { type aliasId }
-						sources { artifact release variant analysisState analysisDate }
-						severities { source severity }
-					}
-					violationDetails {
-						purl type license violationDetails analysisState analysisDate attributedAt
-						sources { artifact release variant analysisState analysisDate }
-					}
-					weaknessDetails {
-						cweId ruleId location fingerprint severity analysisState analysisDate attributedAt
-						sources { artifact release variant analysisState analysisDate }
-					}
-				}
-			}
-		}
-	`
+	pollQuery := rearm.GetSbomProbingResult_Operation
 	pollVars := map[string]any{
 		"runId": probingRun.RunId,
 	}
@@ -384,7 +322,7 @@ func runProbeAttempt(sbomContent string) error {
 		default:
 		}
 
-		pollData, err := sendGraphQLRequest(pollQuery, pollVars, rearmUri+graphqlPath())
+		pollData, err := sendGraphQLRequest(pollQuery, pollVars)
 		if err != nil {
 			stopSpinner()
 			return fmt.Errorf("poll failed: %w", err)

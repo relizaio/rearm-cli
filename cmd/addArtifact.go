@@ -18,12 +18,11 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/go-resty/resty/v2"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -171,16 +170,7 @@ Examples:
 		variables["artifactInput"] = artifactInput
 
 		// Build GraphQL mutation
-		mutation := `
-			mutation AddArtifactProgrammatic($artifactInput: AddArtifactInput) {
-				addArtifactProgrammatic(artifactInput: $artifactInput) {
-					uuid
-					version
-					lifecycle
-					artifacts
-				}
-			}
-		`
+		mutation := rearm.AddArtifactProgrammatic_Operation
 
 		// Execute GraphQL mutation
 		body := map[string]interface{}{
@@ -199,45 +189,7 @@ Examples:
 			fmt.Println(string(jsonBody))
 		}
 
-		// Build GraphQL operation for multipart upload
-		od := make(map[string]interface{})
-		od["operationName"] = "AddArtifactProgrammatic"
-		od["variables"] = variables
-		od["query"] = mutation
-
-		jsonOd, _ := json.Marshal(od)
-		operations := map[string]string{"operations": string(jsonOd)}
-
-		// Build file map
-		fileMapJson, _ := json.Marshal(locationMap)
-		fileMapFd := map[string]string{"map": string(fileMapJson)}
-
-		// Send request using resty
-		client := resty.New()
-		applySessionToRestyClient(client)
-		if h := authorizationHeader(); h != "" {
-			client.SetHeader("Authorization", h)
-		}
-
-		c := client.R()
-		// Add files to multipart request
-		for key, value := range filesMap {
-			if fileData, ok := value.(FileData); ok {
-				c.SetFileReader(key, fileData.Filename, bytes.NewReader(fileData.Bytes))
-			}
-		}
-
-		resp, err := c.
-			SetHeader("Content-Type", "multipart/form-data").
-			SetHeader("User-Agent", "ReARM CLI").
-			SetHeader("Accept-Encoding", "gzip, deflate").
-			SetHeader("Apollo-Require-Preflight", "true").
-			SetMultipartFormData(operations).
-			SetMultipartFormData(fileMapFd).
-			SetHeader("Authorization", authorizationHeader()).
-			Post(rearmUri + graphqlPath())
-
-		handleResponse(err, resp)
+		printGraphQLMultipart(mutation, variables, locationMap, filesMap)
 	},
 }
 

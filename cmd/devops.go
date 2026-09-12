@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -66,14 +67,10 @@ var setInstSecretCertCmd = &cobra.Command{
 	This command sets this certificate for the particular instance.
 	Only supports instance own API Key.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			mutation ($sealedCert: String!) {
-				setInstanceSealedSecretCert(sealedCert: $sealedCert)
-			}
-		`
+		query := rearm.SetInstanceSealedSecretCert_Operation
 		variables := map[string]interface{}{"sealedCert": sealedCert}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -110,11 +107,7 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, instance string, revi
 		stateType = "PLAN"
 	}
 
-	query := `
-		query ($instanceUuid: ID, $instanceUri: String, $revision: Int!, $namespace: String, $stateType: InstanceStateType) {
-			getInstanceRevisionCycloneDxExportProg(instanceUuid: $instanceUuid, instanceUri: $instanceUri, revision: $revision, namespace: $namespace, stateType: $stateType)
-		}
-	`
+	query := rearm.GetInstanceRevisionCycloneDxExportProg_Operation
 	intRevision, _ := strconv.Atoi(revision)
 	variables := map[string]interface{}{
 		"instanceUuid": instance,
@@ -124,7 +117,7 @@ func getInstanceRevisionCycloneDxExportV1(apiKeyId string, instance string, revi
 		"stateType":    stateType,
 	}
 
-	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)

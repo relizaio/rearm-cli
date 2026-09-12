@@ -15,12 +15,15 @@ We're now using GitHub Releases for distribution. You can find the latest releas
 ## Authentication
 It is possible to set authentication data via:
 1. explicit flags (`-i` for API Key ID, `-k` for API Key, `-u` for ReARM Uri)
-2. [login command](#5-use-case-persist-rearm-credentials-in-a-config-file) 
-3. or following environment variables:
+2. [browser login](#browser-login) (`rearm login -u rearm_server_uri` with no key flags), which stores a session instead of a key secret
+3. [login command with key flags](#5-use-case-persist-rearm-credentials-in-a-config-file) 
+4. or following environment variables:
 
 - `REARM_APIKEYID` - for API Key ID
 - `REARM_APIKEY` - for API Key itself
 - `REARM_URI` - for ReARM Uri
+
+All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/rearm-client-go) library, which exchanges the key for a short-lived access token on servers that offer the programmatic endpoint and falls back to the classic `/graphql` endpoint on older servers.
 
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
@@ -478,6 +481,23 @@ Flags stand for:
 - **-i** - flag for api id.
 - **-k** - flag for api key.
 - **-u** - flag for rearm hub uri.
+
+### Browser login
+
+Without `-i` and `-k`, `login` signs in through the browser instead of storing a key secret:
+
+```bash
+rearm login -u rearm_server_uri
+```
+
+The CLI prints a link (and opens it in the browser where it can), you approve the sign-in in ReARM and choose which key the CLI acts as: a personal key created for this session, one of your existing personal keys, or a Free Form key you hold. The CLI stores only session tokens in `.rearm.env` (mode 0600), never a key secret. Access tokens are refreshed silently; the session slides 30 days on every use and ends 90 days after approval at the latest, so a CLI used at least once a month never asks again.
+
+Related commands:
+
+- `rearm whoami` - shows which key the CLI acts as and when the session ends.
+- `rearm logout` - revokes the session in ReARM (a key created for the session is deleted) and clears the credentials file.
+
+Explicit `-i`/`-k` flags or `REARM_APIKEY` in the environment take precedence over a stored session.
 
 ## 6. Use Case: Create New Component in ReARM
 

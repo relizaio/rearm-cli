@@ -6,10 +6,11 @@ Copyright (c) 2019 - 2026 Reliza Incorporated. https://reliza.io
 package cmd
 
 import (
-	"encoding/base64"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/mitchellh/go-homedir"
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -27,24 +28,16 @@ import (
 //
 // `rearm login` with no key arguments starts a login request, opens the browser on the
 // verification link and polls until the user approves it in ReARM. What comes back is a
-// refresh token bound to the key the user chose; no key secret is ever stored. Every
-// command then trades the refresh token for a one-hour access token on demand (when the
-// cached one is expired or within a minute of it), so a CLI used at least once a month
-// never asks to log in again; the server slides the session 30 days per refresh, capped at
-// 90 days after approval. `rearm logout` revokes the session server side and clears the file.
+// refresh token bound to the key the user chose; no key secret is ever stored. The client
+// library then trades the refresh token for a one-hour access token on demand (when the
+// cached one is expired or within a minute of it) and hands every new token set back through
+// persistSessionTokens, so a CLI used at least once a month never asks to log in again; the
+// server slides the session 30 days per refresh, capped at 90 days after approval.
+// `rearm logout` revokes the session server side and clears the file.
 //
 // The credentials file is $HOME/.rearm.env (the file the key-based `rearm login` always
 // wrote), now written with mode 0600 through os.WriteFile, which is portable: on Windows the
 // mode bits are advisory and the file lives under the user's profile directory.
-
-const (
-	deviceCodeGrant     = "urn:ietf:params:oauth:grant-type:device_code"
-	deviceCodePath      = "/api/programmatic/device/code"
-	tokenPath           = "/api/programmatic/token"
-	revokePath          = "/api/programmatic/revoke"
-	programmaticGraphQL = "/api/programmatic/graphql"
-	accessTokenSkew     = 60 * time.Second
-)
 
 // Session-mode values loaded from the credentials file (see initConfig / loadSessionConfig).
 var (
@@ -120,70 +113,14 @@ func inSessionMode() bool {
 	return sessionRefreshToken != "" && apiKey == ""
 }
 
-// graphqlPath: session tokens are only honoured on the programmatic endpoint; key
-// credentials keep the historic /graphql path (with its CSRF handshake) unchanged.
-func graphqlPath() string {
-	if inSessionMode() {
-		return programmaticGraphQL
-	}
-	return "/graphql"
-}
-
-// sessionAwareUri routes a /graphql target to the programmatic endpoint in session mode, so a
-// caller that still builds the legacy URL cannot send a session token where it is not honoured.
-func sessionAwareUri(uri string) string {
-	if inSessionMode() && strings.HasSuffix(uri, "/graphql") && !strings.HasSuffix(uri, programmaticGraphQL) {
-		return strings.TrimSuffix(uri, "/graphql") + programmaticGraphQL
-	}
-	return uri
-}
-
-// authorizationHeader is what every request sends: Basic for a key secret, Bearer for a session.
-func authorizationHeader() string {
-	if inSessionMode() {
-		tok, err := ensureAccessToken()
-		if err != nil {
-			fmt.Println("Error:", err)
-			os.Exit(1)
-		}
-		return "Bearer " + tok
-	}
-	if len(apiKeyId) > 0 && len(apiKey) > 0 {
-		return "Basic " + base64.StdEncoding.EncodeToString([]byte(apiKeyId+":"+apiKey))
-	}
-	return ""
-}
-
-// ensureAccessToken returns a usable access token, refreshing (and persisting) when the cached
-// one is missing, expired, or within a minute of expiring.
-func ensureAccessToken() (string, error) {
-	if sessionAccessToken != "" && time.Now().Add(accessTokenSkew).Before(sessionAccessTokenExp) {
-		return sessionAccessToken, nil
-	}
-	var out map[string]interface{}
-	resp, err := resty.New().R().
-		SetHeader("User-Agent", "ReARM CLI").
-		SetFormData(map[string]string{"grant_type": "refresh_token", "refresh_token": sessionRefreshToken}).
-		SetResult(&out).SetError(&out).
-		Post(rearmUri + tokenPath)
-	if err != nil {
-		return "", err
-	}
-	if e, _ := out["error"].(string); e != "" || resp.IsError() {
-		return "", fmt.Errorf("session refresh failed (%s): run `rearm login` again", errorDescription(out))
-	}
-	tok, _ := out["access_token"].(string)
-	expiresIn, _ := out["expires_in"].(float64)
-	if tok == "" {
-		return "", errors.New("token endpoint returned no access token")
-	}
-	sessionAccessToken = tok
-	sessionAccessTokenExp = time.Now().Add(time.Duration(expiresIn) * time.Second)
-	if s, ok := out["session_expires_at"].(string); ok {
-		sessionExpiresAt, _ = time.Parse(time.RFC3339, s)
+// persistSessionTokens receives every token set the client refreshes and writes it to the file.
+func persistSessionTokens(t rearm.SessionTokens) {
+	sessionAccessToken = t.AccessToken
+	sessionAccessTokenExp = t.AccessTokenExpiry
+	if !t.SessionExpiry.IsZero() {
+		sessionExpiresAt = t.SessionExpiry
 	}
 	_ = persistSession()
-	return tok, nil
 }
 
 func persistSession() error {
@@ -193,16 +130,6 @@ func persistSession() error {
 		"ACCESSTOKENEXPIRY": sessionAccessTokenExp.UTC().Format(time.RFC3339),
 		"SESSIONEXPIRY":     sessionExpiresAt.UTC().Format(time.RFC3339),
 	})
-}
-
-func errorDescription(m map[string]interface{}) string {
-	if d, ok := m["error_description"].(string); ok && d != "" {
-		return d
-	}
-	if e, ok := m["error"].(string); ok {
-		return e
-	}
-	return "unknown error"
 }
 
 // openBrowser is best effort; the link is always printed too.
@@ -236,74 +163,60 @@ func browserLogin() error {
 		return errors.New("--uri (or REARM_URI) is required to log in")
 	}
 	rearmUri = strings.TrimRight(rearmUri, "/")
-	var start map[string]interface{}
-	resp, err := resty.New().R().SetHeader("User-Agent", "ReARM CLI").
-		SetFormData(map[string]string{"requested_from": hostLabel()}).
-		SetResult(&start).SetError(&start).Post(rearmUri + deviceCodePath)
+	ctx := context.Background()
+	hc := &http.Client{Timeout: 30 * time.Second}
+	start, err := rearm.StartDeviceLogin(ctx, hc, rearmUri, hostLabel())
 	if err != nil {
-		return err
+		return fmt.Errorf("could not start a login: %w", err)
 	}
-	if resp.IsError() {
-		return fmt.Errorf("could not start a login: %s", errorDescription(start))
-	}
-	deviceCode, _ := start["device_code"].(string)
-	userCode, _ := start["user_code"].(string)
-	link, _ := start["verification_uri_complete"].(string)
-	interval := 5.0
-	if i, ok := start["interval"].(float64); ok && i > 0 {
-		interval = i
-	}
-	expiresIn := 600.0
-	if e, ok := start["expires_in"].(float64); ok && e > 0 {
-		expiresIn = e
+	interval := time.Duration(start.Interval) * time.Second
+	expiresIn := time.Duration(start.ExpiresIn) * time.Second
+	if expiresIn <= 0 {
+		expiresIn = 10 * time.Minute
 	}
 	fmt.Println("Open this link in your browser and approve the sign-in:")
-	fmt.Println("  " + link)
-	fmt.Println("Code: " + userCode)
-	openBrowser(link)
-	deadline := time.Now().Add(time.Duration(expiresIn) * time.Second)
+	fmt.Println("  " + start.VerificationURIComplete)
+	fmt.Println("Code: " + start.UserCode)
+	openBrowser(start.VerificationURIComplete)
+	deadline := time.Now().Add(expiresIn)
 	for time.Now().Before(deadline) {
-		time.Sleep(time.Duration(interval) * time.Second)
-		var out map[string]interface{}
-		r, err := resty.New().R().SetHeader("User-Agent", "ReARM CLI").
-			SetFormData(map[string]string{"grant_type": deviceCodeGrant, "device_code": deviceCode}).
-			SetResult(&out).SetError(&out).Post(rearmUri + tokenPath)
+		time.Sleep(interval)
+		login, err := rearm.PollDeviceLogin(ctx, hc, rearmUri, start.DeviceCode)
 		if err != nil {
 			return err
 		}
-		// outcomes arrive as 200 with an error member (the ingress in front of ReARM rewrites 4xx bodies), so read the member first
-		if e, _ := out["error"].(string); e != "" || r.IsError() {
-			switch out["error"] {
-			case "authorization_pending":
-				continue
-			case "slow_down":
-				interval += 5
-				continue
-			case "access_denied":
-				return errors.New("the sign-in was denied in the browser")
-			case "expired_token":
-				return errors.New("the sign-in request expired; run `rearm login` again")
-			default:
-				return fmt.Errorf("sign-in failed: %s", errorDescription(out))
+		switch login.Status {
+		case rearm.DevicePending:
+			continue
+		case rearm.DeviceSlowDown:
+			interval += 5 * time.Second
+			continue
+		case rearm.DeviceDenied:
+			return errors.New("the sign-in was denied in the browser")
+		case rearm.DeviceExpired:
+			return errors.New("the sign-in request expired; run `rearm login` again")
+		case rearm.DeviceDelivered:
+			sessionRefreshToken = login.RefreshToken
+			sessionAccessToken = login.Tokens.AccessToken
+			sessionAccessTokenExp = login.Tokens.AccessTokenExpiry
+			sessionExpiresAt = login.Tokens.SessionExpiry
+			sessionKeyId = login.APIKeyID
+			sessionOrg = login.Org
+			sessionUri = rearmUri
+			if err := persistSession(); err != nil {
+				return err
 			}
+			path, _ := credentialsPath()
+			fmt.Printf("Signed in as key %s (org %s). Session valid until %s. Credentials written to %s\n",
+				sessionKeyId, sessionOrg, sessionExpiresAt.Local().Format(time.RFC1123), path)
+			return nil
+		default:
+			desc := login.Description
+			if desc == "" {
+				desc = string(login.Status)
+			}
+			return fmt.Errorf("sign-in failed: %s", desc)
 		}
-		sessionRefreshToken, _ = out["refresh_token"].(string)
-		sessionAccessToken, _ = out["access_token"].(string)
-		expiresIn, _ := out["expires_in"].(float64)
-		sessionAccessTokenExp = time.Now().Add(time.Duration(expiresIn) * time.Second)
-		sessionKeyId, _ = out["api_key_id"].(string)
-		sessionOrg, _ = out["org"].(string)
-		if s, ok := out["session_expires_at"].(string); ok {
-			sessionExpiresAt, _ = time.Parse(time.RFC3339, s)
-		}
-		sessionUri = rearmUri
-		if err := persistSession(); err != nil {
-			return err
-		}
-		path, _ := credentialsPath()
-		fmt.Printf("Signed in as key %s (org %s). Session valid until %s. Credentials written to %s\n",
-			sessionKeyId, sessionOrg, sessionExpiresAt.Local().Format(time.RFC1123), path)
-		return nil
 	}
 	return errors.New("the sign-in request expired; run `rearm login` again")
 }
@@ -314,8 +227,10 @@ var logoutCmd = &cobra.Command{
 	Long:  "Revokes the browser-login session on the server (a key created for it is deleted) and clears the credentials file.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if sessionRefreshToken != "" {
-			_, err := resty.New().R().SetHeader("User-Agent", "ReARM CLI").
-				SetFormData(map[string]string{"token": sessionRefreshToken}).Post(rearmUri + revokePath)
+			c, err := rearm.NewWithSession(rearmUri, sessionRefreshToken, rearm.SessionTokens{}, nil, rearm.WithUserAgent("ReARM CLI"))
+			if err == nil {
+				err = c.Revoke(context.Background())
+			}
 			if err != nil {
 				fmt.Println("Warning: could not reach ReARM to revoke the session:", err)
 			}

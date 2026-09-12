@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -59,15 +60,7 @@ var deliverableGetSecrets = &cobra.Command{
 			namespace = "default"
 		}
 
-		query := `
-			query ($instanceUuid: ID, $instanceUri: String, $deliverableDigest: String!, $namespace: String) {
-				deliverableDownloadSecrets(instanceUuid: $instanceUuid, instanceUri: $instanceUri, deliverableDigest: $deliverableDigest, namespace: $namespace) {
-					login
-					password
-					type
-				}
-			}
-		`
+		query := rearm.DeliverableDownloadSecrets_Operation
 		variables := map[string]interface{}{
 			"instanceUuid":      instance,
 			"instanceUri":       instanceURI,
@@ -75,7 +68,7 @@ var deliverableGetSecrets = &cobra.Command{
 			"namespace":         namespace,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -102,17 +95,13 @@ var isInstHasSecretCertCmd = &cobra.Command{
 	Long: `Bitnami Sealed Certificate property is used to encrypt secrets for instance.
 	This command checks whether this property is configured for the particular instance.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		query := `
-			query ($instanceUuid: ID, $instanceUri: String) {
-				isInstanceHasSealedSecretCert(instanceUuid: $instanceUuid, instanceUri: $instanceUri)
-			}
-		`
+		query := rearm.IsInstanceHasSealedSecretCert_Operation
 		variables := map[string]interface{}{
 			"instanceUuid": instance,
 			"instanceUri":  instanceURI,
 		}
 
-		data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)

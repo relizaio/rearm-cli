@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
@@ -81,19 +82,7 @@ func runEnrollkey(ownerUuid, format, pubkeyFile, pubKey, fingerprint, identity s
 	// `enrollSigningKey`, which is operator-only and not exposed here.
 	const op = "enrollSigningKeyProgrammatic"
 	const argName = "signingKey"
-	query := `
-		mutation ($` + argName + `: AgentSigningKeyInput!) {
-			` + op + `(` + argName + `: $` + argName + `) {
-				uuid
-				format
-				ownerType
-				ownerUuid
-				fingerprint
-				identity
-				createdDate
-			}
-		}
-	`
+	query := rearm.EnrollSigningKeyProgrammatic_Operation
 	input := map[string]interface{}{
 		"format":      strings.ToUpper(format),
 		"ownerType":   "AGENT",
@@ -105,7 +94,7 @@ func runEnrollkey(ownerUuid, format, pubkeyFile, pubKey, fingerprint, identity s
 		input["identity"] = identity
 	}
 	variables := map[string]interface{}{argName: input}
-	data, err := sendGraphQLRequest(query, variables, rearmUri+graphqlPath())
+	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
