@@ -114,13 +114,21 @@ func inSessionMode() bool {
 }
 
 // persistSessionTokens receives every token set the client refreshes and writes it to the file.
+// The server rotates the refresh token on every refresh: the rotated one replaces the stored one
+// before anything else happens, because the previous token is retired (a short grace window on the
+// server covers a crash between here and the write; reuse after it revokes the session).
 func persistSessionTokens(t rearm.SessionTokens) {
 	sessionAccessToken = t.AccessToken
 	sessionAccessTokenExp = t.AccessTokenExpiry
 	if !t.SessionExpiry.IsZero() {
 		sessionExpiresAt = t.SessionExpiry
 	}
-	_ = persistSession()
+	if t.RefreshToken != "" {
+		sessionRefreshToken = t.RefreshToken
+	}
+	if err := persistSession(); err != nil {
+		fmt.Fprintln(os.Stderr, "Warning: could not write the credentials file; the session may need `rearm login` again:", err)
+	}
 }
 
 func persistSession() error {
