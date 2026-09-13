@@ -35,6 +35,8 @@ import (
 var action string
 var apiKeyId string
 var apiKey string
+var authMode string
+var orgFlag string
 
 var branch string
 var product string
@@ -842,6 +844,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "API Key Secret")
 	rootCmd.PersistentFlags().StringVarP(&apiKeyId, "apikeyid", "i", "", "API Key ID")
 	rootCmd.PersistentFlags().StringVarP(&debug, "debug", "d", "false", "If set to true, print debug details")
+	rootCmd.PersistentFlags().StringVar(&authMode, "auth", "", "Credential mode: key (API key id and secret), session (rearm login), or github-oidc (the identity token GitHub Actions issues to the job, no secret; needs permissions id-token: write and a trust rule in ReARM). Default: whichever credentials are present")
+	rootCmd.PersistentFlags().StringVar(&orgFlag, "org", "", "Organization uuid; for github-oidc only when several organizations trust the same identity")
 
 	// flags for add outbound deliverable command
 	addODeliverableCmd.PersistentFlags().StringVar(&releaseId, "releaseid", "", "UUID of release to add deliverable to (either releaseid or component, branch, and version must be set)")
@@ -1039,6 +1043,7 @@ func initConfig(cmd *cobra.Command) {
 	v.BindEnv("sessionexpiry", "REARM_SESSIONEXPIRY")
 
 	v.BindEnv("org", "REARM_ORG")
+	v.BindEnv("auth", "REARM_AUTH")
 
 	bindFlags(cmd, v)
 

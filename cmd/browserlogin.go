@@ -110,7 +110,45 @@ func loadSessionConfig(v *viper.Viper) {
 
 // inSessionMode: a browser login is on file and no explicit key secret was given.
 func inSessionMode() bool {
-	return sessionRefreshToken != "" && apiKey == ""
+	return resolvedAuthMode() == authSession
+}
+
+const (
+	authKey        = "key"
+	authSession    = "session"
+	authGitHubOIDC = "github-oidc"
+)
+
+// resolvedAuthMode: --auth / REARM_AUTH when given; otherwise the credentials present decide,
+// an explicit key secret winning over a stored session, and a GitHub Actions job with
+// id-token: write and no other credentials using its identity token.
+func resolvedAuthMode() string {
+	switch strings.ToLower(strings.TrimSpace(authMode)) {
+	case authKey, authSession, authGitHubOIDC:
+		return strings.ToLower(strings.TrimSpace(authMode))
+	case "":
+	default:
+		fmt.Println("Error: --auth must be key, session or github-oidc")
+		os.Exit(1)
+	}
+	if apiKey != "" {
+		return authKey
+	}
+	if sessionRefreshToken != "" {
+		return authSession
+	}
+	if os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN") != "" && apiKeyId == "" {
+		return authGitHubOIDC
+	}
+	return authKey
+}
+
+// oidcOrg: the organization to name in the exchange, when several trust the same identity.
+func oidcOrg() string {
+	if orgFlag != "" {
+		return orgFlag
+	}
+	return sessionOrg
 }
 
 // persistSessionTokens receives every token set the client refreshes and writes it to the file.
@@ -262,6 +300,21 @@ var whoamiCmd = &cobra.Command{
 			out["org"] = sessionOrg
 			if !sessionExpiresAt.IsZero() {
 				out["sessionExpiresAt"] = sessionExpiresAt.UTC().Format(time.RFC3339)
+			}
+		} else if resolvedAuthMode() == authGitHubOIDC {
+			out["mode"] = "github-oidc"
+			if o := oidcOrg(); o != "" {
+				out["org"] = o
+			}
+			// the identity is only known after an exchange; do one so whoami says who the job acts as
+			c := rearmClient()
+			if _, err := rearm.Raw(context.Background(), c, "Whoami", "query Whoami { __typename }", nil); err != nil {
+				out["error"] = describeError(err)
+			} else {
+				id := c.Identity()
+				out["apiKeyId"] = id.APIKeyID
+				out["org"] = id.Org
+				out["identity"] = id.Repository
 			}
 		} else if apiKeyId != "" {
 			out["mode"] = "api key"

@@ -17,7 +17,8 @@ It is possible to set authentication data via:
 1. explicit flags (`-i` for API Key ID, `-k` for API Key, `-u` for ReARM Uri)
 2. [browser login](#browser-login) (`rearm login -u rearm_server_uri` with no key flags), which stores a session instead of a key secret
 3. [login command with key flags](#5-use-case-persist-rearm-credentials-in-a-config-file) 
-4. or following environment variables:
+4. [GitHub Actions identity token](#github-actions-identity-token) (`--auth github-oidc` or `REARM_AUTH=github-oidc`): no secret at all
+5. or following environment variables:
 
 - `REARM_APIKEYID` - for API Key ID
 - `REARM_APIKEY` - for API Key itself
@@ -497,7 +498,23 @@ Related commands:
 - `rearm whoami` - shows which key the CLI acts as and when the session ends.
 - `rearm logout` - revokes the session in ReARM (a key created for the session is deleted) and clears the credentials file.
 
-Explicit `-i`/`-k` flags or `REARM_APIKEY` in the environment take precedence over a stored session.
+Explicit `-i`/`-k` flags or `REARM_APIKEY` in the environment take precedence over a stored session; `--auth` (or `REARM_AUTH`) with `key`, `session` or `github-oidc` picks a mode explicitly.
+
+### GitHub Actions identity token
+
+In a GitHub Actions job the CLI can authenticate with the identity token GitHub issues to the job, when a ReARM organization admin has added a trust rule for the repository (Organization Settings, Programmatic Access, Federated Identities). No key and no secret are stored anywhere:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+steps:
+  - run: rearm getversion --vcsuri "https://github.com/${{ github.repository }}" -b "${{ github.ref_name }}" -u https://rearm_server_uri
+    env:
+      REARM_AUTH: github-oidc
+```
+
+The CLI requests the identity token with the ReARM URL as audience, exchanges it at the ReARM token endpoint and uses the resulting one-hour access token; it does this again on its own when needed. With no other credentials present in a job that has `id-token: write`, the mode is picked automatically. Pass `--org <organization uuid>` (or `REARM_ORG`) only when several organizations trust the same repository. `rearm whoami --auth github-oidc` shows which key and repository the job acts as; a refused exchange names the reason (no trust rule matches, several organizations match, the repository was renamed since it was pinned).
 
 ## 6. Use Case: Create New Component in ReARM
 
