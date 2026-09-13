@@ -51,13 +51,21 @@ func rearmClient() *rearm.Client {
 		c   *rearm.Client
 		err error
 	)
-	if inSessionMode() {
+	switch resolvedAuthMode() {
+	case authSession:
+		if sessionRefreshToken == "" {
+			fmt.Println("Error: no browser-login session on file; run `rearm login`")
+			os.Exit(1)
+		}
 		c, err = rearm.NewWithSession(rearmUri, sessionRefreshToken, rearm.SessionTokens{
 			AccessToken:       sessionAccessToken,
 			AccessTokenExpiry: sessionAccessTokenExp,
 			SessionExpiry:     sessionExpiresAt,
 		}, persistSessionTokens, opts...)
-	} else {
+	case authGitHubOIDC:
+		// the identity token GitHub issues to the job, exchanged through an organization's trust rule: no secret
+		c, err = rearm.NewWithAssertion(rearmUri, oidcOrg(), rearm.GitHubActionsAssertion(rearmUri, nil), opts...)
+	default:
 		c, err = rearm.New(rearmUri, apiKeyId, apiKey, opts...)
 	}
 	if err != nil {
@@ -195,6 +203,10 @@ func sendGraphQLMultipart(query string, variables map[string]interface{}, locati
 // describeError renders a client error for the terminal: GraphQL messages joined, a refused
 // session refresh as a hint to log in again, anything else verbatim.
 func describeError(err error) string {
+	var ae *rearm.AssertionError
+	if errors.As(err, &ae) {
+		return fmt.Sprintf("identity token refused (%s: %s); check the trust rule in ReARM and, if several organizations trust this repository, pass --org", ae.Code, ae.Description)
+	}
 	var se *rearm.SessionError
 	if errors.As(err, &se) {
 		desc := se.Description
