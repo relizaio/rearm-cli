@@ -192,6 +192,26 @@ func openBrowser(url string) {
 	_ = c.Start()
 }
 
+// localTimeZone: the UTC offset and abbreviation of the local clock, e.g. "UTC+02:00 CEST", with the
+// IANA name appended when the environment names one. Cheap, portable, and a mismatch with the
+// approver's own clock is a useful smell.
+func localTimeZone() string {
+	abbr, offset := time.Now().Zone()
+	sign := "+"
+	if offset < 0 {
+		sign = "-"
+		offset = -offset
+	}
+	tz := fmt.Sprintf("UTC%s%02d:%02d", sign, offset/3600, (offset%3600)/60)
+	if abbr != "" && !strings.HasPrefix(abbr, "+") && !strings.HasPrefix(abbr, "-") {
+		tz += " " + abbr
+	}
+	if name := os.Getenv("TZ"); name != "" && strings.Contains(name, "/") {
+		tz += " (" + name + ")"
+	}
+	return tz
+}
+
 func hostLabel() string {
 	if loginRequestedFromLabel != "" {
 		return loginRequestedFromLabel
@@ -211,7 +231,13 @@ func browserLogin() error {
 	rearmUri = strings.TrimRight(rearmUri, "/")
 	ctx := context.Background()
 	hc := &http.Client{Timeout: 30 * time.Second}
-	start, err := rearm.StartDeviceLogin(ctx, hc, rearmUri, hostLabel())
+	// what this CLI knows about the device; the approval page shows it as reported by the requester, apart from the address the server sees
+	start, err := rearm.StartDeviceLoginWithDetails(ctx, hc, rearmUri, rearm.DeviceDetails{
+		Hostname: hostLabel(),
+		OS:       runtime.GOOS + "/" + runtime.GOARCH,
+		TimeZone: localTimeZone(),
+		Client:   "rearm-cli " + strings.TrimSpace(strings.TrimPrefix(Version, "v")),
+	})
 	if err != nil {
 		return fmt.Errorf("could not start a login: %w", err)
 	}
