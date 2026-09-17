@@ -26,12 +26,13 @@ import (
 // puts every lock it is a cause of into an administrator's hands.
 
 var (
-	attestCommit   string
-	attestVerdict  string
-	attestNote     string
-	attestSession  string
-	lockReleaseId  string
-	lockReleaseWhy string
+	attestCommit       string
+	attestVerdict      string
+	attestNote         string
+	attestSession      string
+	lockReleaseId      string
+	lockReleaseWhy     string
+	lockReleaseSession string
 )
 
 var attestCmd = &cobra.Command{
@@ -50,7 +51,7 @@ NOT_MINE disowns it. The commit stays unaccounted for and any lock it is a cause
 administrator's decision.
 
 The commit is named the way getversion and addrelease name a component -- by --component, or by
---vcsuri plus --repopath -- and resolved through that component's repository. A sha ReARM has
+--vcsuri plus --repo-path -- and resolved through that component's repository. A sha ReARM has
 never seen is refused rather than recorded.
 
 Requires an open agent session (rearm agent session init), because an attestation records who
@@ -116,15 +117,17 @@ Most locks release themselves the moment their last cause is claimed, so this is
 that do not -- and a lock that needs a person, or that has escalated because a commit was
 disowned or contested, refuses here and says which level it needs.
 
-Every release, including this one, is recorded as an attestation.`,
+Every release, including this one, is recorded as an attestation -- which is why --session is
+required: the record names the agent that released the lock, and a key is not a who.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if lockReleaseId == "" || lockReleaseWhy == "" {
-			fmt.Fprintln(os.Stderr, "--lock and --reason are required")
+		if lockReleaseId == "" || lockReleaseWhy == "" || lockReleaseSession == "" {
+			fmt.Fprintln(os.Stderr, "--lock, --reason and --session are required")
 			os.Exit(1)
 		}
 		variables := map[string]interface{}{
 			"lockUuid": lockReleaseId,
 			"reason":   lockReleaseWhy,
+			"session":  lockReleaseSession,
 		}
 		data, err := sendGraphQLRequest(rearm.ReleaseLockProgrammatic_Operation, variables)
 		if err != nil {
@@ -137,16 +140,19 @@ Every release, including this one, is recorded as an attestation.`,
 
 func init() {
 	attestCmd.PersistentFlags().StringVar(&attestCommit, "commit", "", "Commit sha to attest to (required)")
-	attestCmd.PersistentFlags().StringVar(&attestVerdict, "verdict", "MINE", "MINE or NOT_MINE")
+	// No default. Claiming a commit is a statement somebody is accountable for; it must be typed,
+	// not acquired by leaving a flag off.
+	attestCmd.PersistentFlags().StringVar(&attestVerdict, "verdict", "", "MINE or NOT_MINE (required)")
 	attestCmd.PersistentFlags().StringVar(&attestNote, "note", "", "Why -- read by whoever looks at this later")
 	attestCmd.PersistentFlags().StringVar(&attestSession, "session", "", "Agent session uuid this is filed under (required)")
 	attestCmd.PersistentFlags().StringVar(&component, "component", "", "Component UUID the commit belongs to")
 	attestCmd.PersistentFlags().StringVar(&vcsUri, "vcsuri", "", "VCS URI of the component, instead of --component")
-	attestCmd.PersistentFlags().StringVar(&repoPath, "repopath", "", "Path within the VCS repository, with --vcsuri")
+	attestCmd.PersistentFlags().StringVar(&repoPath, "repo-path", "", "Repository path for monorepo components, with --vcsuri")
 	rootCmd.AddCommand(attestCmd)
 
 	lockReleaseCmd.PersistentFlags().StringVar(&lockReleaseId, "lock", "", "Lock UUID, as printed in the refusal (required)")
 	lockReleaseCmd.PersistentFlags().StringVar(&lockReleaseWhy, "reason", "", "Why it may be released (required)")
+	lockReleaseCmd.PersistentFlags().StringVar(&lockReleaseSession, "session", "", "Agent session uuid this is filed under (required)")
 	lockCmd.AddCommand(lockReleaseCmd)
 	rootCmd.AddCommand(lockCmd)
 }
