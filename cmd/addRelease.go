@@ -570,7 +570,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentBranchVersionSchema, "createcomponent-branch-version-schema", "", "(Optional) Feature branch version schema for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&createComponentName, "createcomponent-name", "", "(Optional) Display name for new component. Only used with --createcomponent. Requires organization-wide read-write API key.")
 	addreleaseCmd.PersistentFlags().StringVar(&perspective, "perspective", "", "(Optional) Perspective UUID. When supplied together with --createcomponent and the component does not yet exist, the new component is assigned to this perspective. Requires a FREEFORM API key with WRITE permission on the perspective. Ignored when the component already exists.")
-	addreleaseCmd.PersistentFlags().BoolVar(&rebuildRelease, "rebuild", false, "(Optional) Allow rebuilding release on repeated CI reruns. Default is false.")
+	addreleaseCmd.PersistentFlags().BoolVar(&rebuildRelease, "rebuild", false, "(Optional) Allow rebuilding release on repeated CI reruns. Default is false. A rebuild uploads a new SBOM: if your generator pins serialNumber, it must also increment version per build, otherwise the upload is refused; alternatively let the generator mint a fresh serial number.")
 	// PR-data flags. When run from CI on a PR build, the workflow can
 	// populate these from the SCM event so a first-class PullRequest
 	// entity is upserted (keyed by target VCS + identity) and its head
