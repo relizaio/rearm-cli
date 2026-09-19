@@ -60,6 +60,7 @@ var (
 	agentIconKind     string
 	agentColor        string
 	clientSessionId   string
+	claudeSessionId   string
 	sessionTitle      string
 )
 
@@ -107,8 +108,51 @@ idempotent — the existing session is returned.`,
 			printGqlError(err)
 			os.Exit(1)
 		}
-		emitJson(data["sessionInitializeProgrammatic"])
+		session := data["sessionInitializeProgrammatic"]
+		recordInitState(session)
+		emitJson(session)
 	},
+}
+
+// recordInitState writes the local state file the usage hooks read.
+//
+// Best-effort and never fatal: init's job is to open the session on the server, and that has
+// already succeeded by the time we get here. Failing the command because a state file could not be
+// written would turn a degraded feature into a broken one.
+func recordInitState(session interface{}) {
+	m, ok := session.(map[string]interface{})
+	if !ok {
+		return
+	}
+	uuid, _ := m["uuid"].(string)
+	if uuid == "" {
+		return
+	}
+	clientId, _ := m["clientSessionId"].(string)
+	if clientId == "" {
+		clientId = clientSessionId
+	}
+	if clientId == "" {
+		// The server defaulted it to the row uuid.
+		clientId = uuid
+	}
+	claudeId := claudeSessionId
+	if claudeId == "" {
+		// Claude Code exports its session id to what it runs, so an agent that did not pass the
+		// flag still gets the mapping for free. The name was checked against a running instance
+		// rather than assumed -- it is CLAUDE_CODE_SESSION_ID, and its value is exactly the
+		// sessionId the transcript carries. An earlier guess of CLAUDE_SESSION_ID is unset in
+		// practice, which would have left every hook unable to find its session.
+		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
+	}
+	st := &agentSessionState{
+		SessionUuid:     uuid,
+		ClientSessionId: clientId,
+		ClaudeSessionId: claudeId,
+	}
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: session opened, but local usage state could not be written: %v\n", err)
+	}
 }
 
 var agentSessionTouchCmd = &cobra.Command{
@@ -138,6 +182,11 @@ var agentSessionCloseCmd = &cobra.Command{
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
+		}
+		// The session is over; its local state is now just a stale mapping that a later Claude
+		// session reusing the id would pick up. Removed after the close succeeds, never before.
+		if st := findStateBySessionUuid(args[0]); st != nil {
+			removeAgentState(st)
 		}
 		emitJson(data["sessionCloseProgrammatic"])
 	},
@@ -383,6 +432,7 @@ func init() {
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentIconKind, "agent-icon", "", "Dashboard glyph for the agent — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
+	agentSessionInitCmd.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Claude Code's own session id, so usage hooks can map it without a server call (defaults to $CLAUDE_SESSION_ID)")
 	agentSessionInitCmd.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
@@ -411,6 +461,8 @@ func init() {
 	agentSessionCmd.AddCommand(agentSessionAddArtifactCmd)
 	agentSessionCmd.AddCommand(agentSessionInboxCmd)
 	agentSessionCmd.AddCommand(agentSessionShowCmd)
+	agentSessionCmd.AddCommand(agentSessionUsageCmd)
+	agentCmd.AddCommand(agentHooksCmd)
 	agentReleaseCmd.AddCommand(agentReleaseShowCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	agentCmd.AddCommand(agentReleaseCmd)

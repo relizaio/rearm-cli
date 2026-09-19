@@ -245,6 +245,10 @@ var agentTaskAssignCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentTaskAssignProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}, "agentTaskAssignProgrammatic")
+		// Record the assignment locally so the usage hooks attribute this session's spend to it
+		// without the agent having to pass --task on every turn. Runs only after the server
+		// accepted the assignment, so the local file never claims a task the session does not hold.
+		setCurrentTask(taskSessionUuid, args[0])
 	},
 }
 
@@ -258,6 +262,8 @@ var agentTaskSignoffCmd = &cobra.Command{
 			variables["note"] = taskNote
 		}
 		runGql(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
+		// The hop is closed; usage after this point is not this task's.
+		clearCurrentTask(taskSessionUuid, args[0])
 	},
 }
 
@@ -272,6 +278,7 @@ var agentTaskReturnCmd = &cobra.Command{
 			variables["description"] = taskReturnDesc
 		}
 		runGql(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic")
+		clearCurrentTask(taskSessionUuid, args[0])
 	},
 }
 
