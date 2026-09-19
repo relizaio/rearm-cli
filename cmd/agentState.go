@@ -274,3 +274,73 @@ func clearCurrentTask(sessionUuid, taskUuid string) {
 		fmt.Fprintf(os.Stderr, "rearm: could not clear current task locally: %v\n", err)
 	}
 }
+
+// firstNonEmptyEnv returns the first of these variables that is set and non-blank.
+func firstNonEmptyEnv(names ...string) string {
+	for _, n := range names {
+		if v := strings.TrimSpace(os.Getenv(n)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// adoptStateForClaudeSession binds a Claude session id to local state that does not have one yet.
+//
+// The hook resolves its session by the id in its payload, which only works if `session init`
+// recorded that id. It usually does -- Claude Code exports CLAUDE_CODE_SESSION_ID -- but not when
+// init ran somewhere that variable was absent: a wrapper script, a different shell, CI. The failure
+// mode there is the worst kind: the hook finds nothing, exits 0 by design, and the session records
+// no usage at all with nothing anywhere saying why.
+//
+// So the hook binds itself. If exactly one state file is missing a Claude id, it is unambiguously
+// this one -- a machine running two ReARM-tracked Claude sessions both initialised without the
+// variable is the only case this cannot resolve, and there it does nothing rather than guess and
+// bind usage to the wrong session.
+func adoptStateForClaudeSession(claudeSessionId string) *agentSessionState {
+	if claudeSessionId == "" {
+		return nil
+	}
+	dir, err := agentStateDir()
+	if err != nil {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var candidates []*agentSessionState
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var st agentSessionState
+		if json.Unmarshal(raw, &st) != nil {
+			continue
+		}
+		if st.ClaudeSessionId == "" && st.SessionUuid != "" {
+			candidates = append(candidates, &st)
+		}
+	}
+	if len(candidates) != 1 {
+		if len(candidates) > 1 {
+			fmt.Fprintf(os.Stderr, "rearm: %d local sessions have no Claude session id; cannot tell "+
+				"which one this is, so usage is not being reported. Re-run `rearm agent session init` "+
+				"with --claude-session-id.\n", len(candidates))
+		}
+		return nil
+	}
+	adopted := candidates[0]
+	adopted.ClaudeSessionId = claudeSessionId
+	if err := writeAgentState(adopted); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not bind this Claude session to %s: %v\n", adopted.SessionUuid, err)
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "rearm: bound Claude session %s to ReARM session %s\n",
+		claudeSessionId, adopted.SessionUuid)
+	return adopted
+}

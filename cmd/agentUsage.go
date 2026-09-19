@@ -127,8 +127,12 @@ func isTruthyEnv(name string) bool {
 }
 
 // reasoningFromEnv reads the effort level when the transcript did not carry one.
+//
+// The name was verified against a running Claude Code rather than guessed: it is CLAUDE_EFFORT,
+// not the CLAUDE_CODE_EFFORT_LEVEL this first assumed. The older spelling is kept as a fallback
+// because it costs nothing and a wrong guess here silently drops the field.
 func reasoningFromEnv() string {
-	for _, name := range []string{"CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_REASONING_EFFORT"} {
+	for _, name := range []string{"CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL"} {
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 			return v
 		}
@@ -136,14 +140,47 @@ func reasoningFromEnv() string {
 	return ""
 }
 
+// hookRequestTimeout bounds a report sent from a hook.
+//
+// The shared client's timeout is ten minutes, which is right for an artifact upload and completely
+// wrong here: a hanging server would hold the agent's turn open until Claude Code's own hook
+// timeout fired. Usage reporting is the least important thing happening on that turn, so it gets
+// the shortest leash. A missed report is resent next turn from the same offset.
+const hookRequestTimeout = 5 * time.Second
+
 // sendUsageReport posts one report and returns the ack, or an error.
 func sendUsageReport(input map[string]interface{}) (map[string]interface{}, error) {
-	data, err := sendGraphQLRequest(usageReportMutation, map[string]interface{}{"input": input})
-	if err != nil {
-		return nil, err
+	send := func() (map[string]interface{}, error) {
+		data, err := sendGraphQLRequest(usageReportMutation, map[string]interface{}{"input": input})
+		if err != nil {
+			return nil, err
+		}
+		ack, _ := data["sessionReportUsageProgrammatic"].(map[string]interface{})
+		return ack, nil
 	}
-	ack, _ := data["sessionReportUsageProgrammatic"].(map[string]interface{})
-	return ack, nil
+	if !usageFromHook {
+		return send()
+	}
+	// Bounded in the caller rather than by rebuilding the shared client: the client is shared with
+	// every other command and carries the auth wiring, so giving this one call its own deadline is
+	// the smaller, safer change. The request itself is not cancelled -- it is abandoned -- which is
+	// acceptable for a fire-and-forget report and is the difference between the agent waiting five
+	// seconds and waiting ten minutes.
+	type result struct {
+		ack map[string]interface{}
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		ack, err := send()
+		ch <- result{ack, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.ack, r.err
+	case <-time.After(hookRequestTimeout):
+		return nil, fmt.Errorf("usage report timed out after %s", hookRequestTimeout)
+	}
 }
 
 // buildLinePayload maps a parsed line onto SessionUsageLineInput.
@@ -171,6 +208,22 @@ func buildLinePayload(l usageLine, hosting string) map[string]interface{} {
 // chunks the server confirmed, so the next run picks up exactly where this one stopped instead of
 // leaving a hole no later run would ever fill.
 func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, final bool) {
+	if delta.Truncated {
+		// The transcript is shorter than the offset we recorded, so this is a different session
+		// writing to a path we already have history for. Re-reading produced a sequence below the
+		// server's high-water mark for the old session, which it refuses -- and left alone, that
+		// repeats on every single turn for the life of the session, reporting nothing and
+		// complaining each time.
+		//
+		// So stop reporting against the stale mapping and say why, once, in terms that name the
+		// fix. The state is left in place rather than deleted: it still holds the mapping an
+		// operator needs to work out what happened.
+		fmt.Fprintf(os.Stderr, "rearm: transcript for session %s is shorter than the offset already "+
+			"reported (%d bytes); this looks like a new Claude session reusing the path. Not "+
+			"reporting to avoid a rejected sequence -- run `rearm agent session init` for the new "+
+			"session.\n", st.SessionUuid, st.LastSeq)
+		return
+	}
 	if len(delta.Lines) == 0 {
 		if usageDryRun {
 			fmt.Println("{\"lines\":0}")
@@ -192,9 +245,13 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 			requests += l.Requests
 			payloadLines = append(payloadLines, buildLinePayload(l, hosting))
 		}
-		// Each chunk needs its own sequence. The last chunk carries the true end offset -- that is
-		// the resume point -- while earlier ones are offset backwards by their position so the
-		// sequence stays monotonic and distinct without inventing offsets past the end of the file.
+		// Each chunk needs its own sequence, and they are derived from the ONE end offset of the
+		// parsed range because that is all a chunk has: chunking splits lines, not byte ranges, so
+		// no chunk corresponds to a byte position of its own. Earlier chunks are offset backwards
+		// by their position to stay monotonic and distinct.
+		//
+		// These are therefore book-keeping values, not resume points -- which is exactly why
+		// LastSeq is not advanced here; see below.
 		seq := delta.EndOffset - int64(len(chunks)-1-i)
 		input := map[string]interface{}{
 			"clientSeq": seq,
@@ -229,7 +286,7 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 		}
 		ack, err := sendUsageReport(input)
 		if err != nil {
-			// The offset is NOT advanced past this chunk, so the next run resends it.
+			// Stop here and leave LastSeq where it was, so the whole range is resent next run.
 			usageBail("usage report failed (%d of %d), will retry next run: %v", i+1, len(chunks), err)
 			return
 		}
@@ -238,11 +295,22 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 				fmt.Fprintf(os.Stderr, "rearm: usage line refused: %v\n", r)
 			}
 		}
-		// Advance only after the server confirmed this chunk.
-		st.LastSeq = seq
-		if err := writeAgentState(st); err != nil {
-			fmt.Fprintf(os.Stderr, "rearm: could not record usage offset: %v\n", err)
-		}
+	}
+
+	// LastSeq advances only once EVERY chunk is in, and only to the real end of the parsed range.
+	//
+	// Advancing per chunk was a data-loss bug, not merely untidy. All the chunks come from one
+	// parsed range, so a per-chunk advance moved LastSeq to a fabricated offset near the END of
+	// that range after the FIRST chunk. If chunk two of three then failed, the next run resumed
+	// from that near-the-end offset, parsed almost nothing, and chunks two and three were never
+	// sent by anyone -- silently, and permanently.
+	//
+	// Resending the whole range costs one duplicate report of chunk one, which the server answers
+	// with a duplicate count and no rows written. That is precisely what the idempotency key was
+	// built for, and a cheap duplicate beats a silent hole.
+	st.LastSeq = delta.EndOffset
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not record usage offset: %v\n", err)
 	}
 }
 
@@ -301,9 +369,14 @@ func runUsageFromHook() {
 		return
 	}
 	if st == nil {
-		// No local state: this Claude session was never bound to a ReARM session on this machine.
-		// Silent by design -- a developer running Claude Code outside any ReARM session would
-		// otherwise get a warning on every single turn.
+		// Nothing filed under this Claude id. Before giving up, try to bind: `session init` may
+		// have run somewhere CLAUDE_CODE_SESSION_ID was not set, which would otherwise mean this
+		// session silently reports nothing for its whole life.
+		st = adoptStateForClaudeSession(p.SessionId)
+	}
+	if st == nil {
+		// Genuinely not a tracked session -- a developer running Claude Code outside any ReARM
+		// session. Silent by design: warning here would fire on every turn of every such run.
 		os.Exit(0)
 	}
 	transcript := p.TranscriptPath
@@ -385,17 +458,29 @@ func runUsageExplicit(args []string) {
 	if source == "" {
 		source = "SELF_REPORTED"
 	}
-	context := usageInputTokens + usageCacheReadTokens + usageCacheWriteTokens
+	// The window's total context across however many turns it covers -- which is a per-REQUEST
+	// figure only when the window is a single request.
+	windowContext := usageInputTokens + usageCacheReadTokens + usageCacheWriteTokens
+	requests := maxInt(usageTurns, 1)
 	line := map[string]interface{}{
-		"model":                   usageModel,
-		"contextBand":             bandLabel(usageModel, context),
-		"requests":                maxInt(usageTurns, 1),
-		"inputTokens":             usageInputTokens,
-		"outputTokens":            usageOutputTokens,
-		"cacheReadTokens":         usageCacheReadTokens,
-		"cacheWriteTokens":        usageCacheWriteTokens,
-		"maxRequestContextTokens": context,
-		"minRequestContextTokens": context,
+		"model":            usageModel,
+		"requests":         requests,
+		"inputTokens":      usageInputTokens,
+		"outputTokens":     usageOutputTokens,
+		"cacheReadTokens":  usageCacheReadTokens,
+		"cacheWriteTokens": usageCacheWriteTokens,
+	}
+	if requests == 1 {
+		// One request, so the window's totals ARE that request's context and the band is real.
+		line["contextBand"] = bandLabel(usageModel, windowContext)
+		line["maxRequestContextTokens"] = windowContext
+		line["minRequestContextTokens"] = windowContext
+	} else {
+		// Several requests summed into one line: the sum is not any request's context, and
+		// reporting it as the max would trip long-context pricing on a window of many small
+		// requests that never individually came near the threshold. Sending nothing is honest --
+		// the server prices under the base entry and knows the band was not measured.
+		line["contextBand"] = "0"
 	}
 	if usageHosting != "" {
 		line["hosting"] = strings.ToUpper(usageHosting)

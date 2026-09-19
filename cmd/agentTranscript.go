@@ -112,6 +112,10 @@ type transcriptDelta struct {
 	ReasoningLevel  string
 	SidechainRows   int
 	ClaudeSessionId string
+	// The recorded offset was past the end of the file, so this is a re-read from the start. The
+	// sequence derived from it will be LOWER than the session's high-water mark, which the server
+	// refuses by design -- so the caller must not keep resending it under the old session.
+	Truncated bool
 }
 
 // contextBands are the thresholds at which pricing changes, by model family. Anthropic's current
@@ -175,18 +179,20 @@ func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
 	if err != nil {
 		return nil, err
 	}
+	truncated := false
 	if sinceOffset > size {
 		// The transcript is shorter than where we left off: a different session reusing the path,
-		// or a truncated file. Re-reading from the start is the safe answer -- the server dedupes
-		// on the sequence, so the worst case is a refused duplicate, whereas trusting the stale
-		// offset would skip real usage forever.
+		// or a truncated file. Re-read from the start rather than trusting a stale offset that
+		// would skip real usage forever -- but flag it, because the sequence this produces is
+		// below the server's high-water mark for the old session and will be refused.
 		sinceOffset = 0
+		truncated = true
 	}
 	if _, err := f.Seek(sinceOffset, io.SeekStart); err != nil {
 		return nil, err
 	}
 
-	delta := &transcriptDelta{EndOffset: sinceOffset}
+	delta := &transcriptDelta{EndOffset: sinceOffset, Truncated: truncated}
 	// Grouped by (model, band). Two parallel maps rather than one struct map because tokens are
 	// accumulated per distinct message id while tool calls are accumulated per row.
 	type groupKey struct{ model, band, tier string }

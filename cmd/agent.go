@@ -138,9 +138,12 @@ func recordInitState(session interface{}) {
 	}
 	claudeId := claudeSessionId
 	if claudeId == "" {
-		// Claude Code exports this into the environment of what it runs, so an agent that did not
-		// pass the flag usually still gets the mapping for free.
-		claudeId = os.Getenv("CLAUDE_SESSION_ID")
+		// Claude Code exports its session id to what it runs, so an agent that did not pass the
+		// flag still gets the mapping for free. The name was checked against a running instance
+		// rather than assumed -- it is CLAUDE_CODE_SESSION_ID, and its value is exactly the
+		// sessionId the transcript carries. An earlier guess of CLAUDE_SESSION_ID is unset in
+		// practice, which would have left every hook unable to find its session.
+		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
 	}
 	st := &agentSessionState{
 		SessionUuid:     uuid,
