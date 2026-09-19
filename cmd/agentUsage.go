@@ -211,17 +211,24 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 	if delta.Truncated {
 		// The transcript is shorter than the offset we recorded, so this is a different session
 		// writing to a path we already have history for. Re-reading produced a sequence below the
-		// server's high-water mark for the old session, which it refuses -- and left alone, that
-		// repeats on every single turn for the life of the session, reporting nothing and
-		// complaining each time.
+		// server's high-water mark for the old session, which it refuses -- so stop reporting
+		// against the stale mapping rather than being refused on every turn from here on.
 		//
-		// So stop reporting against the stale mapping and say why, once, in terms that name the
-		// fix. The state is left in place rather than deleted: it still holds the mapping an
-		// operator needs to work out what happened.
-		fmt.Fprintf(os.Stderr, "rearm: transcript for session %s is shorter than the offset already "+
-			"reported (%d bytes); this looks like a new Claude session reusing the path. Not "+
-			"reporting to avoid a rejected sequence -- run `rearm agent session init` for the new "+
-			"session.\n", st.SessionUuid, st.LastSeq)
+		// The warning is printed ONCE and the flag recorded, because this condition holds for the
+		// whole life of the session: without the flag the same paragraph lands on the agent's
+		// stderr every single turn. The state is kept rather than deleted -- it still holds the
+		// mapping an operator needs to work out what happened.
+		if !st.TruncationWarned {
+			fmt.Fprintf(os.Stderr, "rearm: transcript for session %s is shorter than the offset already "+
+				"reported (%d bytes); this looks like a new Claude session reusing the path. Not "+
+				"reporting to avoid a rejected sequence -- run `rearm agent session init` for the new "+
+				"session.\n", st.SessionUuid, st.LastSeq)
+			st.TruncationWarned = true
+			if err := writeAgentState(st); err != nil {
+				// Only costs a repeated warning, so it is not worth failing over.
+				fmt.Fprintf(os.Stderr, "rearm: could not record the warning state: %v\n", err)
+			}
+		}
 		return
 	}
 	if len(delta.Lines) == 0 {

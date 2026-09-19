@@ -97,3 +97,22 @@ func TestEffortIsReadFromTheVariableClaudeCodeActuallySets(t *testing.T) {
 		t.Errorf("expected effort from CLAUDE_EFFORT, got %q", got)
 	}
 }
+
+func TestTheStaleTranscriptWarningIsPrintedOnlyOnce(t *testing.T) {
+	// The condition holds for the whole life of the session, so without the recorded flag this
+	// paragraph lands on the agent's stderr on every single turn.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1", LastSeq: 999}
+	if err := writeAgentState(st); err != nil {
+		t.Fatal(err)
+	}
+	reportDelta(st, &transcriptDelta{Truncated: true}, "TRANSCRIPT", false)
+	if !st.TruncationWarned {
+		t.Fatal("the first encounter should record that it warned")
+	}
+	// Persisted, so a later process does not warn again.
+	reread, err := readAgentState("c-1")
+	if err != nil || reread == nil || !reread.TruncationWarned {
+		t.Errorf("the warning flag was not persisted: %+v (%v)", reread, err)
+	}
+}

@@ -51,7 +51,10 @@ type agentSessionState struct {
 	// The task usage should be attributed to, or empty. Set by `task assign`, cleared by
 	// `task signoff` and `task return`.
 	CurrentTask string `json:"currentTask,omitempty"`
-	Board       string `json:"board,omitempty"`
+	// Set once the stale-transcript warning has been printed for this mapping, so it is not
+	// repeated on every turn for the rest of the session.
+	TruncationWarned bool   `json:"truncationWarned,omitempty"`
+	Board            string `json:"board,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling
