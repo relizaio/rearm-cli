@@ -23,7 +23,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strings"
 )
 
 // Claude Code transcript parsing.
@@ -45,8 +44,8 @@ import (
 // Getting either backwards produces a number that looks plausible and is wrong by ~2x, which is why
 // both have tests.
 
-// transcriptRow is the subset of a transcript line this code reads.
-type transcriptRow struct {
+// claudeTranscriptRow is the subset of a transcript line this code reads.
+type claudeTranscriptRow struct {
 	Type        string `json:"type"`
 	IsSidechain bool   `json:"isSidechain"`
 	Effort      string `json:"effort"`
@@ -68,107 +67,11 @@ type transcriptRow struct {
 	} `json:"message"`
 }
 
-// usageLine is one (model, band, service tier) group: exactly what the server stores as a row and
-// prices under a single pricing entry.
-//
-// Internal only -- the wire payload is built field by field in reportUsagePayload, because the
-// server takes turns and tool calls on the REPORT rather than on the line.
-type usageLine struct {
-	Model                   string
-	ContextBand             string
-	Requests                int
-	InputTokens             int64
-	OutputTokens            int64
-	CacheReadTokens         int64
-	CacheWriteTokens        int64
-	MaxRequestContextTokens int64
-	MinRequestContextTokens int64
-	Turns                   int
-	ToolCalls               int
-	// As reported by the transcript ("standard", "batch", "priority"). Not a wire field: it is
-	// folded into the model string below, where the server's normaliser peels it back out into a
-	// pricing variant. Grouping on it keeps two tiers of the same model from sharing a row and
-	// pricing at whichever tier happened to come first.
-	ServiceTier string
-}
-
-// wireModel is the model string as sent. A non-standard service tier is appended as the suffix the
-// server already peels into a serviceTier variant, which is how a batch-priced request reaches the
-// right pricing entry -- the transcript keeps the tier beside the model rather than in it, so
-// sending the bare model string would price batch traffic at standard rates.
-func (l usageLine) wireModel() string {
-	if l.ServiceTier != "" && !strings.EqualFold(l.ServiceTier, "standard") {
-		return l.Model + "-" + strings.ToLower(l.ServiceTier)
-	}
-	return l.Model
-}
-
-// transcriptDelta is everything parsed out of one pass over the new part of a transcript.
-type transcriptDelta struct {
-	Lines []usageLine
-	// EndOffset is the byte offset after the last line parsed: the next run's starting point and
-	// the clientSeq this delta is sent under.
-	EndOffset       int64
-	ReasoningLevel  string
-	SidechainRows   int
-	ClaudeSessionId string
-	// The recorded offset was past the end of the file, so this is a re-read from the start. The
-	// sequence derived from it will be LOWER than the session's high-water mark, which the server
-	// refuses by design -- so the caller must not keep resending it under the old session.
-	Truncated bool
-}
-
-// contextBands are the thresholds at which pricing changes, by model family. Anthropic's current
-// models price differently above a 200k request context.
-//
-// A static table in the CLI rather than a server lookup: the hook must work with the server
-// unreachable, and a band the CLI does not know is not a failure -- every line carries its max and
-// min request context, so the server can price it correctly and see that the band label came from
-// an older table than its own.
-var contextBands = map[string][]int64{
-	"claude": {200000},
-}
-
-func bandsForModel(model string) []int64 {
-	lower := strings.ToLower(model)
-	for family, bands := range contextBands {
-		if strings.Contains(lower, family) {
-			return bands
-		}
-	}
-	return nil
-}
-
-// bandLabel names the band a request context falls in: "0" below the first threshold, then the
-// threshold itself in compact form ("200k"). The label is only an identifier the server groups on;
-// the authoritative numbers travel as max/min request context on the line.
-func bandLabel(model string, contextTokens int64) string {
-	bands := bandsForModel(model)
-	label := "0"
-	for _, b := range bands {
-		if contextTokens >= b {
-			label = compactTokens(b)
-		}
-	}
-	return label
-}
-
-func compactTokens(n int64) string {
-	switch {
-	case n >= 1_000_000 && n%1_000_000 == 0:
-		return fmt.Sprintf("%dm", n/1_000_000)
-	case n >= 1000 && n%1000 == 0:
-		return fmt.Sprintf("%dk", n/1000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
-}
-
-// parseTranscript reads the transcript from sinceOffset to EOF and returns the delta.
+// parseClaudeTranscript reads the transcript from sinceOffset to EOF and returns the delta.
 //
 // sinceOffset is a byte offset, not a line count: the file is appended to while the session runs,
 // so the only stable resume point is where the last parse stopped.
-func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
+func parseClaudeTranscript(path string, sinceOffset int64) (*usageDelta, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -192,7 +95,9 @@ func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
 		return nil, err
 	}
 
-	delta := &transcriptDelta{EndOffset: sinceOffset, Truncated: truncated}
+	delta := &usageDelta{EndOffset: sinceOffset, Truncated: truncated}
+	sidechainRows := 0
+	claudeSessionId := ""
 	// Grouped by (model, band). Two parallel maps rather than one struct map because tokens are
 	// accumulated per distinct message id while tool calls are accumulated per row.
 	type groupKey struct{ model, band, tier string }
@@ -232,7 +137,7 @@ func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
 			delta.EndOffset = offset
 			continue
 		}
-		var row transcriptRow
+		var row claudeTranscriptRow
 		if err := json.Unmarshal(lineBytes, &row); err != nil {
 			// An assistant row this version cannot map. Skipped rather than fatal: losing one
 			// row's tokens beats losing the session's.
@@ -247,13 +152,13 @@ func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
 			delta.ReasoningLevel = row.Effort
 		}
 		if row.SessionId != "" {
-			delta.ClaudeSessionId = row.SessionId
+			claudeSessionId = row.SessionId
 		}
 		if row.IsSidechain {
 			// Subagent turns are written into the PARENT's transcript with this flag. They are
 			// real spend on this session, so they are counted here rather than dropped; the count
 			// travels with the report so the server can see the session had subagent activity.
-			delta.SidechainRows++
+			sidechainRows++
 		}
 
 		model := row.Message.Model
@@ -330,33 +235,20 @@ func parseTranscript(path string, sinceOffset int64) (*transcriptDelta, error) {
 	for _, k := range keys {
 		delta.Lines = append(delta.Lines, *groups[k])
 	}
-	return delta, nil
-}
 
-// chunkLines splits a backfill into reports of at most maxRequests requests each.
-//
-// A first run can carry an entire session's history; sending it as one report would hit the
-// server's oversize guard and be refused in full. Lines are not split internally -- a line is the
-// unit the server prices -- so a single line larger than the limit goes on its own, which the
-// server sizes by request count and accepts.
-func chunkLines(lines []usageLine, maxRequests int) [][]usageLine {
-	if maxRequests <= 0 {
-		return [][]usageLine{lines}
+	// Claude-specific observations travel in Extra rather than as fields on the shared delta, so
+	// the generic reporting path never has to know what a sidechain is.
+	delta.Extra = map[string]interface{}{}
+	if sidechainRows > 0 {
+		delta.Extra["sidechainRows"] = sidechainRows
 	}
-	var out [][]usageLine
-	var cur []usageLine
-	count := 0
-	for _, l := range lines {
-		if len(cur) > 0 && count+l.Requests > maxRequests {
-			out = append(out, cur)
-			cur = nil
-			count = 0
-		}
-		cur = append(cur, l)
-		count += l.Requests
+	if claudeSessionId != "" {
+		delta.Extra["claudeSessionId"] = claudeSessionId
 	}
-	if len(cur) > 0 {
-		out = append(out, cur)
+
+	// The transcript states the effort in force; fall back to the environment when it did not.
+	if delta.ReasoningLevel == "" {
+		delta.ReasoningLevel = claudeReasoningFromEnv()
 	}
-	return out
+	return delta, nil
 }

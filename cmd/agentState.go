@@ -27,7 +27,7 @@ import (
 // Local session state, one file per session under
 // $XDG_STATE_HOME/rearm/agent-sessions/<clientSessionId>.json.
 //
-// The point of the file is that a Stop hook gets a Claude Code session id and nothing else: no
+// The point of the file is that a hook gets its tool's own session id and nothing else: no
 // ReARM session uuid, no API round trip budget, and no way to know how much of the transcript it
 // already sent. Everything the hook needs to answer those is written here by the commands the agent
 // already runs.
@@ -41,10 +41,12 @@ import (
 type agentSessionState struct {
 	SessionUuid     string `json:"sessionUuid"`
 	ClientSessionId string `json:"clientSessionId"`
-	// The id Claude Code itself uses, which is what a hook payload carries. Kept separate from
-	// ClientSessionId because an agent may choose its own client id, and then the two differ.
-	ClaudeSessionId string `json:"claudeSessionId,omitempty"`
-	TranscriptPath  string `json:"transcriptPath,omitempty"`
+	// The id the AGENT TOOL uses for its own session -- Claude Code's session_id, and whatever
+	// the equivalent is for the next integration. Kept separate from ClientSessionId because an
+	// agent may choose its own client id, and then the two differ. Named generically because this
+	// file is shared: only the code under `rearm agent claude` knows which tool filled it in.
+	ExternalSessionId string `json:"externalSessionId,omitempty"`
+	TranscriptPath    string `json:"transcriptPath,omitempty"`
 	// Byte offset into the transcript after the last line already reported. The server dedupes on
 	// this, so it is both the resume point and the idempotency key.
 	LastSeq int64 `json:"lastSeq"`
@@ -151,8 +153,8 @@ func writeAgentState(st *agentSessionState) error {
 		return err
 	}
 	ids := []string{st.ClientSessionId}
-	if st.ClaudeSessionId != "" && st.ClaudeSessionId != st.ClientSessionId {
-		ids = append(ids, st.ClaudeSessionId)
+	if st.ExternalSessionId != "" && st.ExternalSessionId != st.ClientSessionId {
+		ids = append(ids, st.ExternalSessionId)
 	}
 	for _, id := range ids {
 		if id == "" {
@@ -200,7 +202,7 @@ func removeAgentState(st *agentSessionState) {
 	if st == nil {
 		return
 	}
-	for _, id := range []string{st.ClientSessionId, st.ClaudeSessionId} {
+	for _, id := range []string{st.ClientSessionId, st.ExternalSessionId} {
 		if id == "" {
 			continue
 		}
@@ -286,64 +288,4 @@ func firstNonEmptyEnv(names ...string) string {
 		}
 	}
 	return ""
-}
-
-// adoptStateForClaudeSession binds a Claude session id to local state that does not have one yet.
-//
-// The hook resolves its session by the id in its payload, which only works if `session init`
-// recorded that id. It usually does -- Claude Code exports CLAUDE_CODE_SESSION_ID -- but not when
-// init ran somewhere that variable was absent: a wrapper script, a different shell, CI. The failure
-// mode there is the worst kind: the hook finds nothing, exits 0 by design, and the session records
-// no usage at all with nothing anywhere saying why.
-//
-// So the hook binds itself. If exactly one state file is missing a Claude id, it is unambiguously
-// this one -- a machine running two ReARM-tracked Claude sessions both initialised without the
-// variable is the only case this cannot resolve, and there it does nothing rather than guess and
-// bind usage to the wrong session.
-func adoptStateForClaudeSession(claudeSessionId string) *agentSessionState {
-	if claudeSessionId == "" {
-		return nil
-	}
-	dir, err := agentStateDir()
-	if err != nil {
-		return nil
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var candidates []*agentSessionState
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var st agentSessionState
-		if json.Unmarshal(raw, &st) != nil {
-			continue
-		}
-		if st.ClaudeSessionId == "" && st.SessionUuid != "" {
-			candidates = append(candidates, &st)
-		}
-	}
-	if len(candidates) != 1 {
-		if len(candidates) > 1 {
-			fmt.Fprintf(os.Stderr, "rearm: %d local sessions have no Claude session id; cannot tell "+
-				"which one this is, so usage is not being reported. Re-run `rearm agent session init` "+
-				"with --claude-session-id.\n", len(candidates))
-		}
-		return nil
-	}
-	adopted := candidates[0]
-	adopted.ClaudeSessionId = claudeSessionId
-	if err := writeAgentState(adopted); err != nil {
-		fmt.Fprintf(os.Stderr, "rearm: could not bind this Claude session to %s: %v\n", adopted.SessionUuid, err)
-		return nil
-	}
-	fmt.Fprintf(os.Stderr, "rearm: bound Claude session %s to ReARM session %s\n",
-		claudeSessionId, adopted.SessionUuid)
-	return adopted
 }

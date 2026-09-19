@@ -46,13 +46,13 @@ func TestInstallPreservesEverythingElseInTheSettingsFile(t *testing.T) {
     }`)
 	defer done()
 
-	settings, err := readSettings(path)
+	settings, err := readClaudeSettings(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	installHook(settings, "Stop", stopHookCommand)
-	installHook(settings, "SessionEnd", sessionEndHookCommand)
-	if err := writeSettings(path, settings); err != nil {
+	installClaudeHook(settings, "Stop", claudeStopHookCommand)
+	installClaudeHook(settings, "SessionEnd", claudeSessionEndHookCommand)
+	if err := writeClaudeSettings(path, settings); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,10 +77,10 @@ func TestInstallingTwiceDoesNotDoubleTheHook(t *testing.T) {
 	// dedupes on the sequence) but it doubles the work on every turn forever.
 	path, done := settingsWith(t, "")
 	defer done()
-	settings, _ := readSettings(path)
-	installHook(settings, "Stop", stopHookCommand)
-	installHook(settings, "Stop", stopHookCommand)
-	writeSettings(path, settings)
+	settings, _ := readClaudeSettings(path)
+	installClaudeHook(settings, "Stop", claudeStopHookCommand)
+	installClaudeHook(settings, "Stop", claudeStopHookCommand)
+	writeClaudeSettings(path, settings)
 
 	hooks := loadSettings(t, path)["hooks"].(map[string]interface{})
 	if n := len(hooks["Stop"].([]interface{})); n != 1 {
@@ -93,22 +93,22 @@ func TestUninstallRemovesOnlyWhatWeAdded(t *testing.T) {
       "hooks": {"Stop": [{"hooks":[{"type":"command","command":"echo someone-elses"}]}]}
     }`)
 	defer done()
-	settings, _ := readSettings(path)
-	installHook(settings, "Stop", stopHookCommand)
-	writeSettings(path, settings)
+	settings, _ := readClaudeSettings(path)
+	installClaudeHook(settings, "Stop", claudeStopHookCommand)
+	writeClaudeSettings(path, settings)
 
-	settings, _ = readSettings(path)
-	if !uninstallHook(settings, "Stop", stopHookCommand) {
+	settings, _ = readClaudeSettings(path)
+	if !uninstallClaudeHook(settings, "Stop", claudeStopHookCommand) {
 		t.Fatal("uninstall reported nothing removed")
 	}
-	writeSettings(path, settings)
+	writeClaudeSettings(path, settings)
 
 	hooks := loadSettings(t, path)["hooks"].(map[string]interface{})
 	entries := hooks["Stop"].([]interface{})
 	if len(entries) != 1 {
 		t.Fatalf("expected the other hook to survive alone, got %+v", entries)
 	}
-	if cmds := hookCommandOf(entries[0]); len(cmds) != 1 || cmds[0] != "echo someone-elses" {
+	if cmds := claudeHookCommandOf(entries[0]); len(cmds) != 1 || cmds[0] != "echo someone-elses" {
 		t.Errorf("wrong entry survived: %+v", cmds)
 	}
 }
@@ -118,13 +118,13 @@ func TestUninstallLeavesASharedEntryAlone(t *testing.T) {
 	// report is a much smaller harm than silently removing a hook the user depends on.
 	path, done := settingsWith(t, `{
       "hooks": {"Stop": [{"hooks":[
-        {"type":"command","command":"rearm agent session usage --from-hook"},
+        {"type":"command","command":"rearm agent claude usage --from-hook"},
         {"type":"command","command":"echo also-mine"}
       ]}]}
     }`)
 	defer done()
-	settings, _ := readSettings(path)
-	if uninstallHook(settings, "Stop", stopHookCommand) {
+	settings, _ := readClaudeSettings(path)
+	if uninstallClaudeHook(settings, "Stop", claudeStopHookCommand) {
 		t.Error("a shared entry must not be removed")
 	}
 }
@@ -132,7 +132,7 @@ func TestUninstallLeavesASharedEntryAlone(t *testing.T) {
 func TestUnparseableSettingsAreRefusedRatherThanOverwritten(t *testing.T) {
 	path, done := settingsWith(t, `{"model": "opus",`)
 	defer done()
-	if _, err := readSettings(path); err == nil {
+	if _, err := readClaudeSettings(path); err == nil {
 		t.Fatal("expected a refusal on invalid JSON, not a silent overwrite")
 	}
 	// And the file is untouched.
@@ -144,7 +144,7 @@ func TestUnparseableSettingsAreRefusedRatherThanOverwritten(t *testing.T) {
 
 func TestAMissingSettingsFileIsAnEmptyStartNotAnError(t *testing.T) {
 	dir := t.TempDir()
-	settings, err := readSettings(filepath.Join(dir, "nope.json"))
+	settings, err := readClaudeSettings(filepath.Join(dir, "nope.json"))
 	if err != nil {
 		t.Fatalf("a missing settings file should not be an error: %v", err)
 	}

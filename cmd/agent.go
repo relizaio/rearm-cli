@@ -146,9 +146,9 @@ func recordInitState(session interface{}) {
 		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
 	}
 	st := &agentSessionState{
-		SessionUuid:     uuid,
-		ClientSessionId: clientId,
-		ClaudeSessionId: claudeId,
+		SessionUuid:       uuid,
+		ClientSessionId:   clientId,
+		ExternalSessionId: claudeId,
 	}
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: session opened, but local usage state could not be written: %v\n", err)
@@ -462,7 +462,9 @@ func init() {
 	agentSessionCmd.AddCommand(agentSessionInboxCmd)
 	agentSessionCmd.AddCommand(agentSessionShowCmd)
 	agentSessionCmd.AddCommand(agentSessionUsageCmd)
-	agentCmd.AddCommand(agentHooksCmd)
+	// Claude Code specifics live one level down, so `rearm agent claude ...` is clearly one
+	// agent's integration rather than something every agent is expected to have.
+	agentCmd.AddCommand(agentClaudeCmd)
 	agentReleaseCmd.AddCommand(agentReleaseShowCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	agentCmd.AddCommand(agentReleaseCmd)

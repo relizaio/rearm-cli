@@ -19,19 +19,21 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"time"
 
+	rearm "github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
 )
 
 // Usage reporting: what a session consumed, sent to ReARM.
 //
-//   rearm agent session usage <session-uuid> --model m --input-tokens N ...   explicit
-//   rearm agent session usage --from-transcript <path> [--since-seq N]        parse a transcript
-//   rearm agent session usage --from-hook [--final]                           Claude Code hook
+//   rearm agent session usage <session-uuid> --model m --input-tokens N ...   explicit numbers
+//
+// Transcript and hook reporting live under `rearm agent claude`, because both know the shape of
+// one particular agent's output. What stays here is what any agent needs: the report payload, the
+// context bands, chunking, and the never-block rule.
 //
 // THE GOVERNING RULE IS THAT THIS NEVER BLOCKS THE AGENT. It runs on the Stop hook of every turn,
 // so a failure here -- server down, expired key, malformed transcript -- must cost the agent nothing
@@ -62,24 +64,145 @@ var (
 	usageDryRun           bool
 )
 
+// usageDelta is one batch of usage ready to report: the generic shape every agent integration
+// produces, whatever it parsed to get there.
+//
+// Defined at agent level on purpose. reportDelta below is shared, and a shared function taking a
+// Claude-shaped argument would mean the next integration either reuses a type named after another
+// agent or duplicates the reporting path.
+type usageDelta struct {
+	Lines []usageLine
+	// EndOffset is the resume point and the clientSeq this delta is sent under. For a transcript
+	// parser it is a byte offset; another integration may use anything monotonic per session.
+	EndOffset int64
+	// Effort/verbosity setting in force, when the integration can see it.
+	ReasoningLevel string
+	// The recorded offset was past the end of the source, so this is a re-read from the start. The
+	// sequence derived from it is BELOW the session's high-water mark, which the server refuses --
+	// so the caller must not keep resending it under the old session.
+	Truncated bool
+	// Agent-specific facts worth keeping beside the numbers; merged into the report's raw payload.
+	Extra map[string]interface{}
+}
+
+// usageLine is one (model, band, service tier) group: exactly what the server stores as a row and
+// prices under a single pricing entry.
+//
+// Internal only -- the wire payload is built field by field in reportUsagePayload, because the
+// server takes turns and tool calls on the REPORT rather than on the line.
+type usageLine struct {
+	Model                   string
+	ContextBand             string
+	Requests                int
+	InputTokens             int64
+	OutputTokens            int64
+	CacheReadTokens         int64
+	CacheWriteTokens        int64
+	MaxRequestContextTokens int64
+	MinRequestContextTokens int64
+	Turns                   int
+	ToolCalls               int
+	// As reported by the transcript ("standard", "batch", "priority"). Not a wire field: it is
+	// folded into the model string below, where the server's normaliser peels it back out into a
+	// pricing variant. Grouping on it keeps two tiers of the same model from sharing a row and
+	// pricing at whichever tier happened to come first.
+	ServiceTier string
+}
+
+// wireModel is the model string as sent. A non-standard service tier is appended as the suffix the
+// server already peels into a serviceTier variant, which is how a batch-priced request reaches the
+// right pricing entry -- the transcript keeps the tier beside the model rather than in it, so
+// sending the bare model string would price batch traffic at standard rates.
+func (l usageLine) wireModel() string {
+	if l.ServiceTier != "" && !strings.EqualFold(l.ServiceTier, "standard") {
+		return l.Model + "-" + strings.ToLower(l.ServiceTier)
+	}
+	return l.Model
+}
+
+// contextBands are the thresholds at which pricing changes, by model family. Anthropic's current
+// models price differently above a 200k request context.
+//
+// A static table in the CLI rather than a server lookup: the hook must work with the server
+// unreachable, and a band the CLI does not know is not a failure -- every line carries its max and
+// min request context, so the server can price it correctly and see that the band label came from
+// an older table than its own.
+var contextBands = map[string][]int64{
+	// Keyed by MODEL family, not by agent: any integration reporting an Anthropic model bands it
+	// the same way, whether or not Claude Code was the thing running it.
+	"claude": {200000},
+}
+
+func bandsForModel(model string) []int64 {
+	lower := strings.ToLower(model)
+	for family, bands := range contextBands {
+		if strings.Contains(lower, family) {
+			return bands
+		}
+	}
+	return nil
+}
+
+// bandLabel names the band a request context falls in: "0" below the first threshold, then the
+// threshold itself in compact form ("200k"). The label is only an identifier the server groups on;
+// the authoritative numbers travel as max/min request context on the line.
+func bandLabel(model string, contextTokens int64) string {
+	bands := bandsForModel(model)
+	label := "0"
+	for _, b := range bands {
+		if contextTokens >= b {
+			label = compactTokens(b)
+		}
+	}
+	return label
+}
+
+func compactTokens(n int64) string {
+	switch {
+	case n >= 1_000_000 && n%1_000_000 == 0:
+		return fmt.Sprintf("%dm", n/1_000_000)
+	case n >= 1000 && n%1000 == 0:
+		return fmt.Sprintf("%dk", n/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+// chunkLines splits a backfill into reports of at most maxRequests requests each.
+//
+// A first run can carry an entire session's history; sending it as one report would hit the
+// server's oversize guard and be refused in full. Lines are not split internally -- a line is the
+// unit the server prices -- so a single line larger than the limit goes on its own, which the
+// server sizes by request count and accepts.
+func chunkLines(lines []usageLine, maxRequests int) [][]usageLine {
+	if maxRequests <= 0 {
+		return [][]usageLine{lines}
+	}
+	var out [][]usageLine
+	var cur []usageLine
+	count := 0
+	for _, l := range lines {
+		if len(cur) > 0 && count+l.Requests > maxRequests {
+			out = append(out, cur)
+			cur = nil
+			count = 0
+		}
+		cur = append(cur, l)
+		count += l.Requests
+	}
+	if len(cur) > 0 {
+		out = append(out, cur)
+	}
+	return out
+}
+
 // maxRequestsPerReport chunks a backfill. The server sizes its oversize guard by request count, so
 // this is the CLI's half of the same contract.
 const maxRequestsPerReport = 500
 
-// usageReportMutation is declared here rather than taken from the generated client because the
-// client's operations are regenerated from the schema on its own release cadence; carrying the
-// query inline lets the CLI ship with the server change instead of behind it. It moves into
-// rearm-client-go at the next regeneration.
-const usageReportMutation = `
-mutation SessionReportUsageProgrammatic($input: SessionUsageReportInput!) {
-  sessionReportUsageProgrammatic(input: $input) {
-    accepted
-    duplicates
-    refused
-    attribution
-    task
-  }
-}`
+// The report mutation comes from the generated client, like every other operation the CLI
+// sends. It was briefly declared inline here so the CLI could ship alongside the server change
+// instead of waiting on a client release; rearm-client-go now carries it.
 
 // usageBail reports a problem and stops, exiting 0 in hook and transcript modes.
 //
@@ -91,16 +214,6 @@ func usageBail(format string, args ...interface{}) {
 		os.Exit(0)
 	}
 	os.Exit(1)
-}
-
-// hookPayload is what Claude Code writes to a hook's stdin.
-type hookPayload struct {
-	SessionId      string `json:"session_id"`
-	TranscriptPath string `json:"transcript_path"`
-	Cwd            string `json:"cwd"`
-	HookEventName  string `json:"hook_event_name"`
-	StopHookActive bool   `json:"stop_hook_active"`
-	Reason         string `json:"reason"`
 }
 
 // detectHosting reads the provider from the environment. Hosting is a pricing dimension, and the
@@ -126,21 +239,7 @@ func isTruthyEnv(name string) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
-// reasoningFromEnv reads the effort level when the transcript did not carry one.
-//
-// The name was verified against a running Claude Code rather than guessed: it is CLAUDE_EFFORT,
-// not the CLAUDE_CODE_EFFORT_LEVEL this first assumed. The older spelling is kept as a fallback
-// because it costs nothing and a wrong guess here silently drops the field.
-func reasoningFromEnv() string {
-	for _, name := range []string{"CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL"} {
-		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// hookRequestTimeout bounds a report sent from a hook.
+// hookRequestTimeout bounds a report sent from an agent's hook.
 //
 // The shared client's timeout is ten minutes, which is right for an artifact upload and completely
 // wrong here: a hanging server would hold the agent's turn open until Claude Code's own hook
@@ -151,7 +250,7 @@ const hookRequestTimeout = 5 * time.Second
 // sendUsageReport posts one report and returns the ack, or an error.
 func sendUsageReport(input map[string]interface{}) (map[string]interface{}, error) {
 	send := func() (map[string]interface{}, error) {
-		data, err := sendGraphQLRequest(usageReportMutation, map[string]interface{}{"input": input})
+		data, err := sendGraphQLRequest(rearm.SessionReportUsageProgrammatic_Operation, map[string]interface{}{"input": input})
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +306,7 @@ func buildLinePayload(l usageLine, hosting string) map[string]interface{} {
 // Stopping rather than continuing is what makes a resume correct: lastSeq is only advanced past
 // chunks the server confirmed, so the next run picks up exactly where this one stopped instead of
 // leaving a hole no later run would ever fill.
-func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, final bool) {
+func reportDelta(st *agentSessionState, delta *usageDelta, source string, final bool) {
 	if delta.Truncated {
 		// The transcript is shorter than the offset we recorded, so this is a different session
 		// writing to a path we already have history for. Re-reading produced a sequence below the
@@ -220,7 +319,7 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 		// mapping an operator needs to work out what happened.
 		if !st.TruncationWarned {
 			fmt.Fprintf(os.Stderr, "rearm: transcript for session %s is shorter than the offset already "+
-				"reported (%d bytes); this looks like a new Claude session reusing the path. Not "+
+				"reported (%d bytes); this looks like a new agent session reusing the path. Not "+
 				"reporting to avoid a rejected sequence -- run `rearm agent session init` for the new "+
 				"session.\n", st.SessionUuid, st.LastSeq)
 			st.TruncationWarned = true
@@ -239,9 +338,6 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 	}
 	hosting := detectHosting()
 	reasoning := delta.ReasoningLevel
-	if reasoning == "" {
-		reasoning = reasoningFromEnv()
-	}
 	chunks := chunkLines(delta.Lines, maxRequestsPerReport)
 	for i, chunk := range chunks {
 		turns, tools, requests := 0, 0, 0
@@ -279,10 +375,11 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 			input["reasoningLevel"] = reasoning
 		}
 		raw := map[string]interface{}{"final": final, "chunk": i + 1, "chunks": len(chunks)}
-		if delta.SidechainRows > 0 {
-			// Subagent turns are in the parent's transcript and counted into it. Recorded so the
-			// number is explainable later rather than looking like the parent talked to itself.
-			raw["sidechainRows"] = delta.SidechainRows
+		// Whatever the integration thought worth recording beside the numbers -- for a transcript
+		// parser, how many turns came from subagents, so the total is explainable later rather
+		// than looking like the session talked to itself.
+		for k, v := range delta.Extra {
+			raw[k] = v
 		}
 		input["raw"] = raw
 
@@ -324,102 +421,22 @@ func reportDelta(st *agentSessionState, delta *transcriptDelta, source string, f
 var agentSessionUsageCmd = &cobra.Command{
 	Use:   "usage [session-uuid]",
 	Short: "Report what this session consumed (tokens, turns, tool calls)",
-	Long: `Reports usage against an agent session. Three modes:
+	Long: `Reports usage against an agent session from explicit numbers, for agents
+that report their own consumption:
 
-  --from-hook         read a Claude Code hook payload from stdin and report the
-                      delta since the last report. This is what 'rearm agent
-                      hooks install' wires up; you rarely run it by hand.
-  --from-transcript   parse a Claude Code transcript at the given path.
-  (neither)           report explicit numbers from the flags, for agents that
-                      are not Claude Code. Use --source self-reported.
+  rearm agent session usage <session-uuid> --source self-reported \
+    --model '<model identifier>' --input-tokens N --output-tokens N \
+    --turns N --wall-seconds N
 
-In hook and transcript modes any failure exits 0 with a message on stderr: usage
-reporting must never block the agent it is measuring.
+Claude Code does not need this: it writes a transcript, so 'rearm agent claude
+usage' reads the numbers rather than being told them, and 'rearm agent claude
+hooks install' runs that automatically.
 
-Reports are idempotent. The sequence is the transcript byte offset, kept in the
-local state file, and the server drops a delta it has already filed.`,
+Reports are idempotent on their sequence, so a resend files nothing twice.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		switch {
-		case usageFromHook:
-			runUsageFromHook()
-		case usageFromTranscript != "":
-			runUsageFromTranscript(args)
-		default:
-			runUsageExplicit(args)
-		}
+		runUsageExplicit(args)
 	},
-}
-
-func runUsageFromHook() {
-	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
-	if err != nil || len(raw) == 0 {
-		usageBail("no hook payload on stdin")
-		return
-	}
-	var p hookPayload
-	if err := json.Unmarshal(raw, &p); err != nil {
-		usageBail("hook payload is not readable JSON: %v", err)
-		return
-	}
-	// A Stop hook that itself triggered this run: reporting again would loop.
-	if p.StopHookActive {
-		os.Exit(0)
-	}
-	if p.SessionId == "" {
-		usageBail("hook payload carries no session_id")
-		return
-	}
-	st, err := readAgentState(p.SessionId)
-	if err != nil {
-		usageBail("could not read session state: %v", err)
-		return
-	}
-	if st == nil {
-		// Nothing filed under this Claude id. Before giving up, try to bind: `session init` may
-		// have run somewhere CLAUDE_CODE_SESSION_ID was not set, which would otherwise mean this
-		// session silently reports nothing for its whole life.
-		st = adoptStateForClaudeSession(p.SessionId)
-	}
-	if st == nil {
-		// Genuinely not a tracked session -- a developer running Claude Code outside any ReARM
-		// session. Silent by design: warning here would fire on every turn of every such run.
-		os.Exit(0)
-	}
-	transcript := p.TranscriptPath
-	if transcript == "" {
-		transcript = st.TranscriptPath
-	}
-	if transcript == "" {
-		usageBail("no transcript path in the hook payload or session state")
-		return
-	}
-	st.TranscriptPath = transcript
-	delta, err := parseTranscript(transcript, st.LastSeq)
-	if err != nil {
-		usageBail("could not read transcript: %v", err)
-		return
-	}
-	reportDelta(st, delta, "TRANSCRIPT", usageFinal)
-}
-
-func runUsageFromTranscript(args []string) {
-	st := resolveUsageState(args)
-	if st == nil {
-		usageBail("need a session uuid, --client-session-id, or local session state")
-		return
-	}
-	since := st.LastSeq
-	if usageSinceSeq >= 0 {
-		since = usageSinceSeq
-	}
-	st.TranscriptPath = usageFromTranscript
-	delta, err := parseTranscript(usageFromTranscript, since)
-	if err != nil {
-		usageBail("could not read transcript: %v", err)
-		return
-	}
-	reportDelta(st, delta, "TRANSCRIPT", usageFinal)
 }
 
 // resolveUsageState builds the state to report against, from an explicit uuid, a client session id,
@@ -557,7 +574,7 @@ func maxInt(a, b int) int {
 
 func init() {
 	f := agentSessionUsageCmd.Flags()
-	f.StringVar(&usageSource, "source", "", "transcript | self-reported | otel | provider")
+	f.StringVar(&usageSource, "source", "", "self-reported | otel | provider")
 	f.StringVar(&usageModel, "model", "", "model identifier, sent verbatim")
 	f.Int64Var(&usageInputTokens, "input-tokens", 0, "uncached input tokens")
 	f.Int64Var(&usageOutputTokens, "output-tokens", 0, "output tokens")
@@ -570,12 +587,10 @@ func init() {
 	f.StringVar(&usageTask, "task", "", "task uuid to attribute to (defaults to the assigned task)")
 	f.StringVar(&usageWindowStart, "window-start", "", "ISO-8601 start of the window")
 	f.StringVar(&usageWindowEnd, "window-end", "", "ISO-8601 end of the window")
-	f.Int64Var(&usageSeq, "seq", 0, "monotonic sequence; defaults to the transcript offset or the clock")
-	f.StringVar(&usageFromTranscript, "from-transcript", "", "parse this Claude Code transcript")
-	f.Int64Var(&usageSinceSeq, "since-seq", -1, "start at this byte offset instead of the recorded one")
-	f.BoolVar(&usageFromHook, "from-hook", false, "read a Claude Code hook payload from stdin")
-	f.BoolVar(&usageFinal, "final", false, "mark this as the session's last flush")
-	f.StringVar(&usageClientSessionId, "client-session-id", "", "resolve the session by its client id")
+	f.Int64Var(&usageSeq, "seq", 0, "monotonic sequence; defaults to the clock")
 	f.StringVar(&usageHosting, "hosting", "", "DIRECT | BEDROCK | VERTEX | AZURE")
 	f.BoolVar(&usageDryRun, "dry-run", false, "print the report that would be sent and exit")
+	// --client-session-id is shared with the claude subcommand, which registers its own copy;
+	// both resolve the same state file.
+	f.StringVar(&usageClientSessionId, "client-session-id", "", "resolve the session by its client id")
 }

@@ -36,7 +36,7 @@ func TestUsageIsCountedOncePerMessageNotOncePerRow(t *testing.T) {
 		assistantRow("msg_1", "claude-opus-5", "text", 1, 100, 50, 1000, 200),
 		assistantRow("msg_1", "claude-opus-5", "tool_use", 2, 100, 50, 1000, 200),
 	)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestToolCallsAreCountedPerRowNotPerMessage(t *testing.T) {
 		assistantRow("msg_1", "claude-opus-5", "tool_use", 1, 10, 5, 0, 0),
 		assistantRow("msg_1", "claude-opus-5", "tool_use", 2, 10, 5, 0, 0),
 	)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestModelsAndBandsSplitIntoSeparateLines(t *testing.T) {
 		// Over the 200k threshold: same model as m1, different pricing band.
 		assistantRow("m3", "claude-opus-5", "text", 0, 1000, 5, 250000, 0),
 	)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestANonStandardServiceTierRidesOnTheModelString(t *testing.T) {
 		assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0),
 		`"service_tier":"standard"`, `"service_tier":"batch"`, 1)
 	path := writeTranscript(t, row)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestANonStandardServiceTierRidesOnTheModelString(t *testing.T) {
 	// Standard is the default and must NOT be appended, or every ordinary request would resolve
 	// to a model string no catalogue entry matches.
 	std := writeTranscript(t, assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0))
-	d2, _ := parseTranscript(std, 0)
+	d2, _ := parseClaudeTranscript(std, 0)
 	if got := d2.Lines[0].wireModel(); got != "claude-opus-5" {
 		t.Errorf("standard tier must not be appended, got %q", got)
 	}
@@ -129,7 +129,7 @@ func TestResumingFromAnOffsetSkipsWhatWasAlreadyReported(t *testing.T) {
 		assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0),
 		assistantRow("m2", "claude-opus-5", "text", 0, 20, 5, 0, 0),
 	)
-	first, err := parseTranscript(path, 0)
+	first, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestResumingFromAnOffsetSkipsWhatWasAlreadyReported(t *testing.T) {
 	}
 	// A second pass from the recorded offset has nothing new to send. This is what stops every
 	// turn from re-reporting the whole session.
-	second, err := parseTranscript(path, first.EndOffset)
+	second, err := parseClaudeTranscript(path, first.EndOffset)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestAnOffsetPastTheEndRereadsFromTheStart(t *testing.T) {
 	// truncated. Re-reading risks a duplicate, which the server drops; trusting the offset would
 	// skip real usage permanently. The cheap mistake is the right one.
 	path := writeTranscript(t, assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0))
-	d, err := parseTranscript(path, 999999)
+	d, err := parseClaudeTranscript(path, 999999)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestAHalfWrittenFinalLineIsLeftForNextTime(t *testing.T) {
 	// skipped: the offset stops before it so the next run reads it whole.
 	good := assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0)
 	path := writeTranscript(t, good, `{"type":"assistant","message":{"id":"m2","mod`)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,21 +184,21 @@ func TestSubagentTurnsAreCountedAndFlagged(t *testing.T) {
 	side := strings.Replace(assistantRow("m2", "claude-opus-5", "text", 0, 70, 5, 0, 0),
 		`"type":"assistant"`, `"type":"assistant","isSidechain":true`, 1)
 	path := writeTranscript(t, assistantRow("m1", "claude-opus-5", "text", 0, 30, 5, 0, 0), side)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if d.Lines[0].InputTokens != 100 {
 		t.Errorf("subagent turns should be counted into the session, got %d", d.Lines[0].InputTokens)
 	}
-	if d.SidechainRows != 1 {
-		t.Errorf("expected the sidechain row to be flagged, got %d", d.SidechainRows)
+	if d.Extra["sidechainRows"] != 1 {
+		t.Errorf("expected the sidechain row to be flagged in Extra, got %v", d.Extra["sidechainRows"])
 	}
 }
 
 func TestReasoningLevelComesOffTheTranscript(t *testing.T) {
 	path := writeTranscript(t, assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0))
-	d, _ := parseTranscript(path, 0)
+	d, _ := parseClaudeTranscript(path, 0)
 	if d.ReasoningLevel != "high" {
 		t.Errorf("expected effort read from the row, got %q", d.ReasoningLevel)
 	}
@@ -234,7 +234,7 @@ func TestLineOrderIsStableSoARetryIsIdentical(t *testing.T) {
 	)
 	var first []string
 	for i := 0; i < 8; i++ {
-		d, err := parseTranscript(path, 0)
+		d, err := parseClaudeTranscript(path, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,7 +266,7 @@ func TestRowsOfOtherShapesDoNotHaltTheParse(t *testing.T) {
 		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result"}]}}`,
 		assistantRow("m2", "claude-opus-5", "text", 0, 20, 5, 0, 0),
 	)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestACorruptLineMidFileIsSkippedNotFatal(t *testing.T) {
 		`{"type":"assistant","message":{"id":"broken`,
 		assistantRow("m2", "claude-opus-5", "text", 0, 20, 5, 0, 0),
 	)
-	d, err := parseTranscript(path, 0)
+	d, err := parseClaudeTranscript(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ func TestStateIsFiledUnderBothSessionIds(t *testing.T) {
 	// The agent knows its client id; a hook payload carries only Claude's. Filing under both is
 	// what lets the hook resolve the ReARM session without a server call on every turn.
 	withStateDir(t)
-	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "client-1", ClaudeSessionId: "claude-1"}
+	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "client-1", ExternalSessionId: "claude-1"}
 	if err := writeAgentState(st); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestStateIsFoundByItsSessionUuid(t *testing.T) {
 
 func TestRemovingStateDropsBothNames(t *testing.T) {
 	withStateDir(t)
-	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "client-1", ClaudeSessionId: "claude-1"}
+	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "client-1", ExternalSessionId: "claude-1"}
 	writeAgentState(st)
 	removeAgentState(st)
 	for _, id := range []string{"client-1", "claude-1"} {

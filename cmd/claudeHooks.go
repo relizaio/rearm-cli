@@ -35,8 +35,8 @@ import (
 // contents intact -- including keys this CLI knows nothing about.
 
 const (
-	stopHookCommand       = "rearm agent session usage --from-hook"
-	sessionEndHookCommand = "rearm agent session usage --from-hook --final"
+	claudeStopHookCommand       = "rearm agent claude usage --from-hook"
+	claudeSessionEndHookCommand = "rearm agent claude usage --from-hook --final"
 )
 
 var (
@@ -45,10 +45,10 @@ var (
 	hooksAgent   string
 )
 
-// hooksSettingsPath resolves which settings file to edit. Project scope is the default: usage
+// claudeSettingsPath resolves which settings file to edit. Project scope is the default: usage
 // belongs to the work being done, and a user-scope hook would report every unrelated Claude Code
 // session on the machine.
-func hooksSettingsPath() (string, error) {
+func claudeSettingsPath() (string, error) {
 	if hooksUser {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -63,13 +63,13 @@ func hooksSettingsPath() (string, error) {
 	return filepath.Join(cwd, ".claude", "settings.json"), nil
 }
 
-// readSettings loads the settings file as a generic map. A missing file is an empty map, not an
+// readClaudeSettings loads the settings file as a generic map. A missing file is an empty map, not an
 // error -- installing into a project that has no settings yet is the common case.
 //
 // Generic map rather than a typed struct on purpose: settings.json holds many keys this CLI has no
 // business knowing about, and unmarshalling into a struct would silently drop every one of them on
 // the way back out.
-func readSettings(path string) (map[string]interface{}, error) {
+func readClaudeSettings(path string) (map[string]interface{}, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -92,7 +92,7 @@ func readSettings(path string) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func writeSettings(path string, settings map[string]interface{}) error {
+func writeClaudeSettings(path string, settings map[string]interface{}) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -108,8 +108,8 @@ func writeSettings(path string, settings map[string]interface{}) error {
 	return os.Rename(tmp, path)
 }
 
-// hookCommandOf digs the command string out of one entry of a hooks array, or returns "".
-func hookCommandOf(entry interface{}) []string {
+// claudeHookCommandOf digs the command string out of one entry of a hooks array, or returns "".
+func claudeHookCommandOf(entry interface{}) []string {
 	m, ok := entry.(map[string]interface{})
 	if !ok {
 		return nil
@@ -131,9 +131,9 @@ func hookCommandOf(entry interface{}) []string {
 	return cmds
 }
 
-func hasHookCommand(entries []interface{}, command string) bool {
+func hasClaudeHookCommand(entries []interface{}, command string) bool {
 	for _, e := range entries {
-		for _, c := range hookCommandOf(e) {
+		for _, c := range claudeHookCommandOf(e) {
 			if c == command {
 				return true
 			}
@@ -142,7 +142,7 @@ func hasHookCommand(entries []interface{}, command string) bool {
 	return false
 }
 
-func newHookEntry(command string) map[string]interface{} {
+func newClaudeHookEntry(command string) map[string]interface{} {
 	return map[string]interface{}{
 		"hooks": []interface{}{
 			map[string]interface{}{"type": "command", "command": command},
@@ -150,27 +150,27 @@ func newHookEntry(command string) map[string]interface{} {
 	}
 }
 
-// installHook adds one hook to one event, preserving everything already there. Idempotent: an
+// installClaudeHook adds one hook to one event, preserving everything already there. Idempotent: an
 // entry carrying our exact command is left alone rather than duplicated, so running install twice
 // does not fire the report twice per turn.
-func installHook(settings map[string]interface{}, event, command string) bool {
+func installClaudeHook(settings map[string]interface{}, event, command string) bool {
 	hooks, _ := settings["hooks"].(map[string]interface{})
 	if hooks == nil {
 		hooks = map[string]interface{}{}
 		settings["hooks"] = hooks
 	}
 	entries, _ := hooks[event].([]interface{})
-	if hasHookCommand(entries, command) {
+	if hasClaudeHookCommand(entries, command) {
 		return false
 	}
-	hooks[event] = append(entries, newHookEntry(command))
+	hooks[event] = append(entries, newClaudeHookEntry(command))
 	return true
 }
 
-// uninstallHook removes exactly the entries this CLI added and nothing else. An entry that also
+// uninstallClaudeHook removes exactly the entries this CLI added and nothing else. An entry that also
 // carries someone else's command is left in place -- removing it would take an unrelated hook with
 // it, and a stray usage report is a far smaller harm than a silently deleted hook.
-func uninstallHook(settings map[string]interface{}, event, command string) bool {
+func uninstallClaudeHook(settings map[string]interface{}, event, command string) bool {
 	hooks, _ := settings["hooks"].(map[string]interface{})
 	if hooks == nil {
 		return false
@@ -182,7 +182,7 @@ func uninstallHook(settings map[string]interface{}, event, command string) bool 
 	kept := make([]interface{}, 0, len(entries))
 	removed := false
 	for _, e := range entries {
-		cmds := hookCommandOf(e)
+		cmds := claudeHookCommandOf(e)
 		if len(cmds) == 1 && cmds[0] == command {
 			removed = true
 			continue
@@ -203,19 +203,19 @@ func uninstallHook(settings map[string]interface{}, event, command string) bool 
 	return true
 }
 
-var agentHooksCmd = &cobra.Command{
+var agentClaudeHooksCmd = &cobra.Command{
 	Use:   "hooks",
 	Short: "Install or remove the usage-reporting hooks for your agent",
 }
 
-var agentHooksInstallCmd = &cobra.Command{
+var agentClaudeHooksInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Wire usage reporting into Claude Code's settings (merges; safe to re-run)",
 	Long: `Adds two hooks to .claude/settings.json (--project, the default) or
 ~/.claude/settings.json (--user):
 
-  Stop        rearm agent session usage --from-hook
-  SessionEnd  rearm agent session usage --from-hook --final
+  Stop        rearm agent claude usage --from-hook
+  SessionEnd  rearm agent claude usage --from-hook --final
 
 Existing hooks are preserved and ours is added once, so re-running changes
 nothing. 'hooks uninstall' removes exactly these two.
@@ -227,23 +227,23 @@ tokens, and they exit 0 on any failure so they cannot block your work.`,
 			fmt.Fprintf(os.Stderr, "rearm: only --agent claude-code is supported\n")
 			os.Exit(1)
 		}
-		path, err := hooksSettingsPath()
+		path, err := claudeSettingsPath()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		settings, err := readSettings(path)
+		settings, err := readClaudeSettings(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		a := installHook(settings, "Stop", stopHookCommand)
-		b := installHook(settings, "SessionEnd", sessionEndHookCommand)
+		a := installClaudeHook(settings, "Stop", claudeStopHookCommand)
+		b := installClaudeHook(settings, "SessionEnd", claudeSessionEndHookCommand)
 		if !a && !b {
 			fmt.Printf("hooks already installed in %s\n", path)
 			return
 		}
-		if err := writeSettings(path, settings); err != nil {
+		if err := writeClaudeSettings(path, settings); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: could not write %s: %v\n", path, err)
 			os.Exit(1)
 		}
@@ -251,27 +251,27 @@ tokens, and they exit 0 on any failure so they cannot block your work.`,
 	},
 }
 
-var agentHooksUninstallCmd = &cobra.Command{
+var agentClaudeHooksUninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Remove the usage-reporting hooks this CLI installed",
 	Run: func(cmd *cobra.Command, args []string) {
-		path, err := hooksSettingsPath()
+		path, err := claudeSettingsPath()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		settings, err := readSettings(path)
+		settings, err := readClaudeSettings(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		a := uninstallHook(settings, "Stop", stopHookCommand)
-		b := uninstallHook(settings, "SessionEnd", sessionEndHookCommand)
+		a := uninstallClaudeHook(settings, "Stop", claudeStopHookCommand)
+		b := uninstallClaudeHook(settings, "SessionEnd", claudeSessionEndHookCommand)
 		if !a && !b {
 			fmt.Printf("no rearm usage hooks found in %s\n", path)
 			return
 		}
-		if err := writeSettings(path, settings); err != nil {
+		if err := writeClaudeSettings(path, settings); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: could not write %s: %v\n", path, err)
 			os.Exit(1)
 		}
@@ -280,11 +280,11 @@ var agentHooksUninstallCmd = &cobra.Command{
 }
 
 func init() {
-	for _, c := range []*cobra.Command{agentHooksInstallCmd, agentHooksUninstallCmd} {
+	for _, c := range []*cobra.Command{agentClaudeHooksInstallCmd, agentClaudeHooksUninstallCmd} {
 		c.Flags().BoolVar(&hooksProject, "project", false, "edit .claude/settings.json in the current directory (default)")
 		c.Flags().BoolVar(&hooksUser, "user", false, "edit ~/.claude/settings.json instead")
 		c.Flags().StringVar(&hooksAgent, "agent", "claude-code", "agent whose hooks to manage")
 	}
-	agentHooksCmd.AddCommand(agentHooksInstallCmd)
-	agentHooksCmd.AddCommand(agentHooksUninstallCmd)
+	agentClaudeHooksCmd.AddCommand(agentClaudeHooksInstallCmd)
+	agentClaudeHooksCmd.AddCommand(agentClaudeHooksUninstallCmd)
 }

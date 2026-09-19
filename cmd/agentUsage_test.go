@@ -38,7 +38,7 @@ func TestAdoptionBindsTheOnlyUnboundSession(t *testing.T) {
 	if err := writeAgentState(&agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1"}); err != nil {
 		t.Fatal(err)
 	}
-	got := adoptStateForClaudeSession("claude-xyz")
+	got := adoptClaudeSession("claude-xyz")
 	if got == nil || got.SessionUuid != "u-1" {
 		t.Fatalf("expected adoption of the single unbound session, got %+v", got)
 	}
@@ -55,15 +55,15 @@ func TestAdoptionRefusesToGuessBetweenTwoUnboundSessions(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	writeAgentState(&agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1"})
 	writeAgentState(&agentSessionState{SessionUuid: "u-2", ClientSessionId: "c-2"})
-	if got := adoptStateForClaudeSession("claude-xyz"); got != nil {
+	if got := adoptClaudeSession("claude-xyz"); got != nil {
 		t.Errorf("expected no adoption when two sessions are unbound, got %+v", got)
 	}
 }
 
 func TestAdoptionIgnoresSessionsAlreadyBound(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	writeAgentState(&agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1", ClaudeSessionId: "claude-old"})
-	if got := adoptStateForClaudeSession("claude-new"); got != nil {
+	writeAgentState(&agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1", ExternalSessionId: "claude-old"})
+	if got := adoptClaudeSession("claude-new"); got != nil {
 		t.Errorf("a session already bound to another Claude id must not be re-bound, got %+v", got)
 	}
 }
@@ -75,14 +75,14 @@ func TestTruncatedTranscriptIsFlaggedSoTheCallerCanRefuse(t *testing.T) {
 	path := filepath.Join(dir, "t.jsonl")
 	os.WriteFile(path, []byte(assistantRow("m1", "claude-opus-5", "text", 0, 10, 5, 0, 0)+"\n"), 0o600)
 
-	d, err := parseTranscript(path, 999_999)
+	d, err := parseClaudeTranscript(path, 999_999)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !d.Truncated {
 		t.Error("an offset past the end must be flagged as a truncation/reuse")
 	}
-	fresh, _ := parseTranscript(path, 0)
+	fresh, _ := parseClaudeTranscript(path, 0)
 	if fresh.Truncated {
 		t.Error("an ordinary read must not be flagged")
 	}
@@ -93,7 +93,7 @@ func TestEffortIsReadFromTheVariableClaudeCodeActuallySets(t *testing.T) {
 	// CLAUDE_CODE_EFFORT_LEVEL, is unset in practice, so relying on it silently dropped the field.
 	t.Setenv("CLAUDE_CODE_EFFORT_LEVEL", "")
 	t.Setenv("CLAUDE_EFFORT", "high")
-	if got := reasoningFromEnv(); got != "high" {
+	if got := claudeReasoningFromEnv(); got != "high" {
 		t.Errorf("expected effort from CLAUDE_EFFORT, got %q", got)
 	}
 }
@@ -106,7 +106,7 @@ func TestTheStaleTranscriptWarningIsPrintedOnlyOnce(t *testing.T) {
 	if err := writeAgentState(st); err != nil {
 		t.Fatal(err)
 	}
-	reportDelta(st, &transcriptDelta{Truncated: true}, "TRANSCRIPT", false)
+	reportDelta(st, &usageDelta{Truncated: true}, "TRANSCRIPT", false)
 	if !st.TruncationWarned {
 		t.Fatal("the first encounter should record that it warned")
 	}
