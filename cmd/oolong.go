@@ -149,13 +149,13 @@ type ProductReleaseComponent struct {
 
 // ProductRelease represents the structure of product release.yaml
 type ProductRelease struct {
-	UUID        string                    `yaml:"uuid"`
-	Version     string                    `yaml:"version"`
-	CreatedDate string                    `yaml:"createdDate"`
-	ReleaseDate string                    `yaml:"releaseDate"`
-	PreRelease  bool                      `yaml:"preRelease"`
-	Identifiers []OolongIdentifier        `yaml:"identifiers"`
-	Components  []ProductReleaseComponent `yaml:"components"`
+	UUID        string                     `yaml:"uuid"`
+	Version     string                     `yaml:"version"`
+	CreatedDate string                     `yaml:"createdDate"`
+	ReleaseDate string                     `yaml:"releaseDate"`
+	PreRelease  bool                       `yaml:"preRelease"`
+	Identifiers []OolongIdentifier         `yaml:"identifiers"`
+	Components  []ProductReleaseComponent  `yaml:"components"`
 }
 
 // UpdateReason represents the update reason in collection.yaml
@@ -445,17 +445,17 @@ The artifact file is named with its UUID.`,
 
 		// Validate artifact type
 		validTypes := map[string]bool{
-			"ATTESTATION":     true,
-			"BOM":             true,
-			"BUILD_META":      true,
-			"CERTIFICATION":   true,
-			"FORMULATION":     true,
-			"LICENSE":         true,
-			"RELEASE_NOTES":   true,
-			"SECURITY_TXT":    true,
-			"THREAT_MODEL":    true,
+			"ATTESTATION":   true,
+			"BOM":           true,
+			"BUILD_META":    true,
+			"CERTIFICATION": true,
+			"FORMULATION":   true,
+			"LICENSE":       true,
+			"RELEASE_NOTES": true,
+			"SECURITY_TXT":  true,
+			"THREAT_MODEL":  true,
 			"VULNERABILITIES": true,
-			"OTHER":           true,
+			"OTHER":         true,
 		}
 		if !validTypes[artifactType] {
 			fmt.Fprintf(os.Stderr, "Error: invalid artifact type '%s'. Must be one of: ATTESTATION, BOM, BUILD_META, CERTIFICATION, FORMULATION, LICENSE, RELEASE_NOTES, SECURITY_TXT, THREAT_MODEL, VULNERABILITIES, OTHER\n", artifactType)
@@ -973,7 +973,7 @@ func parseOrDefaultDate(dateStr string) string {
 // validateArtifactsExist checks if all artifact UUIDs exist in the artifacts directory
 func validateArtifactsExist(contentDir string, artifactUUIDs []string) error {
 	artifactsDir := filepath.Join(contentDir, "artifacts")
-
+	
 	for _, artifactUUID := range artifactUUIDs {
 		artifactPath := filepath.Join(artifactsDir, artifactUUID+".yaml")
 		if _, err := os.Stat(artifactPath); os.IsNotExist(err) {
