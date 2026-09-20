@@ -8,50 +8,39 @@ import (
 	"testing"
 )
 
-// ---------- canonical uris ----------
+// ---------- local repository matching ----------
 
-func TestCanonicalVcsUriMatchesEveryFormOfOneRepository(t *testing.T) {
-	// This has to agree with the server's canonicaliser exactly: the publish is refused unless the
-	// uri the CLI sends and the board's documents repository reduce to the same string. A git
-	// remote is configured in whatever form its owner chose, and none of those is what an operator
-	// typed into the board.
-	for _, form := range []string{
+func TestSameRepositoryAcrossTheFormsARemoteIsWrittenIn(t *testing.T) {
+	// A local heuristic for picking the right checkout, NOT a mirror of the server's identity
+	// rule: the server resolves whatever uri it is sent to a repository row and compares uuids.
+	// That is why this can be approximate and why --repo exists when it guesses wrong.
+	board := "https://github.com/acme/docs"
+	for _, remote := range []string{
 		"https://github.com/acme/docs",
-		"http://github.com/acme/docs",
 		"https://github.com/acme/docs.git",
 		"git@github.com:acme/docs.git",
-		"git@github.com:acme/docs",
 		"ssh://git@github.com/acme/docs.git",
-		"github:acme/docs",
-		"  github:acme/docs  ",
+		"git://github.com/acme/docs",
+		"https://github.com/acme/docs/",
 	} {
-		if got := canonicalVcsUri(form); got != "github.com/acme/docs" {
-			t.Errorf("%q canonicalised to %q", form, got)
+		if !sameRepository(remote, board) {
+			t.Errorf("%q should match the board's %q", remote, board)
 		}
 	}
 }
 
-func TestCanonicalVcsUriWorksForAnyHost(t *testing.T) {
-	// Nothing here is GitHub-specific; a self-hosted repository has no tracker shorthand and must
-	// not need one.
-	if got := canonicalVcsUri("https://git.example.com/team/docs"); got != "git.example.com/team/docs" {
-		t.Errorf("self-hosted https: %q", got)
-	}
-	if got := canonicalVcsUri("git@git.example.com:team/docs.git"); got != "git.example.com/team/docs" {
-		t.Errorf("self-hosted ssh: %q", got)
-	}
-	// An unknown prefix is not a shorthand and is left to be canonicalised as the uri it looks
-	// like, rather than refused.
-	if got := canonicalVcsUri("mytracker:acme/docs"); got != "mytracker/acme/docs" {
-		t.Errorf("unknown prefix: %q", got)
+func TestSameRepositoryWorksForAnyHost(t *testing.T) {
+	if !sameRepository("git@git.example.com:team/docs.git", "https://git.example.com/team/docs") {
+		t.Error("self-hosted repositories must match across forms")
 	}
 }
 
-func TestScpStyleHostIsNotMistakenForAShorthand(t *testing.T) {
-	// "word colon path" is both an scp remote and a tracker shorthand. The dot in the host tells
-	// them apart; confusing them would mangle every ssh remote an agent has.
-	if got := canonicalVcsUri("git@github.com:acme/docs"); got != "github.com/acme/docs" {
-		t.Errorf("scp form: %q", got)
+func TestDifferentRepositoriesDoNotMatch(t *testing.T) {
+	if sameRepository("https://github.com/acme/code", "https://github.com/acme/docs") {
+		t.Error("different repositories must not match")
+	}
+	if sameRepository("", "https://github.com/acme/docs") {
+		t.Error("an unknown remote must not match anything")
 	}
 }
 
@@ -179,7 +168,7 @@ func TestRepoResolutionAcceptsAMatchingCheckoutInAnyRemoteForm(t *testing.T) {
 	defer func() { docRepoPath = "" }()
 	for _, configured := range []string{
 		"https://github.com/acme/docs",
-		"github:acme/docs",
+		"ssh://git@github.com/acme/docs.git",
 		"git@github.com:acme/docs.git",
 	} {
 		if _, err := resolveDocumentsRepo(nil, configured); err != nil {
@@ -192,7 +181,7 @@ func TestRepoResolutionFallsBackToTheRememberedPath(t *testing.T) {
 	dir := newRepo(t, "https://github.com/acme/docs")
 	docRepoPath = ""
 	st := &agentSessionState{DocumentsRepoPath: dir}
-	got, err := resolveDocumentsRepo(st, "github:acme/docs")
+	got, err := resolveDocumentsRepo(st, "https://github.com/acme/docs")
 	if err != nil || got != dir {
 		t.Errorf("expected the remembered path, got %q (%v)", got, err)
 	}

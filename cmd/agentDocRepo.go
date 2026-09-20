@@ -30,68 +30,46 @@ import (
 // pin a code commit onto a document -- a release claiming a commit that never touched the file it
 // points at.
 
-// canonicalVcsUri reduces every way of writing one repository to a single string.
+// sameRepository decides whether a checkout's remote is the board's documents repository.
 //
-// This mirrors the server's canonicalisation exactly, and it has to: the publish is refused unless
-// the uri the CLI sends and the board's documents repository canonicalise the same way. A git
-// remote is configured in whatever form its owner chose -- https, ssh, with or without .git -- and
-// none of those is the form an operator typed into the board.
+// A LOCAL HEURISTIC, not a contract. The server decides repository identity by row: it resolves
+// whatever uri the CLI sends through the same get-or-create the board used, so equality there is a
+// uuid comparison and this function has no say in it. That is why there is no canonicaliser here
+// mirroring the server's -- keeping two implementations in step across two codebases is a coupling
+// that drifts silently, and did, for ssh:// remotes.
 //
-//	https://github.com/acme/docs      -> github.com/acme/docs
-//	git@github.com:acme/docs.git      -> github.com/acme/docs
-//	github:acme/docs                  -> github.com/acme/docs   (tracker shorthand)
-//	https://git.example.com/team/docs -> git.example.com/team/docs
-func canonicalVcsUri(uri string) string {
+// All this has to do is pick the right checkout on this machine, and `--repo` is the escape hatch
+// when it guesses wrong. So it compares the trailing host-and-path, which is stable across the
+// forms a remote is written in:
+//
+//	https://github.com/acme/docs        -> github.com/acme/docs
+//	git@github.com:acme/docs.git        -> github.com/acme/docs
+//	ssh://git@github.com/acme/docs.git  -> github.com/acme/docs
+func sameRepository(a, b string) bool {
+	na, nb := repoKey(a), repoKey(b)
+	return na != "" && na == nb
+}
+
+// repoKey reduces a remote to host-and-path for the local comparison above.
+func repoKey(uri string) string {
 	s := strings.TrimSpace(uri)
 	if s == "" {
-		return s
+		return ""
 	}
-	s = expandTrackerShorthand(s)
-	s = strings.TrimPrefix(s, "git@")
-	s = strings.TrimSuffix(s, ".git")
-	for _, scheme := range []string{"https://", "http://", "ssh://", "git://"} {
+	for _, scheme := range []string{"https://", "http://", "ssh://", "git://", "git+ssh://"} {
 		s = strings.TrimPrefix(s, scheme)
 	}
-	// Credentials, if the remote carries them. The '@' only counts before the first '/', or a
-	// path containing '@' would be truncated.
+	s = strings.TrimSuffix(s, ".git")
+	// Credentials, when the remote carries them. Only before the first '/', or a path containing
+	// '@' would be truncated.
 	if at := strings.Index(s, "@"); at > 0 {
 		if slash := strings.Index(s, "/"); slash < 0 || at < slash {
 			s = s[at+1:]
 		}
 	}
-	// scp-style host:path becomes host/path. Only the FIRST colon, so a port survives as part of
-	// the host exactly as the server treats it.
+	// scp-style host:path becomes host/path; only the first colon, so a port survives.
 	s = strings.Replace(s, ":", "/", 1)
-	return s
-}
-
-// trackerShorthandHosts accepts boards configured with a tracker reference; it does not restrict
-// which git hosts work. An unknown prefix is simply not a shorthand.
-var trackerShorthandHosts = map[string]string{
-	"github":    "github.com",
-	"gitlab":    "gitlab.com",
-	"bitbucket": "bitbucket.org",
-	"codeberg":  "codeberg.org",
-}
-
-// expandTrackerShorthand turns `<tracker>:owner/repo` into `<host>/owner/repo`.
-//
-// Only when the part before the colon is a known prefix AND has no dot. The dot is what keeps
-// git@github.com:acme/docs out of here: that colon is the scp separator, not a shorthand.
-func expandTrackerShorthand(uri string) string {
-	colon := strings.Index(uri, ":")
-	if colon <= 0 {
-		return uri
-	}
-	prefix := uri[:colon]
-	if strings.ContainsAny(prefix, "./") {
-		return uri
-	}
-	host, ok := trackerShorthandHosts[strings.ToLower(prefix)]
-	if !ok {
-		return uri
-	}
-	return host + "/" + strings.TrimPrefix(uri[colon+1:], "/")
+	return strings.ToLower(strings.Trim(s, "/"))
 }
 
 // git runs a git command in dir and returns trimmed stdout.
@@ -105,13 +83,16 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// gitRemote returns the canonical uri of a checkout's origin, or "".
+// gitRemote returns a checkout's origin as configured, or "".
+//
+// Returned RAW: the server resolves it to a repository row, so the shape it is written in does not
+// matter there, and the local comparison handles the shapes itself.
 func gitRemote(dir string) string {
 	out, err := git(dir, "config", "--get", "remote.origin.url")
 	if err != nil {
 		return ""
 	}
-	return canonicalVcsUri(out)
+	return strings.TrimSpace(out)
 }
 
 // resolveDocumentsRepo finds the checkout the board's documents live in.
@@ -121,11 +102,9 @@ func gitRemote(dir string) string {
 // names what it wanted, because every remaining guess is wrong in a way the agent cannot see:
 // publishing from the code checkout would pin a commit that never touched the document.
 func resolveDocumentsRepo(st *agentSessionState, documentsRepo string) (string, error) {
-	want := canonicalVcsUri(documentsRepo)
-
 	if docRepoPath != "" {
 		have := gitRemote(docRepoPath)
-		if have != "" && have != want {
+		if have != "" && !sameRepository(have, documentsRepo) {
 			return "", fmt.Errorf("--repo %s has remote %s, but this board's documents repository is %s",
 				docRepoPath, have, documentsRepo)
 		}
@@ -133,12 +112,12 @@ func resolveDocumentsRepo(st *agentSessionState, documentsRepo string) (string, 
 	}
 
 	cwd, err := os.Getwd()
-	if err == nil && gitRemote(cwd) == want {
+	if err == nil && sameRepository(gitRemote(cwd), documentsRepo) {
 		return cwd, nil
 	}
 
 	if st != nil && st.DocumentsRepoPath != "" {
-		if gitRemote(st.DocumentsRepoPath) == want {
+		if sameRepository(gitRemote(st.DocumentsRepoPath), documentsRepo) {
 			return st.DocumentsRepoPath, nil
 		}
 	}

@@ -384,7 +384,12 @@ func boardOfSession(st *agentSessionState) (map[string]interface{}, string, erro
 	if board == nil {
 		return nil, "", fmt.Errorf("board %s not found", boardUuid)
 	}
-	repo, _ := board["documentsRepo"].(string)
+	// An object now, not a string: the board names a repository ROW and the uri is the row's.
+	repoObj, _ := board["documentsRepo"].(map[string]interface{})
+	repo := ""
+	if repoObj != nil {
+		repo, _ = repoObj["uri"].(string)
+	}
 	if repo == "" {
 		return nil, "", fmt.Errorf("board %s has no documents repository configured; "+
 			"an operator must set one before documents can be published", boardUuid)
