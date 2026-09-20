@@ -106,11 +106,20 @@ func TestCrossCheckAcceptsTheHeadingFormsTheRolePromptsDescribe(t *testing.T) {
 }
 
 func TestCrossCheckIgnoresOrdinaryProse(t *testing.T) {
-	// A heading that is not a finding must not be read as one, or every document with a "## Summary"
-	// section would be refused.
-	md := "## Summary\n\nWe looked at it.\n\n### F-1: the actual finding\n"
-	if err := crossCheckIds(indexWith("F-1"), md); err != nil {
-		t.Errorf("prose headings should be ignored: %v", err)
+	// A heading that is not a finding must not be read as one. The colon forms matter most: an
+	// earlier rule took any word before a colon as an id, so "## Context: what was reviewed"
+	// became finding "Context" and refused a document that was perfectly correct. Being too
+	// permissive here blocks real work.
+	for _, md := range []string{
+		"## Summary\n\nWe looked at it.\n\n### F-1: the actual finding\n",
+		"## Context: what was reviewed\n\n### F-1: the actual finding\n",
+		"## Scope - files touched\n\n### F-1: the actual finding\n",
+		"# Review: round 2\n\n### F-1: the actual finding\n",
+		"## Note: F-1 is discussed below\n\n### F-1: the actual finding\n",
+	} {
+		if err := crossCheckIds(indexWith("F-1"), md); err != nil {
+			t.Errorf("prose heading should be ignored in %q: %v", md, err)
+		}
 	}
 }
 
@@ -239,6 +248,14 @@ func TestPendingOutputsAreKeyedByTaskAndTakenOnce(t *testing.T) {
 	rememberPendingOutput(st, "task-a", "rel-1") // a retry returns the same release
 	rememberPendingOutput(st, "task-b", "rel-2")
 
+	// Looked up by SESSION UUID, which is what every board command takes and what the orientation
+	// documents. State files are named by client id, so a uuid lookup that did not scan found
+	// nothing and silently behaved as though the session had no state: publish recorded no output
+	// and the sign-off sent none. The original test passed because it used the client id.
+	if len(takePendingOutputsProbe("u-1", "task-b")) != 1 {
+		t.Fatal("state must be findable by session uuid, not only by client session id")
+	}
+
 	got := takePendingOutputs("c-1", "task-a")
 	if len(got) != 1 || got[0] != "rel-1" {
 		t.Fatalf("expected one release for task-a, got %v", got)
@@ -246,7 +263,10 @@ func TestPendingOutputsAreKeyedByTaskAndTakenOnce(t *testing.T) {
 	if again := takePendingOutputs("c-1", "task-a"); len(again) != 0 {
 		t.Errorf("outputs should be taken once, got %v", again)
 	}
-	if other := takePendingOutputs("c-1", "task-b"); len(other) != 1 {
-		t.Errorf("another task's outputs must survive, got %v", other)
-	}
+}
+
+// takePendingOutputsProbe is takePendingOutputs, named so the uuid assertion above reads as what it
+// is: the same call the sign-off path makes, with the id an agent actually holds.
+func takePendingOutputsProbe(sessionRef, taskUuid string) []string {
+	return takePendingOutputs(sessionRef, taskUuid)
 }

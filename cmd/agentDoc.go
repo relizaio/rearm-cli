@@ -51,6 +51,7 @@ var (
 	docLifecycle string
 	docRepoPath  string
 	docDryRun    bool
+	docBoard     string
 )
 
 // taskScopedTypes need a task and carry a findings index; everything else is a document series
@@ -60,10 +61,16 @@ var taskScopedTypes = map[string]bool{
 	"TEST_REPORT":     true,
 }
 
-// findingHeading matches a markdown heading whose text starts with a finding id, e.g.
-// "### F-3: Null dereference" or "## T-1 - flaky under load". The id is everything up to the first
-// colon or dash, which is the convention the role prompts describe.
-var findingHeading = regexp.MustCompile(`(?m)^#{1,6}\s+([A-Za-z][A-Za-z0-9_.-]*?)\s*[:\-–]\s`)
+// findingHeading matches a markdown heading that opens with a finding id, e.g.
+// "### F-3: Null dereference" or "## T-1 - flaky under load".
+//
+// The id shape is deliberately narrow: letters, then a dash, then digits, which is the `F-<n>`
+// convention the role prompts describe. A looser rule -- any word before a colon -- turned
+// ordinary prose headings into phantom ids: "## Context: what was reviewed" became finding
+// "Context", absent from the index, and the publish was refused for a document that was perfectly
+// correct. Being too permissive here blocks real work, while being too strict only means an agent
+// that invents its own id scheme has to pass the heading it used.
+var findingHeading = regexp.MustCompile(`(?m)^#{1,6}\s+([A-Za-z]{1,4}-\d+)\s*[:\-–]\s`)
 
 func sha256File(path string) (string, error) {
 	b, err := os.ReadFile(path)
@@ -171,7 +178,7 @@ func runDocPublish() error {
 		return fmt.Errorf("--component is required for %s, which belongs to a document series", spec)
 	}
 
-	st, _ := readAgentState(docSession)
+	st := lookupAgentState(docSession)
 	board, documentsRepo, err := boardOfSession(st)
 	if err != nil {
 		return err
@@ -335,6 +342,7 @@ func init() {
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
 	f.StringVar(&docLifecycle, "lifecycle", "", "release lifecycle; DRAFT when omitted")
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
+	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
 	f.BoolVar(&docDryRun, "dry-run", false, "print what would be sent and exit")
 
 	agentDocCmd.AddCommand(agentDocPublishCmd)
@@ -346,8 +354,8 @@ func init() {
 // templates are board configuration an operator changes, and a stale local copy would send an agent
 // to write in the wrong place.
 func boardOfSession(st *agentSessionState) (map[string]interface{}, string, error) {
-	boardUuid := ""
-	if docTask != "" {
+	boardUuid := docBoard
+	if boardUuid == "" && docTask != "" {
 		data, err := sendGraphQLRequest(rearm.AgentTaskProgrammatic_Operation,
 			map[string]interface{}{"taskUuid": docTask})
 		if err != nil {
@@ -359,11 +367,12 @@ func boardOfSession(st *agentSessionState) (map[string]interface{}, string, erro
 		}
 		cachedTask = task
 		boardUuid, _ = task["board"].(string)
-	} else if st != nil {
+	} else if boardUuid == "" && st != nil {
 		boardUuid = st.Board
 	}
 	if boardUuid == "" {
-		return nil, "", fmt.Errorf("cannot tell which board this document belongs to; pass --task")
+		return nil, "", fmt.Errorf("cannot tell which board this document belongs to; pass --board " +
+			"(or --task for a per-task document)")
 	}
 
 	data, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation,

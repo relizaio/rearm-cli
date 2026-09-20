@@ -119,6 +119,9 @@ including coordinatorPrompt - assume it.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardCoordinateProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid}, "agentBoardCoordinateProgrammatic")
+		// Recorded so a component-scoped `doc publish`, which names no task, can still tell which
+		// board it belongs to. Only the seat gives a session a board without a task.
+		rememberBoard(taskSessionUuid, args[0])
 	},
 }
 

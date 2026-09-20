@@ -299,6 +299,23 @@ func firstNonEmptyEnv(names ...string) string {
 	return ""
 }
 
+// lookupAgentState finds local state by whichever id the caller has.
+//
+// State files are named by the CLIENT session id and the agent tool's own id, but every board
+// command takes the session UUID -- which names no file. Looking up by uuid alone therefore found
+// nothing and silently behaved as though the session had no local state: `doc publish` recorded no
+// pending output, and the sign-off that followed sent none, which a role declaring a required
+// output then refused. The task commands got this right by scanning; this is that, for both keys.
+func lookupAgentState(ref string) *agentSessionState {
+	if ref == "" {
+		return nil
+	}
+	if st, err := readAgentState(ref); err == nil && st != nil {
+		return st
+	}
+	return findStateBySessionUuid(ref)
+}
+
 // rememberDocumentsRepoPath records where the board's documents checkout was found.
 func rememberDocumentsRepoPath(st *agentSessionState, path string) {
 	if st == nil || path == "" || st.DocumentsRepoPath == path {
@@ -338,8 +355,8 @@ func rememberPendingOutput(st *agentSessionState, taskUuid, releaseUuid string) 
 // again at the next hop on the same task, where the server refuses them for falling outside the
 // assignment window -- a confusing failure a long way from its cause.
 func takePendingOutputs(sessionRef, taskUuid string) []string {
-	st, err := readAgentState(sessionRef)
-	if err != nil || st == nil || st.PendingOutputs == nil {
+	st := lookupAgentState(sessionRef)
+	if st == nil || st.PendingOutputs == nil {
 		return nil
 	}
 	out := st.PendingOutputs[taskUuid]
@@ -359,4 +376,20 @@ func sessionUuidOf(st *agentSessionState, given string) string {
 		return st.SessionUuid
 	}
 	return given
+}
+
+// rememberBoard records the board a session is coordinating.
+//
+// A component-scoped document names no task, so the task read cannot supply the board. Holding the
+// coordinator seat is the one thing that binds a session to a board without one.
+func rememberBoard(sessionRef, boardUuid string) {
+	st := lookupAgentState(sessionRef)
+	if st == nil || boardUuid == "" || st.Board == boardUuid {
+		return
+	}
+	st.Board = boardUuid
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not record the board locally; pass --board on "+
+			"component-scoped publishes: %v\n", err)
+	}
 }
