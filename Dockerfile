@@ -5,6 +5,20 @@ COPY go.mod go.sum ./
 COPY ./internal/imports ./internal/imports
 RUN go build ./internal/imports
 COPY . .
+
+# Formatting and vet gates, in the build so they run on every push -- CI builds
+# this Dockerfile and nothing else checked either.
+#
+# `gofmt -l` prints the files whose formatting differs from gofmt's output, so a
+# non-empty result is the failure. Written as a test on the captured output
+# rather than piping to grep, because gofmt exits 0 whether or not it found
+# anything: a bare `RUN gofmt -l .` would pass silently forever.
+#
+# This is how cmd/bear.go and cmd/oolong.go came to be unformatted in the first
+# place and stayed that way long enough to churn three separate pull requests.
+RUN test -z "$(gofmt -l .)" || { echo "Not gofmt-ed:"; gofmt -l .; echo "Run: gofmt -w ."; exit 1; }
+RUN go vet ./...
+
 RUN go test ./tests
 RUN go version
 ARG TARGETOS
