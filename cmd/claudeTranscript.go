@@ -100,7 +100,10 @@ func parseClaudeTranscript(path string, sinceOffset int64) (*usageDelta, error) 
 	claudeSessionId := ""
 	// Grouped by (model, band). Two parallel maps rather than one struct map because tokens are
 	// accumulated per distinct message id while tool calls are accumulated per row.
-	type groupKey struct{ model, band, tier string }
+	type groupKey struct {
+		model, tier string
+		band        int64
+	}
 	groups := map[groupKey]*usageLine{}
 	seenIds := map[string]bool{}
 	// A message id's group, so later rows of the same message add their tool calls to the same
@@ -171,7 +174,7 @@ func parseClaudeTranscript(path string, sinceOffset int64) (*usageDelta, error) 
 		var key groupKey
 		if first {
 			ctx := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
-			key = groupKey{model: model, band: bandLabel(model, ctx), tier: u.ServiceTier}
+			key = groupKey{model: model, band: bandFloor(model, ctx), tier: u.ServiceTier}
 			idGroup[row.Message.Id] = key
 			seenIds[row.Message.Id] = true
 

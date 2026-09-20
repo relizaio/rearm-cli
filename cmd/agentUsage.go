@@ -92,7 +92,7 @@ type usageDelta struct {
 // server takes turns and tool calls on the REPORT rather than on the line.
 type usageLine struct {
 	Model                   string
-	ContextBand             string
+	ContextBand             int64
 	Requests                int
 	InputTokens             int64
 	OutputTokens            int64
@@ -143,29 +143,21 @@ func bandsForModel(model string) []int64 {
 	return nil
 }
 
-// bandLabel names the band a request context falls in: "0" below the first threshold, then the
-// threshold itself in compact form ("200k"). The label is only an identifier the server groups on;
-// the authoritative numbers travel as max/min request context on the line.
-func bandLabel(model string, contextTokens int64) string {
-	bands := bandsForModel(model)
-	label := "0"
-	for _, b := range bands {
+// bandFloor is the floor of the pricing band a request context falls in: 0 below the first
+// threshold, then the threshold itself.
+//
+// A number, not a label. The server keys usage rows on it, and a formatted label put spelling into
+// that key -- "200k" and "200000" would have been two bands -- while making every comparison a
+// string match on something inherently ordered. A floor sorts, and compares directly against a
+// pricing entry's contextAboveTokens.
+func bandFloor(model string, contextTokens int64) int64 {
+	var floor int64
+	for _, b := range bandsForModel(model) {
 		if contextTokens >= b {
-			label = compactTokens(b)
+			floor = b
 		}
 	}
-	return label
-}
-
-func compactTokens(n int64) string {
-	switch {
-	case n >= 1_000_000 && n%1_000_000 == 0:
-		return fmt.Sprintf("%dm", n/1_000_000)
-	case n >= 1000 && n%1000 == 0:
-		return fmt.Sprintf("%dk", n/1000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
+	return floor
 }
 
 // chunkLines splits a backfill into reports of at most maxRequests requests each.
@@ -496,15 +488,15 @@ func runUsageExplicit(args []string) {
 	}
 	if requests == 1 {
 		// One request, so the window's totals ARE that request's context and the band is real.
-		line["contextBand"] = bandLabel(usageModel, windowContext)
+		line["contextBand"] = bandFloor(usageModel, windowContext)
 		line["maxRequestContextTokens"] = windowContext
 		line["minRequestContextTokens"] = windowContext
 	} else {
 		// Several requests summed into one line: the sum is not any request's context, and
 		// reporting it as the max would trip long-context pricing on a window of many small
-		// requests that never individually came near the threshold. Sending nothing is honest --
+		// requests that never individually came near the threshold. The base band is honest --
 		// the server prices under the base entry and knows the band was not measured.
-		line["contextBand"] = "0"
+		line["contextBand"] = int64(0)
 	}
 	if usageHosting != "" {
 		line["hosting"] = strings.ToUpper(usageHosting)

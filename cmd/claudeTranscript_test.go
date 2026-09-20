@@ -86,12 +86,12 @@ func TestModelsAndBandsSplitIntoSeparateLines(t *testing.T) {
 	}
 	var banded *usageLine
 	for i := range d.Lines {
-		if d.Lines[i].ContextBand == "200k" {
+		if d.Lines[i].ContextBand == 200000 {
 			banded = &d.Lines[i]
 		}
 	}
 	if banded == nil {
-		t.Fatalf("no line landed in the 200k band: %+v", d.Lines)
+		t.Fatalf("no line landed in the 200000 band: %+v", d.Lines)
 	}
 	// The band is chosen on the FULL request context, not on input_tokens: a cached session has a
 	// tiny input_tokens and a huge context, and pricing follows the context.
@@ -240,7 +240,7 @@ func TestLineOrderIsStableSoARetryIsIdentical(t *testing.T) {
 		}
 		var order []string
 		for _, l := range d.Lines {
-			order = append(order, l.Model+"/"+l.ContextBand)
+			order = append(order, fmt.Sprintf("%s/%d", l.Model, l.ContextBand))
 		}
 		if i == 0 {
 			first = order
