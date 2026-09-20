@@ -63,6 +63,7 @@ var (
 	taskReturnDesc   string
 	taskChildrenJson string
 	taskPrUrl        string
+	taskOutputs      []string
 	taskStatusFilter string
 	taskLockReason   string
 	taskDependsOn    []string
@@ -261,6 +262,11 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if taskNote != "" {
 			variables["note"] = taskNote
 		}
+		// Documents published during this hop. Sent from local state when the flag is absent, so
+		// the ordinary flow is publish then sign off with no uuids copied by hand.
+		if outputs := resolveOutputs(taskSessionUuid, args[0]); len(outputs) > 0 {
+			variables["outputs"] = outputs
+		}
 		runGql(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
 		// The hop is closed; usage after this point is not this task's.
 		clearCurrentTask(taskSessionUuid, args[0])
@@ -276,6 +282,11 @@ var agentTaskReturnCmd = &cobra.Command{
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskReturnReason}
 		if taskReturnDesc != "" {
 			variables["description"] = taskReturnDesc
+		}
+		// Nothing is required of a return, but partial findings from an aborted hop are worth far
+		// more to the next agent than a free-text reason.
+		if outputs := resolveOutputs(taskSessionUuid, args[0]); len(outputs) > 0 {
+			variables["outputs"] = outputs
 		}
 		runGql(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic")
 		clearCurrentTask(taskSessionUuid, args[0])
@@ -461,7 +472,11 @@ func init() {
 	}
 	agentTaskSignoffCmd.PersistentFlags().StringVar(&taskOutcome, "outcome", "", "PASSED | REJECTED — required")
 	agentTaskSignoffCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Sign-off note")
+	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
+		"Document releases produced by this hop; defaults to what `doc publish` recorded")
 	_ = agentTaskSignoffCmd.MarkPersistentFlagRequired("outcome")
+	agentTaskReturnCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
+		"Document releases produced before returning; defaults to what `doc publish` recorded")
 	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnReason, "reason", "", "Return reason enum — required")
 	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnDesc, "description", "", "Free-text detail (required for OTHER)")
 	_ = agentTaskReturnCmd.MarkPersistentFlagRequired("reason")
@@ -526,4 +541,17 @@ func init() {
 
 	agentCmd.AddCommand(agentBoardCmd)
 	agentCmd.AddCommand(agentTaskCmd)
+}
+
+// resolveOutputs picks the document releases to send with a sign-off or return.
+//
+// An explicit --outputs wins; otherwise the ones `doc publish` recorded for this task are taken and
+// forgotten. Taking rather than reading matters: the hop is closing, and leaving them would offer
+// the same documents at the next hop on the same task, where the server refuses them for falling
+// outside the assignment window.
+func resolveOutputs(sessionUuid, taskUuid string) []string {
+	if len(taskOutputs) > 0 {
+		return taskOutputs
+	}
+	return takePendingOutputs(sessionUuid, taskUuid)
 }

@@ -465,6 +465,7 @@ func init() {
 	// Claude Code specifics live one level down, so `rearm agent claude ...` is clearly one
 	// agent's integration rather than something every agent is expected to have.
 	agentCmd.AddCommand(agentClaudeCmd)
+	agentCmd.AddCommand(agentDocCmd)
 	agentReleaseCmd.AddCommand(agentReleaseShowCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	agentCmd.AddCommand(agentReleaseCmd)

@@ -57,6 +57,15 @@ type agentSessionState struct {
 	// repeated on every turn for the rest of the session.
 	TruncationWarned bool   `json:"truncationWarned,omitempty"`
 	Board            string `json:"board,omitempty"`
+	// Where this session last found the board's documents repository, so an agent that passed
+	// --repo once does not have to keep passing it.
+	DocumentsRepoPath string `json:"documentsRepoPath,omitempty"`
+	// Document releases published during the current hop, keyed by TASK uuid, so `task signoff`
+	// can send them without the agent copying uuids by hand.
+	//
+	// Keyed by task and not a flat list: a session may work several tasks in its life, and
+	// offering one hop's document as another hop's output is exactly what the server refuses.
+	PendingOutputs map[string][]string `json:"pendingOutputs,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling
@@ -288,4 +297,66 @@ func firstNonEmptyEnv(names ...string) string {
 		}
 	}
 	return ""
+}
+
+// rememberDocumentsRepoPath records where the board's documents checkout was found.
+func rememberDocumentsRepoPath(st *agentSessionState, path string) {
+	if st == nil || path == "" || st.DocumentsRepoPath == path {
+		return
+	}
+	st.DocumentsRepoPath = path
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not remember the documents repository path: %v\n", err)
+	}
+}
+
+// rememberPendingOutput records a document release as an output of the current hop on a task.
+func rememberPendingOutput(st *agentSessionState, taskUuid, releaseUuid string) {
+	if st == nil || taskUuid == "" || releaseUuid == "" {
+		return
+	}
+	if st.PendingOutputs == nil {
+		st.PendingOutputs = map[string][]string{}
+	}
+	for _, existing := range st.PendingOutputs[taskUuid] {
+		if existing == releaseUuid {
+			// A re-publish returns the SAME release, by design. Recording it twice would send a
+			// duplicate uuid at sign-off.
+			return
+		}
+	}
+	st.PendingOutputs[taskUuid] = append(st.PendingOutputs[taskUuid], releaseUuid)
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not record the published document locally; "+
+			"pass --outputs %s at sign-off: %v\n", releaseUuid, err)
+	}
+}
+
+// takePendingOutputs returns what this session published for a task, and forgets them.
+//
+// Taken rather than read: the hop is closing. Leaving them behind would offer the same documents
+// again at the next hop on the same task, where the server refuses them for falling outside the
+// assignment window -- a confusing failure a long way from its cause.
+func takePendingOutputs(sessionRef, taskUuid string) []string {
+	st, err := readAgentState(sessionRef)
+	if err != nil || st == nil || st.PendingOutputs == nil {
+		return nil
+	}
+	out := st.PendingOutputs[taskUuid]
+	if len(out) == 0 {
+		return nil
+	}
+	delete(st.PendingOutputs, taskUuid)
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not clear the recorded outputs: %v\n", err)
+	}
+	return out
+}
+
+// sessionUuidOf prefers the uuid recorded in local state, falling back to what the caller passed.
+func sessionUuidOf(st *agentSessionState, given string) string {
+	if st != nil && st.SessionUuid != "" {
+		return st.SessionUuid
+	}
+	return given
 }
