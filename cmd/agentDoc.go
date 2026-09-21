@@ -356,7 +356,6 @@ func runDocPublish() error {
 		defer rememberDocumentsRepoPath(st, repoPath)
 	}
 	return sendDocPublish(st, input)
-	return nil
 }
 
 // resolveTemplatePath fills the board's path template for this type and the task's next round.
