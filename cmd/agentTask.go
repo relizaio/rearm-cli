@@ -110,6 +110,23 @@ var agentBoardShowCmd = &cobra.Command{
 	},
 }
 
+var agentBoardSnapshotCmd = &cobra.Command{
+	Use:   "snapshot <board-uuid>",
+	Short: "Every task on the board: who holds it, what it waits on, its documents and questions",
+	Long: `Returns the whole board in one call: each task with its holder, its
+dependencies WITH their statuses, the newest release of each document type,
+and the question it is waiting on if any.
+
+Use this instead of listing tasks and then asking about each one. Nothing in
+progress appears here -- a hop has no outputs until it signs off -- so what you
+see is what has actually been published.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(rearm.AgentBoardSnapshotProgrammatic_Operation,
+			map[string]interface{}{"boardUuid": args[0]}, "agentBoardSnapshotProgrammatic")
+	},
+}
+
 var agentBoardCoordinateCmd = &cobra.Command{
 	Use:   "coordinate <board-uuid>",
 	Short: "Claim the board's singleton coordinator seat for the calling session",
@@ -518,6 +535,7 @@ func init() {
 	agentBoardRoleconfigCmd.AddCommand(agentBoardRoleconfigListCmd)
 	agentBoardCmd.AddCommand(agentBoardListCmd)
 	agentBoardCmd.AddCommand(agentBoardShowCmd)
+	agentBoardCmd.AddCommand(agentBoardSnapshotCmd)
 	agentBoardCmd.AddCommand(agentBoardCoordinateCmd)
 	agentBoardCmd.AddCommand(agentBoardLockCmd)
 	agentBoardCmd.AddCommand(agentBoardUnlockCmd)

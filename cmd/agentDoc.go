@@ -42,16 +42,17 @@ import (
 // has nothing to hand over. So this reports errors and exits non-zero.
 
 var (
-	docSession   string
-	docType      string
-	docTask      string
-	docComponent string
-	docFile      string
-	docIndexFile string
-	docLifecycle string
-	docRepoPath  string
-	docDryRun    bool
-	docBoard     string
+	docSession       string
+	docType          string
+	docTask          string
+	docComponent     string
+	docFile          string
+	docIndexFile     string
+	docIndexOnlyFlag bool
+	docLifecycle     string
+	docRepoPath      string
+	docDryRun        bool
+	docBoard         string
 )
 
 // taskScopedTypes need a task and carry a findings index; everything else is a document series
@@ -163,6 +164,77 @@ opening a new round.`,
 	},
 }
 
+// docIndexOnly reports whether this is an index-alone publish: an --index with no --file, and no
+// path template to fall back on.
+//
+// Recognised by what was supplied rather than by a flag, so a caller cannot claim one shape and
+// send the other -- the server decides the same way.
+// sendDocPublish sends the publish and records what it produced.
+//
+// Shared by both shapes so the pending-output bookkeeping cannot drift between them: an
+// index-only round is an output of the hop exactly as a markdown round is, and a sign-off that
+// could not offer it would lose the questions it just asked.
+func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
+	if docDryRun {
+		out, _ := json.MarshalIndent(input, "", "  ")
+		fmt.Println(string(out))
+		return nil
+	}
+	data, err := sendGraphQLRequest(rearm.AgentDocumentPublishProgrammatic_Operation,
+		map[string]interface{}{"input": input})
+	if err != nil {
+		printGqlError(err)
+		os.Exit(1)
+	}
+	release, _ := data["agentDocumentPublishProgrammatic"].(map[string]interface{})
+	releaseUuid, _ := release["uuid"].(string)
+	// Remembered so `task signoff` can send it without the agent copying a uuid by hand. Recorded
+	// per task, because a session may work several tasks in its life and one hop's outputs must
+	// never be offered as another's.
+	if releaseUuid != "" && docTask != "" {
+		rememberPendingOutput(st, docTask, releaseUuid)
+	}
+	emitJson(release)
+	return nil
+}
+
+func docIndexOnly() bool {
+	return docIndexOnlyFlag && docIndexFile != ""
+}
+
+// publishIndexOnly sends an index with no file, commit or repository.
+//
+// The index is read from the working directory rather than from the documents repository: it was
+// never committed, because there is nothing to commit it alongside. Idempotency is the index
+// itself, so a retry after a dropped response returns the round the first attempt created.
+func publishIndexOnly(st *agentSessionState) error {
+	raw, err := os.ReadFile(docIndexFile)
+	if err != nil {
+		return fmt.Errorf("could not read the index %s: %w", docIndexFile, err)
+	}
+	var idx map[string]interface{}
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		return fmt.Errorf("the index %s is not valid JSON: %w", docIndexFile, err)
+	}
+	spec := strings.ToUpper(strings.ReplaceAll(docType, "-", "_"))
+	if about, ok := idx["about"].(map[string]interface{}); !ok || about["specification"] == nil {
+		if spec == "QUESTIONS" {
+			return fmt.Errorf("a QUESTIONS index needs \"about\": {\"specification\": ...}, which is what" +
+				" sends it to the role that produces that input")
+		}
+	}
+	input := map[string]interface{}{
+		"sessionUuid":   sessionUuidOf(st, docSession),
+		"specification": spec,
+		"index":         idx,
+		"taskUuid":      docTask,
+	}
+	if docLifecycle != "" {
+		input["lifecycle"] = strings.ToUpper(docLifecycle)
+	}
+	return sendDocPublish(st, input)
+}
+
 func runDocPublish() error {
 	if docSession == "" {
 		return fmt.Errorf("--session is required")
@@ -179,6 +251,14 @@ func runDocPublish() error {
 	}
 
 	st := lookupAgentState(docSession)
+
+	// An index with no markdown: the items ARE the document. Usual for QUESTIONS, where forcing a
+	// file would mean committing an empty page to satisfy a check. Nothing below this touches the
+	// documents repository -- there is no file to commit, no digest to take and no commit to pin.
+	if docIndexOnly() {
+		return publishIndexOnly(st)
+	}
+
 	board, documentsRepo, err := boardOfSession(st)
 	if err != nil {
 		return err
@@ -272,31 +352,10 @@ func runDocPublish() error {
 		input["indexDigest"] = indexDigest
 	}
 
-	if docDryRun {
-		out, _ := json.MarshalIndent(input, "", "  ")
-		fmt.Println(string(out))
-		return nil
-	}
-
-	data, err := sendGraphQLRequest(rearm.AgentDocumentPublishProgrammatic_Operation,
-		map[string]interface{}{"input": input})
-	if err != nil {
-		printGqlError(err)
-		os.Exit(1)
-	}
-	release, _ := data["agentDocumentPublishProgrammatic"].(map[string]interface{})
-	releaseUuid, _ := release["uuid"].(string)
-
-	// Remembered so `task signoff` can send it without the agent copying a uuid by hand. Recorded
-	// per task, because a session may work several tasks in its life and one hop's outputs must
-	// never be offered as another's.
-	if releaseUuid != "" && docTask != "" {
-		rememberPendingOutput(st, docTask, releaseUuid)
-	}
 	if repoPath != "" {
-		rememberDocumentsRepoPath(st, repoPath)
+		defer rememberDocumentsRepoPath(st, repoPath)
 	}
-	emitJson(release)
+	return sendDocPublish(st, input)
 	return nil
 }
 
@@ -340,6 +399,10 @@ func init() {
 	f.StringVar(&docComponent, "component", "", "document series (component-scoped types)")
 	f.StringVar(&docFile, "file", "", "repo-relative path; resolved from the board's template when omitted")
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
+	f.BoolVar(&docIndexOnlyFlag, "index-only", false,
+		"publish the index alone, with no file: the items ARE the document, which is the usual"+
+			" shape for QUESTIONS. --index is then a path in the current directory, not in the"+
+			" documents repository, and nothing is committed")
 	f.StringVar(&docLifecycle, "lifecycle", "", "release lifecycle; DRAFT when omitted")
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
 	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
