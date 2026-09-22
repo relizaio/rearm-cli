@@ -101,10 +101,11 @@ The `uuid` and `clientSessionId` are what the agent will reference
 later (uuid for the `ReARM-Agent` trailer's target session, and
 `clientSessionId` for the `ReARM-Agentic-Session` trailer value).
 
-**Idempotency.** Calling `init` twice with the same
-`--client-session-id` while an OPEN session for that id exists
-returns the existing row instead of inserting a duplicate —
-typical agent crash-recovery shape.
+**Uniqueness.** A `--client-session-id` is unique forever within
+the agent. `init` refuses an id already used by any session — OPEN,
+CLOSED or BLOCKED — and the error names that session. After a crash,
+keep using the session you already have rather than re-running
+`init`; after a BLOCKED or CLOSED session, pick a fresh id.
 
 ### `rearm agent session update-meta <session-uuid>`
 
@@ -131,8 +132,8 @@ rearm agent session touch "01f8d9c3-…"
 ### `rearm agent session close <session-uuid>`
 
 Closes the session. Terminal — a closed session cannot be
-re-opened; a subsequent `init` with the same `--client-session-id`
-creates a fresh row. Idempotent on already-closed sessions.
+re-opened, and its `--client-session-id` cannot be reused: a new
+`init` needs a fresh id. Idempotent on already-closed sessions.
 
 ```bash
 rearm agent session close "01f8d9c3-…"

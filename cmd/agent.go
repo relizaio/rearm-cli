@@ -73,9 +73,11 @@ calls with the same --agent-name resolve to the same agent row.
 
 The session's clientSessionId is what the commit trailer
 (ReARM-Agentic-Session:) references later; if --client-session-id is
-omitted, the server defaults it to the new row's uuid. Calling init
-twice with the same --client-session-id on an OPEN session is
-idempotent — the existing session is returned.
+omitted, the server defaults it to the new row's uuid. A
+--client-session-id is unique forever within the agent: init refuses
+one already used by any session, OPEN, CLOSED or BLOCKED, and names
+that session. To retry after a crash, keep using the session you have;
+after a BLOCKED or CLOSED one, pick a fresh id.
 
 Under Claude Code the session also records Claude Code's own session id
 ($CLAUDE_CODE_SESSION_ID), so it can be traced back to the conversation.

@@ -98,24 +98,31 @@ func resolveProviderSession(o providerSessionOpts) (map[string]interface{}, erro
 		}
 		return nil, nil
 	}
-	provider := strings.TrimSpace(o.provider)
+	provider := strings.ToLower(strings.TrimSpace(o.provider))
 	id := strings.TrimSpace(o.id)
 	remote := strings.TrimSpace(o.remoteId)
-	if id == "" {
+	// Claude Code's fallbacks only speak for Claude Code. Under Claude Code, --provider cursor
+	// with no id would otherwise send Claude's id labelled as Cursor's.
+	claudeOrUnnamed := provider == "" || provider == claudeCodeProvider
+	if id == "" && claudeOrUnnamed {
 		id = strings.TrimSpace(o.legacyClaudeId)
-		if id != "" && provider == "" {
-			provider = claudeCodeProvider
-		}
 	}
-	if id == "" {
+	if id == "" && claudeOrUnnamed {
 		// The older CLAUDE_SESSION_ID spelling is kept for the same reason recordInitState keeps
 		// it: an agent that already exports it should not silently lose the mapping.
 		id = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
-		if id != "" && provider == "" {
-			provider = claudeCodeProvider
-		}
+	}
+	if id != "" && provider == "" && o.id == "" {
+		// Found by a Claude Code fallback, so it is Claude Code's.
+		provider = claudeCodeProvider
 	}
 	if id == "" {
+		if provider != "" {
+			// The mirror of an id with no tool: a tool named with nothing to attribute to it is
+			// a mistake, not an absence, so it is not left to --require-provider-session.
+			return nil, fmt.Errorf("--provider %s needs --provider-session-id: there is no id to "+
+				"report for it", provider)
+		}
 		if remote != "" {
 			return nil, errors.New("--provider-remote-session-id needs the local id it belongs to: " +
 				"pass --provider-session-id as well")
