@@ -68,6 +68,22 @@ Optional flags:
   format. Defaults to the new row uuid when omitted.
 - `--title` — informational metadata for the dashboard.
 
+**Provider session.** The session also records the agent tool's own
+id for the conversation, so it can be traced back to it:
+
+- Under Claude Code this is automatic: `$CLAUDE_CODE_SESSION_ID` is
+  sent as provider `claude-code`.
+- `--provider <tool> --provider-session-id <id>` — report it
+  explicitly, for another tool or to override the environment.
+- `--provider-remote-session-id <id>` — the id a hosted surface of the
+  tool knows the session by (Claude Code's bridge `session_…`). The CLI
+  does not look for it; the agent passes it when it has one.
+- `--no-provider-session` — opt out.
+- `--require-provider-session` — fail when no id can be found. Without
+  it, a missing id is not an error and the session opens without one.
+- `--claude-session-id` — deprecated alias for
+  `--provider-session-id` with `--provider claude-code`.
+
 Output (JSON):
 
 ```json
@@ -89,6 +105,19 @@ later (uuid for the `ReARM-Agent` trailer's target session, and
 `--client-session-id` while an OPEN session for that id exists
 returns the existing row instead of inserting a duplicate —
 typical agent crash-recovery shape.
+
+### `rearm agent session update-meta <session-uuid>`
+
+Updates an open session's `--title`, and reports the provider session
+the same way `init` does (same five flags). Use it when a new
+conversation resumes work on an existing session: provider sessions
+append, so the session keeps the id of the conversation that opened it
+too.
+
+```bash
+rearm agent session update-meta "01f8d9c3-…" \
+    --provider-remote-session-id "session_01…"
+```
 
 ### `rearm agent session touch <session-uuid>`
 

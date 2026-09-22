@@ -75,8 +75,21 @@ The session's clientSessionId is what the commit trailer
 (ReARM-Agentic-Session:) references later; if --client-session-id is
 omitted, the server defaults it to the new row's uuid. Calling init
 twice with the same --client-session-id on an OPEN session is
-idempotent — the existing session is returned.`,
+idempotent — the existing session is returned.
+
+Under Claude Code the session also records Claude Code's own session id
+($CLAUDE_CODE_SESSION_ID), so it can be traced back to the conversation.
+Pass --provider-remote-session-id for a hosted (bridge) session id,
+--no-provider-session to opt out, or --require-provider-session to fail
+when no id can be found.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Resolved before anything is sent, so --require-provider-session refuses without
+		// opening a session it would then have to explain.
+		ps, err := resolveProviderSession(currentProviderSessionOpts())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "rearm:", err)
+			os.Exit(1)
+		}
 		query := rearm.SessionInitializeProgrammatic_Operation
 		input := map[string]interface{}{
 			"agentName": agentName,
@@ -101,6 +114,9 @@ idempotent — the existing session is returned.`,
 		}
 		if sessionTitle != "" {
 			input["title"] = sessionTitle
+		}
+		if ps != nil {
+			input["providerSession"] = ps
 		}
 		variables := map[string]interface{}{"sessionInit": input}
 		data, err := sendGraphQLRequest(query, variables)
@@ -137,6 +153,9 @@ func recordInitState(session interface{}) {
 		clientId = uuid
 	}
 	claudeId := claudeSessionId
+	if claudeId == "" && providerSessionId != "" && (providerName == "" || providerName == claudeCodeProvider) {
+		claudeId = providerSessionId
+	}
 	if claudeId == "" {
 		// Claude Code exports its session id to what it runs, so an agent that did not pass the
 		// flag still gets the mapping for free. The name was checked against a running instance
@@ -432,7 +451,7 @@ func init() {
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentIconKind, "agent-icon", "", "Dashboard glyph for the agent — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
-	agentSessionInitCmd.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Claude Code's own session id, so usage hooks can map it without a server call (defaults to $CLAUDE_SESSION_ID)")
+	agentSessionInitCmd.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Deprecated alias for --provider-session-id with --provider claude-code (defaults to $CLAUDE_CODE_SESSION_ID)")
 	agentSessionInitCmd.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
