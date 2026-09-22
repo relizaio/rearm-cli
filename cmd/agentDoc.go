@@ -251,8 +251,13 @@ func runDocPublish() error {
 	if taskScopedTypes[spec] && docTask == "" {
 		return fmt.Errorf("--task is required for %s, which is a per-task document", spec)
 	}
-	if !taskScopedTypes[spec] && docComponent == "" {
-		return fmt.Errorf("--component is required for %s, which belongs to a document series", spec)
+	// Only when there is no board context to resolve it from. A component-scoped document
+	// published against a task, or against a board, hangs off that board's target: the server
+	// finds the series or creates it. Demanding the uuid regardless meant an architect could not
+	// publish the design it had just been asked about without first going to look the series up.
+	if !taskScopedTypes[spec] && docComponent == "" && docTask == "" && docBoard == "" {
+		return fmt.Errorf("--component is required for %s outside a board: it belongs to a document"+
+			" series, and with no --task or --board there is nothing to resolve the series from", spec)
 	}
 
 	st := lookupAgentState(docSession)
