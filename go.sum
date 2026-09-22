@@ -82,6 +82,10 @@ github.com/relizaio/rearm-client-go v0.1.7-0.20260922205517-03b6aa73795d h1:PBfs
 github.com/relizaio/rearm-client-go v0.1.7-0.20260922205517-03b6aa73795d/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
 github.com/relizaio/rearm-client-go v0.1.7-0.20260922210035-dfcd704a1201 h1:Q+sb/Kr8fGQ6h+kc/yhRNLLUImZf6YIeCGuiJw2USX8=
 github.com/relizaio/rearm-client-go v0.1.7-0.20260922210035-dfcd704a1201/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260922232242-03f600671eff h1:QQsU3O0K4yo//8YM2Pdv7E5RhOwoJmcSBM0qul8AfE0=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260922232242-03f600671eff/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260922233545-9669a6843887 h1:6JhhkYA49ojefHkBspj0F2o7sunQ7zaI577zNaKDAm0=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260922233545-9669a6843887/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
