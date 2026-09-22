@@ -60,6 +60,11 @@ var (
 var taskScopedTypes = map[string]bool{
 	"REVIEW_FINDINGS": true,
 	"TEST_REPORT":     true,
+	// QUESTIONS is task-scoped like the other two -- it is in the server's INDEXED_TYPES and its
+	// items are always about one task. Left out, every `doc publish --type QUESTIONS` was refused
+	// here with "--component is required", a flag a task-scoped type has nothing to put in, so an
+	// agent could not ask a question through the CLI at all.
+	"QUESTIONS": true,
 }
 
 // findingHeading matches a markdown heading that opens with a finding id, e.g.
