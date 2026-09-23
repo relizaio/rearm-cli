@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/relizaio/rearm-client-go"
@@ -67,6 +68,7 @@ var (
 	taskPrUrl        string
 	taskOutputs      []string
 	taskRoles        []string
+	taskStrength     string
 	taskStatusFilter string
 	taskLockReason   string
 	taskDependsOn    []string
@@ -287,6 +289,21 @@ for this session, so a following 'task assign' passes the same roles.`,
 	},
 }
 
+// parseRequiredStrength reads --required-strength: "none" clears (nil), anything else must be a
+// number. Precision is the server's to enforce, so a third decimal is refused with its message
+// rather than rounded here.
+func parseRequiredStrength(v string) (interface{}, error) {
+	t := strings.TrimSpace(v)
+	if strings.EqualFold(t, "none") {
+		return nil, nil
+	}
+	f, err := strconv.ParseFloat(t, 64)
+	if err != nil {
+		return nil, fmt.Errorf("--required-strength must be a number or \"none\", got %q", v)
+	}
+	return f, nil
+}
+
 // requireRolesIfGiven returns the declared roles, refusing a --role that was passed but is empty.
 // `--role "$ROLE"` with ROLE unset would otherwise read as no declaration at all, and an agent
 // that meant to restrict itself would be offered every role.
@@ -379,7 +396,12 @@ var agentTaskAuthorizeCmd = &cobra.Command{
 	Long: `Queues the task for a role. --depends-on (comma-separated task uuids)
 replaces the dependency list: the task stays queued but ineligible for
 assignment until every dependency is COMPLETED - lay out the whole
-plan up front and the server releases work as dependencies land.`,
+plan up front and the server releases work as dependencies land.
+
+--required-strength sets the model strength this task needs, overriding
+its role's floor, for work harder (or easier) than the role usually is:
+a number with at most two decimals, or "none" to clear it. Left out, the
+task's requirement is unchanged.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -388,6 +410,16 @@ plan up front and the server releases work as dependencies land.`,
 		}
 		if len(taskDependsOn) > 0 {
 			variables["dependsOn"] = taskDependsOn
+		}
+		if cmd.Flags().Changed("required-strength") {
+			strength, err := parseRequiredStrength(taskStrength)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "rearm:", err)
+				os.Exit(1)
+			}
+			// nil is sent as an explicit null, which the server reads as "clear"; leaving the
+			// variable out is what leaves the requirement alone.
+			variables["requiredStrength"] = strength
 		}
 		runGql(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
 	},
@@ -567,6 +599,8 @@ func init() {
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskRole, "role", "", "Role to queue the task for — required")
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order (lowest served first)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringSliceVar(&taskDependsOn, "depends-on", nil, "Task uuids that must be COMPLETED before this one is assignable (replaces the list)")
+	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskStrength, "required-strength", "",
+		"Model strength this task needs, overriding its role's floor; \"none\" clears it")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
