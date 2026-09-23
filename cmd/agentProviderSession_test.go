@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"errors"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +107,23 @@ func TestStrictFailureNamesTheWayOut(t *testing.T) {
 	_, err := resolveProviderSession(providerSessionOpts{require: true})
 	if !errors.Is(err, errNoProviderSession) {
 		t.Fatalf("want errNoProviderSession, got %v", err)
+	}
+}
+
+func TestSessionDeviceInput(t *testing.T) {
+	d := sessionDeviceInput(false)
+	for _, k := range []string{"os", "timeZone", "client"} {
+		if v, _ := d[k].(string); v == "" {
+			t.Fatalf("want %s reported, got %v", k, d)
+		}
+	}
+	if !strings.HasPrefix(d["client"].(string), "rearm-cli ") {
+		t.Fatalf("client should name the CLI, got %q", d["client"])
+	}
+	if h, err := os.Hostname(); err == nil && h != "" && d["hostname"] != h {
+		t.Fatalf("want hostname %q, got %v", h, d["hostname"])
+	}
+	if sessionDeviceInput(true) != nil {
+		t.Fatal("--no-device-info must send nothing")
 	}
 }
