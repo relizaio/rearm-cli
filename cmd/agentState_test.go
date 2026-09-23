@@ -164,8 +164,8 @@ func TestParseRequiredStrength(t *testing.T) {
 	if v, err := parseRequiredStrength("4.5"); err != nil || v != 4.5 {
 		t.Fatalf("got %v %v", v, err)
 	}
-	if v, err := parseRequiredStrength(" None "); err != nil || v != nil {
-		t.Fatalf("none must clear, got %v %v", v, err)
+	if _, err := parseRequiredStrength("none"); err == nil {
+		t.Fatal("the coordinator cannot clear a requirement, so none is not a value")
 	}
 	if _, err := parseRequiredStrength("strong"); err == nil {
 		t.Fatal("want an error for a non-number")

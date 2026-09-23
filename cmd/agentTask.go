@@ -289,17 +289,13 @@ for this session, so a following 'task assign' passes the same roles.`,
 	},
 }
 
-// parseRequiredStrength reads --required-strength: "none" clears (nil), anything else must be a
-// number. Precision is the server's to enforce, so a third decimal is refused with its message
-// rather than rounded here.
-func parseRequiredStrength(v string) (interface{}, error) {
-	t := strings.TrimSpace(v)
-	if strings.EqualFold(t, "none") {
-		return nil, nil
-	}
-	f, err := strconv.ParseFloat(t, 64)
+// parseRequiredStrength reads --required-strength as a number. The coordinator can only raise a
+// requirement, so there is no way to clear one here. Precision and the raise-only rule are the
+// server's to enforce, so their refusals arrive with the server's message.
+func parseRequiredStrength(v string) (float64, error) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
 	if err != nil {
-		return nil, fmt.Errorf("--required-strength must be a number or \"none\", got %q", v)
+		return 0, fmt.Errorf("--required-strength must be a number, got %q", v)
 	}
 	return f, nil
 }
@@ -398,10 +394,11 @@ replaces the dependency list: the task stays queued but ineligible for
 assignment until every dependency is COMPLETED - lay out the whole
 plan up front and the server releases work as dependencies land.
 
---required-strength sets the model strength this task needs, overriding
-its role's floor, for work harder (or easier) than the role usually is:
-a number with at most two decimals, or "none" to clear it. Left out, the
-task's requirement is unchanged.`,
+--required-strength raises the model strength this task needs above what
+its role usually asks, for work harder than the role usually is: a number
+with at most two decimals. Raise only -- the server refuses a value below
+the task's current requirement (its own, else the role's floor). To lower
+or clear one, ask the operator. Left out, the requirement is unchanged.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -417,8 +414,6 @@ task's requirement is unchanged.`,
 				fmt.Fprintln(os.Stderr, "rearm:", err)
 				os.Exit(1)
 			}
-			// nil is sent as an explicit null, which the server reads as "clear"; leaving the
-			// variable out is what leaves the requirement alone.
 			variables["requiredStrength"] = strength
 		}
 		runGql(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
@@ -600,7 +595,7 @@ func init() {
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order (lowest served first)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringSliceVar(&taskDependsOn, "depends-on", nil, "Task uuids that must be COMPLETED before this one is assignable (replaces the list)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskStrength, "required-strength", "",
-		"Model strength this task needs, overriding its role's floor; \"none\" clears it")
+		"Raise the model strength this task needs above its role's floor (raise only)")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
