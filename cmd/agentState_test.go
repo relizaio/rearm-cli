@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -127,5 +128,34 @@ func TestUpdatingAbsentStateIsANoOpNotACreation(t *testing.T) {
 	dir, _ := agentStateDir()
 	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
 		t.Errorf("a state file was created for an unknown session: %+v", entries)
+	}
+}
+
+func TestDeclaredRolesCarryFromNextToAssignAndAnUndeclaredPollClearsThem(t *testing.T) {
+	withStateDir(t)
+	if err := writeAgentState(&agentSessionState{SessionUuid: "u-roles", ClientSessionId: "roles"}); err != nil {
+		t.Fatal(err)
+	}
+	setDeclaredRoles("u-roles", []string{"architect", "coder"})
+	if got := declaredRoles("u-roles"); !reflect.DeepEqual(got, []string{"architect", "coder"}) {
+		t.Fatalf("want the declared roles remembered, got %v", got)
+	}
+	setDeclaredRoles("u-roles", nil)
+	if got := declaredRoles("u-roles"); len(got) != 0 {
+		t.Fatalf("an undeclared poll must clear the roles, got %v", got)
+	}
+	// A session opened elsewhere has no local state: nothing remembered, nothing written.
+	setDeclaredRoles("u-unknown", []string{"architect"})
+	if got := declaredRoles("u-unknown"); got != nil {
+		t.Fatalf("want nothing for an unknown session, got %v", got)
+	}
+}
+
+func TestCleanRolesTrimsAndDropsBlanks(t *testing.T) {
+	if got := cleanRoles([]string{" architect ", "", "  ", "coder"}); !reflect.DeepEqual(got, []string{"architect", "coder"}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := cleanRoles([]string{" "}); len(got) != 0 {
+		t.Fatalf("want empty, got %v", got)
 	}
 }
