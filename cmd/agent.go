@@ -83,7 +83,13 @@ Under Claude Code the session also records Claude Code's own session id
 ($CLAUDE_CODE_SESSION_ID), so it can be traced back to the conversation.
 Pass --provider-remote-session-id for a hosted (bridge) session id,
 --no-provider-session to opt out, or --require-provider-session to fail
-when no id can be found.`,
+when no id can be found.
+
+The session also records how it was opened: the credential and, for a
+CLI login, who approved it; the address the server saw; and what this
+CLI reports about the machine -- hostname, OS, time zone and version.
+Hostname and address are shown only to org admins and the session's
+owner. --no-device-info stops the CLI reporting the machine.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Resolved before anything is sent, so --require-provider-session refuses without
 		// opening a session it would then have to explain.
@@ -119,6 +125,9 @@ when no id can be found.`,
 		}
 		if ps != nil {
 			input["providerSession"] = ps
+		}
+		if device := sessionDeviceInput(noDeviceInfo); device != nil {
+			input["device"] = device
 		}
 		variables := map[string]interface{}{"sessionInit": input}
 		data, err := sendGraphQLRequest(query, variables)

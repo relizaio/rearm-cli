@@ -84,6 +84,17 @@ id for the conversation, so it can be traced back to it:
 - `--claude-session-id` — deprecated alias for
   `--provider-session-id` with `--provider claude-code`.
 
+**Origin.** The session also records how it was opened: the auth
+method (key secret, CLI login, federated), the person it is attributed
+to when anything names one — the CLI login's user, a personal key's
+owner, or a Free Form key's holder — the address the server saw, and
+what the CLI reports about the machine: hostname, OS, time zone and
+version. Hostname and addresses are shown only to org admins and the
+session's owner.
+
+- `--no-device-info` — do not report the machine. The server's own
+  observations are recorded regardless.
+
 Output (JSON):
 
 ```json

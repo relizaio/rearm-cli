@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	rearm "github.com/relizaio/rearm-client-go"
@@ -145,6 +146,28 @@ func resolveProviderSession(o providerSessionOpts) (map[string]interface{}, erro
 	return ps, nil
 }
 
+// noDeviceInfo stops session init describing the machine it runs on. The server records what it
+// observes -- the address, the credential -- regardless.
+var noDeviceInfo bool
+
+// sessionDeviceInput is what session init says about the device: the same description a CLI login
+// gives the approval page, so the two can be compared. Hostname is left out rather than invented
+// when the OS will not say; the server shows it only to org admins and the session's owner.
+func sessionDeviceInput(optOut bool) map[string]interface{} {
+	if optOut {
+		return nil
+	}
+	d := map[string]interface{}{
+		"os":       runtime.GOOS + "/" + runtime.GOARCH,
+		"timeZone": localTimeZone(),
+		"client":   "rearm-cli " + strings.TrimSpace(strings.TrimPrefix(Version, "v")),
+	}
+	if h, err := os.Hostname(); err == nil && strings.TrimSpace(h) != "" {
+		d["hostname"] = strings.TrimSpace(h)
+	}
+	return d
+}
+
 var updateMetaTitle string
 
 var agentSessionUpdateMetaCmd = &cobra.Command{
@@ -186,6 +209,8 @@ that opened it as well.`,
 
 func init() {
 	addProviderSessionFlags(agentSessionInitCmd.PersistentFlags())
+	agentSessionInitCmd.PersistentFlags().BoolVar(&noDeviceInfo, "no-device-info", false, "Do not report this "+
+		"machine's hostname, OS, time zone and client version")
 	addProviderSessionFlags(agentSessionUpdateMetaCmd.PersistentFlags())
 	agentSessionUpdateMetaCmd.PersistentFlags().StringVar(&updateMetaTitle, "title", "", "New session title")
 	agentSessionCmd.AddCommand(agentSessionUpdateMetaCmd)
