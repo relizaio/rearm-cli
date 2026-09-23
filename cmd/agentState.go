@@ -66,6 +66,9 @@ type agentSessionState struct {
 	// Keyed by task and not a flat list: a session may work several tasks in its life, and
 	// offering one hop's document as another hop's output is exactly what the server refuses.
 	PendingOutputs map[string][]string `json:"pendingOutputs,omitempty"`
+	// The roles the last 'task next' declared, so 'task assign' can pass the same ones. Empty
+	// when the last poll declared none.
+	DeclaredRoles []string `json:"declaredRoles,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling
@@ -268,6 +271,27 @@ func setCurrentTask(sessionUuid, taskUuid string) {
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: could not record current task locally: %v\n", err)
 	}
+}
+
+// setDeclaredRoles records the roles a 'task next' declared, or clears them when it declared
+// none. A session with no local state -- opened elsewhere -- simply has nothing remembered.
+func setDeclaredRoles(sessionUuid string, roles []string) {
+	st := findStateBySessionUuid(sessionUuid)
+	if st == nil {
+		return
+	}
+	st.DeclaredRoles = roles
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not record declared roles locally: %v\n", err)
+	}
+}
+
+// declaredRoles is what the last 'task next' declared for this session, or nil.
+func declaredRoles(sessionUuid string) []string {
+	if st := findStateBySessionUuid(sessionUuid); st != nil {
+		return st.DeclaredRoles
+	}
+	return nil
 }
 
 // clearCurrentTask forgets the assignment when the hop closes.

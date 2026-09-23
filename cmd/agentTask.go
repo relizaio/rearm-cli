@@ -18,7 +18,9 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
@@ -64,6 +66,7 @@ var (
 	taskChildrenJson string
 	taskPrUrl        string
 	taskOutputs      []string
+	taskRoles        []string
 	taskStatusFilter string
 	taskLockReason   string
 	taskDependsOn    []string
@@ -250,14 +253,61 @@ var agentTaskRegisterCmd = &cobra.Command{
 
 var agentTaskNextCmd = &cobra.Command{
 	Use:   "next",
-	Short: "Role-less worker poll: lowest-ordered claimable task with role + served prompt, or null",
+	Short: "Worker poll: lowest-ordered claimable task with role + served prompt, or null",
+	Long: `Asks for the next task this session may take.
+
+--role declares the roles this agent can take -- a role name on the board
+(any case) or a role uuid; repeat it or separate with commas. Only tasks
+for those roles are offered, and nothing when none match or none is open.
+Without --role every role is considered. The declaration is remembered
+for this session, so a following 'task assign' passes the same roles.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"sessionUuid": taskSessionUuid}
 		if taskBoardUuid != "" {
 			variables["boardUuid"] = taskBoardUuid
 		}
-		runGql(rearm.AgentTaskNextProgrammatic_Operation, variables, "agentTaskNextProgrammatic")
+		roles := requireRolesIfGiven(cmd)
+		if len(roles) > 0 {
+			variables["roles"] = roles
+		}
+		data, err := sendGraphQLRequest(rearm.AgentTaskNextProgrammatic_Operation, variables)
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
+		}
+		// Remembered only once the server has answered, and cleared by an undeclared poll, so
+		// assign never carries a declaration the agent has since dropped.
+		setDeclaredRoles(taskSessionUuid, roles)
+		offered := data["agentTaskNextProgrammatic"]
+		if offered == nil && len(roles) > 0 {
+			fmt.Fprintf(os.Stderr, "rearm: no open task for roles %s (names are per board; "+
+				"'rearm agent board roleconfig list' shows them)\n", strings.Join(roles, ", "))
+		}
+		emitJson(offered)
 	},
+}
+
+// requireRolesIfGiven returns the declared roles, refusing a --role that was passed but is empty.
+// `--role "$ROLE"` with ROLE unset would otherwise read as no declaration at all, and an agent
+// that meant to restrict itself would be offered every role.
+func requireRolesIfGiven(cmd *cobra.Command) []string {
+	roles := cleanRoles(taskRoles)
+	if cmd.Flags().Changed("role") && len(roles) == 0 {
+		fmt.Fprintln(os.Stderr, "rearm: --role was given but is empty; name a role, or leave --role out to consider every role")
+		os.Exit(1)
+	}
+	return roles
+}
+
+// cleanRoles trims the declared roles and drops blanks.
+func cleanRoles(in []string) []string {
+	var out []string
+	for _, r := range in {
+		if t := strings.TrimSpace(r); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 var agentTaskAssignCmd = &cobra.Command{
@@ -265,7 +315,17 @@ var agentTaskAssignCmd = &cobra.Command{
 	Short: "Bind the task to the calling session (QUEUED -> ASSIGNED; constraints re-checked atomically)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskAssignProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}, "agentTaskAssignProgrammatic")
+		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}
+		// An explicit --role wins; otherwise the roles the last 'task next' declared, so a STRICT
+		// board ranks this agent only against work it could be offered.
+		roles := requireRolesIfGiven(cmd)
+		if len(roles) == 0 {
+			roles = declaredRoles(taskSessionUuid)
+		}
+		if len(roles) > 0 {
+			variables["roles"] = roles
+		}
+		runGql(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
 		// Record the assignment locally so the usage hooks attribute this session's spend to it
 		// without the agent having to pass --task on every turn. Runs only after the server
 		// accepted the assignment, so the local file never claims a task the session does not hold.
@@ -483,6 +543,10 @@ func init() {
 
 	agentTaskNextCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
 	agentTaskNextCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Restrict the poll to one board")
+	agentTaskNextCmd.PersistentFlags().StringSliceVar(&taskRoles, "role", nil,
+		"Role this agent can take (name or uuid); repeatable. Only tasks for these roles are offered")
+	agentTaskAssignCmd.PersistentFlags().StringSliceVar(&taskRoles, "role", nil,
+		"Roles this agent declared; defaults to what the last `task next` declared for this session")
 	_ = agentTaskNextCmd.MarkPersistentFlagRequired("session")
 
 	for _, c := range []*cobra.Command{agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd,
