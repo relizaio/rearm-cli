@@ -35,7 +35,10 @@ import (
 //
 //   rearm agent doc publish --session <uuid> --type REVIEW_FINDINGS --task <uuid> \
 //       [--file findings/1a2b3c4d/round-2.md] [--index findings/1a2b3c4d/round-2.json] \
-//       [--repo /path/to/documents-checkout] [--component <uuid>] [--lifecycle ASSEMBLED]
+//       [--repo /path/to/documents-checkout] [--component <uuid>]
+//
+// There is no lifecycle to choose: the server publishes a DRAFT and the board promotes it to
+// ASSEMBLED when the hop that produced it signs off.
 //
 // Unlike usage reporting, this is NOT fire-and-forget: the agent asked for it, the hop cannot be
 // signed off without it, and a silent failure would leave the agent to discover at sign-off that it
@@ -49,7 +52,6 @@ var (
 	docFile          string
 	docIndexFile     string
 	docIndexOnlyFlag bool
-	docLifecycle     string
 	docRepoPath      string
 	docDryRun        bool
 	docBoard         string
@@ -234,9 +236,6 @@ func publishIndexOnly(st *agentSessionState) error {
 		"index":         idx,
 		"taskUuid":      docTask,
 	}
-	if docLifecycle != "" {
-		input["lifecycle"] = strings.ToUpper(docLifecycle)
-	}
 	return sendDocPublish(st, input)
 }
 
@@ -333,9 +332,6 @@ func runDocPublish() error {
 	if head.Date != "" {
 		input["commitDate"] = head.Date
 	}
-	if docLifecycle != "" {
-		input["lifecycle"] = strings.ToUpper(docLifecycle)
-	}
 
 	if indexFile != "" {
 		raw, err := os.ReadFile(filepath.Join(repoPath, indexFile))
@@ -412,7 +408,6 @@ func init() {
 		"publish the index alone, with no file: the items ARE the document, which is the usual"+
 			" shape for QUESTIONS. --index is then a path in the current directory, not in the"+
 			" documents repository, and nothing is committed")
-	f.StringVar(&docLifecycle, "lifecycle", "", "release lifecycle; DRAFT when omitted")
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
 	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
 	f.BoolVar(&docDryRun, "dry-run", false, "print what would be sent and exit")
