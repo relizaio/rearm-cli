@@ -388,11 +388,23 @@ The canonical AGENTIC_REPORT case:
     --tag agenticPhase=ORIENTATION
 
 --tag is repeatable. Tags are stored verbatim and surface to the
-CEL session.* policy surface.`,
+CEL session.* policy surface.
+
+--digest is optional and repeatable: <algo>:<hex>[:<scope>], e.g.
+--digest sha256:<64 hex chars>. The scope defaults to ORIGINAL_FILE (the file as
+you had it); OCI_STORAGE and REARM may also be declared. ReARM computes the
+digest of what it stores itself, so leave --digest out unless you have one to
+declare.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if addArtifactFile == "" {
 			fmt.Fprintln(os.Stderr, "--file is required")
+			os.Exit(1)
+		}
+		// Parsed before the file is read: a bad digest should fail before anything is uploaded.
+		digestRecords, err := parseDigestFlags(addArtifactDigests)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		if addArtifactType == "" {
@@ -435,8 +447,9 @@ CEL session.* policy surface.`,
 		if len(tags) > 0 {
 			art["tags"] = tags
 		}
-		if len(addArtifactDigests) > 0 {
-			art["digestRecords"] = addArtifactDigests
+		if len(digestRecords) > 0 {
+			// DigestRecordInput objects: the server refuses a bare string here.
+			art["digestRecords"] = digestRecords
 		}
 
 		mutation := rearm.SessionAddArtifact_Operation
@@ -472,7 +485,7 @@ func init() {
 	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactType, "type", "", "ArtifactType enum (e.g. AGENTIC_REPORT) — required")
 	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactDisplayId, "display-id", "", "Display identifier; defaults to the file basename")
 	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactTags, "tag", nil, "Tag in key=value form — repeatable (e.g. --tag agenticPhase=ORIENTATION)")
-	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactDigests, "digest", nil, "Pre-computed digest record(s) — optional, server auto-computes when omitted")
+	agentSessionAddArtifactCmd.PersistentFlags().StringArrayVar(&addArtifactDigests, "digest", nil, "Declared digest, <algo>:<hex>[:<scope>], e.g. sha256:<hex>; scope defaults to ORIGINAL_FILE (repeatable, optional)")
 	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("file")
 	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("type")
 
