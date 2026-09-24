@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -331,6 +332,7 @@ func reportDelta(st *agentSessionState, delta *usageDelta, source string, final 
 	hosting := detectHosting()
 	reasoning := delta.ReasoningLevel
 	chunks := chunkLines(delta.Lines, maxRequestsPerReport)
+	var lastAck map[string]interface{}
 	for i, chunk := range chunks {
 		turns, tools, requests := 0, 0, 0
 		payloadLines := make([]map[string]interface{}, 0, len(chunk))
@@ -391,6 +393,11 @@ func reportDelta(st *agentSessionState, delta *usageDelta, source string, final 
 				fmt.Fprintf(os.Stderr, "rearm: usage line refused: %v\n", r)
 			}
 		}
+		lastAck = ack
+	}
+	// Once per report rather than per chunk: the last ack carries the hop's spend after every chunk.
+	if w := allowanceWarning(lastAck); w != "" {
+		fmt.Fprintln(os.Stderr, "rearm: "+w)
 	}
 
 	// LastSeq advances only once EVERY chunk is in, and only to the real end of the parsed range.
@@ -555,6 +562,42 @@ func runUsageExplicit(args []string) {
 		os.Exit(1)
 	}
 	emitJson(ack)
+	if w := allowanceWarning(ack); w != "" {
+		fmt.Fprintln(os.Stderr, "rearm: "+w)
+	}
+}
+
+// allowanceWarning is the line to print when an ack says the hop this session is working has cost
+// more than its role's allowance, or "" when it has not or the ack does not say. The server cannot
+// stop a hop mid-flight, so a usage report is the only moment a running agent can be told.
+func allowanceWarning(ack map[string]interface{}) string {
+	allowance, okAllowance := ackMicros(ack["hopAllowanceMicros"])
+	spent, okSpent := ackMicros(ack["hopSpentMicros"])
+	if !okAllowance || !okSpent || spent <= allowance {
+		return ""
+	}
+	on := ""
+	if task, _ := ack["task"].(string); task != "" {
+		on = " on task " + task
+	}
+	return fmt.Sprintf("hop allowance exceeded: spent %d of %d micros%s — consider returning the task",
+		spent, allowance, on)
+}
+
+// ackMicros reads a Long from a decoded ack, which arrives as a float64, a json.Number or, from a
+// server that quotes longs, a string.
+func ackMicros(v interface{}) (int64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int64(n), true
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	case string:
+		i, err := strconv.ParseInt(n, 10, 64)
+		return i, err == nil
+	}
+	return 0, false
 }
 
 func maxInt(a, b int) int {
