@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -27,5 +28,17 @@ func TestReopenRequiresTheSessionRoleAndReason(t *testing.T) {
 	}
 	if agentTaskReopenCmd.Parent() != agentTaskCmd {
 		t.Error("reopen is not under `agent task`")
+	}
+}
+
+func TestTheStatusFilterNamesDelivering(t *testing.T) {
+	f := agentTaskListCmd.PersistentFlags().Lookup("status")
+	if f == nil {
+		t.Fatal("task list has no --status")
+	}
+	for _, s := range []string{"DELIVERING", "ON_HOLD", "COMPLETED"} {
+		if !strings.Contains(f.Usage, s) {
+			t.Errorf("--status help does not name %s: %q", s, f.Usage)
+		}
 	}
 }

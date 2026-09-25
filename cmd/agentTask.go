@@ -510,6 +510,10 @@ reopened; register a new one. A round the budget does not cover holds for an ope
 	},
 }
 
+// taskStatusHelp lists every task status a list can filter on. DELIVERING is a task whose roles
+// have all passed and whose linked PR has not merged yet.
+const taskStatusHelp = "PENDING_INTAKE | QUEUED | ASSIGNED | AWAITING_COORDINATOR | ON_HOLD | DELIVERING | COMPLETED | CANCELLED"
+
 // reopenVariables is the reopen mutation's input: every field is required by the server.
 func reopenVariables(task, session, role, reason string) map[string]interface{} {
 	return map[string]interface{}{"taskUuid": task, "sessionUuid": session, "role": role, "reason": reason}
@@ -645,7 +649,7 @@ func init() {
 	agentTaskLinkprCmd.PersistentFlags().StringVar(&taskPrUrl, "pr-url", "", "Pull request URL — required")
 	_ = agentTaskLinkprCmd.MarkPersistentFlagRequired("pr-url")
 	agentTaskListCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Board uuid — required")
-	agentTaskListCmd.PersistentFlags().StringVar(&taskStatusFilter, "status", "", "PENDING_INTAKE | QUEUED | ASSIGNED | AWAITING_COORDINATOR | COMPLETED | CANCELLED")
+	agentTaskListCmd.PersistentFlags().StringVar(&taskStatusFilter, "status", "", taskStatusHelp)
 	_ = agentTaskListCmd.MarkPersistentFlagRequired("board")
 
 	agentBoardRoleconfigCmd.AddCommand(agentBoardRoleconfigSetCmd)
