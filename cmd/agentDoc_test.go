@@ -205,6 +205,44 @@ func TestUncommittedChangesAreRefused(t *testing.T) {
 	}
 }
 
+func TestAnUnpushedCommitIsRefusedAndAPushedOneIsNot(t *testing.T) {
+	// The release pins HEAD; a commit no remote branch has cannot be fetched by anyone else.
+	bare := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+		t.Fatalf("git init --bare: %v %s", err, out)
+	}
+	dir := newRepo(t, bare)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+	commitFile(t, dir, "findings/a/round-1.md", "### F-1: x\n")
+
+	head, _ := git(dir, "rev-parse", "HEAD")
+	err := assertPushed(dir)
+	if err == nil || !strings.Contains(err.Error(), "push the documents repository first") ||
+		!strings.Contains(err.Error(), head[:12]) {
+		t.Fatalf("an unpushed commit must be refused, naming it; got %v", err)
+	}
+
+	run("push", "-q", "origin", "HEAD:refs/heads/main")
+	run("fetch", "-q", "origin")
+	if err := assertPushed(dir); err != nil {
+		t.Fatalf("a pushed commit must pass: %v", err)
+	}
+
+	// A new local commit on top is unpushed again.
+	commitFile(t, dir, "findings/a/round-2.md", "### F-1: y\n")
+	if err := assertPushed(dir); err == nil {
+		t.Fatal("a commit made after the push must be refused until it is pushed")
+	}
+}
+
 func TestHeadFactsComeFromTheDocumentsCheckout(t *testing.T) {
 	dir := newRepo(t, "https://github.com/acme/docs")
 	commitFile(t, dir, "findings/a/round-1.md", "### F-1: x\n")

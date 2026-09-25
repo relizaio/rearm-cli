@@ -300,6 +300,9 @@ func runDocPublish() error {
 	if err := assertCommitted(repoPath, paths); err != nil {
 		return err
 	}
+	if err := assertPushed(repoPath); err != nil {
+		return err
+	}
 
 	digest, err := sha256File(filepath.Join(repoPath, file))
 	if err != nil {

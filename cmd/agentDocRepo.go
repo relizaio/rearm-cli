@@ -143,6 +143,33 @@ func readHead(dir string) (headFacts, error) {
 	return headFacts{Commit: commit, Message: message, Date: date}, nil
 }
 
+// assertPushed refuses when no remote-tracking branch contains HEAD.
+//
+// The release pins HEAD, and everything downstream -- the board's link to the file, the next role's
+// pinned input, the trailers' attribution -- reads that commit from the remote. A commit only this
+// checkout has is one nobody else can fetch, so it is refused rather than published. There is no
+// flag to skip it: there is no honest case for pinning a commit the server cannot see.
+func assertPushed(dir string) error {
+	head, err := git(dir, "rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	out, err := git(dir, "branch", "-r", "--contains", "HEAD")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) == "" {
+		short := head
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		return fmt.Errorf("push the documents repository first: the release will pin commit %s, "+
+			"which no remote branch has. Push it (never force-push there: published releases pin "+
+			"its commits), then publish", short)
+	}
+	return nil
+}
+
 // assertCommitted refuses when any of the given paths has uncommitted changes.
 //
 // A document release pins a commit, and the digest is taken from the working tree. If the two
