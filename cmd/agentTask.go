@@ -472,12 +472,28 @@ var agentTaskHoldCmd = &cobra.Command{
 	},
 }
 
+var taskReleaseRole string
+
+// releaseHoldVars are the variables of a coordinator's release: the role only when one is named,
+// so a release without --role lets routing pick, as before (task 4c566d0d).
+func releaseHoldVars(task, session, role string) map[string]interface{} {
+	vars := map[string]interface{}{"taskUuid": task, "sessionUuid": session}
+	if r := strings.TrimSpace(role); r != "" {
+		vars["role"] = r
+	}
+	return vars
+}
+
 var agentTaskReleaseholdCmd = &cobra.Command{
 	Use:   "releasehold <task-uuid>",
-	Short: "Coordinator: release a hold back to AWAITING_COORDINATOR",
-	Args:  cobra.ExactArgs(1),
+	Short: "Coordinator: release a hold; the task routes on from its last hop, or to --role",
+	Long: `Releases a COORDINATOR-level hold. The task routes on from its last hop, as routing would
+have routed it; --role names an active role on the board to send it to instead.
+
+An OPERATOR hold (a loop stop, a budget stop, a person's hold) is the operator's to release.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskReleaseHoldProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}, "agentTaskReleaseHoldProgrammatic")
+		runGql(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole), "agentTaskReleaseHoldProgrammatic")
 	},
 }
 
@@ -672,6 +688,7 @@ func init() {
 	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("reason")
 	agentTaskReleaseholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	_ = agentTaskReleaseholdCmd.MarkPersistentFlagRequired("session")
+	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseRole, "role", "", "Route the released task to this role instead of the one routing would pick")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskEventKind, "kind", "INFO", "ALERT | INFO")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskNote, "message", "", "Notice text — required")
