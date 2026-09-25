@@ -93,9 +93,37 @@ func TestMergePlanShortHeadUnseen(t *testing.T) {
 // The read the plan and task show use carries both heads; without them every PR reads untested.
 func TestTheTaskReadSelectsTheHeads(t *testing.T) {
 	op := strings.Join(strings.Fields(rearm.AgentTaskProgrammatic_Operation), " ")
-	for _, want := range []string{"testedHeads { pr head }", "registered head }"} {
+	// "registered head " rather than "registered head }": the PR selection goes on to the
+	// attestation since client-go#43 (task 18c5c293).
+	for _, want := range []string{"testedHeads { pr head }", "registered head "} {
 		if !strings.Contains(op, want) {
 			t.Errorf("AgentTaskProgrammatic lacks %q; is rearm-client-go pinned at #40 or later?", want)
 		}
+	}
+}
+
+// The attest line (task 18c5c293): after a ready PR's merge command when the board cannot see the
+// merge, runnable as printed but for the merge sha; never on a PR that is not ready.
+func TestMergePlanAttestLines(t *testing.T) {
+	steps := []mergeStep{
+		{PR: "https://github.com/o/r/pull/1", Registered: false, Status: "ready"},
+		{PR: "https://github.com/o/r/pull/2", Registered: true, Status: "ready"},
+		{PR: "https://github.com/o/r/pull/3", Registered: false, Status: "moved"},
+	}
+	if !needsBoardMode(steps) || needsBoardMode(steps[:1]) {
+		t.Error("only a ready registered PR needs the board's mode")
+	}
+	cp := func() []mergeStep { return append([]mergeStep(nil), steps...) }
+	rows := withAttestLines(cp(), "t-1", false)
+	want := "rearm agent task delivered t-1 --session <seat-session> --unit https://github.com/o/r/pull/1 --commit <merge sha>"
+	if rows[0].Attest != want {
+		t.Errorf("an unregistered ready PR is attested on any board: %q", rows[0].Attest)
+	}
+	if rows[1].Attest != "" || rows[2].Attest != "" {
+		t.Errorf("a registered PR on a PR_ROWS board, and a moved one, get none: %+v", rows)
+	}
+	attested := withAttestLines(cp(), "t-1", true)
+	if !strings.Contains(attested[1].Attest, "--unit https://github.com/o/r/pull/2 ") || attested[2].Attest != "" {
+		t.Errorf("on an ATTESTED board every ready PR is attested: %+v", attested)
 	}
 }
