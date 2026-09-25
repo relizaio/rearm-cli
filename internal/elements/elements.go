@@ -21,8 +21,9 @@ import (
 	"strings"
 )
 
-// GrammarVersion is the grammar this parser implements.
-const GrammarVersion = "1"
+// GrammarVersion is the grammar this parser implements. 1.1 adds terms: the glossary terms an
+// element's content marks as **term** (elements.md §3).
+const GrammarVersion = "1.1"
 
 // Warning codes, as the server uses them.
 const (
@@ -54,6 +55,7 @@ type Element struct {
 	Traces        []Link   `json:"traces"`
 	Assumes       []string `json:"assumes"`
 	Speculative   []string `json:"speculative"`
+	Terms         []string `json:"terms"`
 	ContentDigest string   `json:"contentDigest"`
 	Line          int      `json:"line"`
 }
@@ -77,7 +79,38 @@ var (
 	atxHeading = regexp.MustCompile(`^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$`)
 	attrLine   = regexp.MustCompile(`^(parent|traces|assumes|level|speculative):[ \t]*(.*)$`)
 	fence      = regexp.MustCompile("^[ \t]{0,3}(```|~~~)")
+	// A bold span as markdown reads one: no whitespace just inside either pair of asterisks, so a
+	// stray ** left by a span that ran across lines does not pair up with the next one.
+	boldSpan = regexp.MustCompile(`\*\*([^*\s](?:[^*\n]*?[^*\s])?)\*\*`)
 )
+
+// termsOf reads the glossary terms a piece of content uses: every bold span on one line, trimmed,
+// trailing punctuation dropped, unique in first-seen order, case kept. Fenced code is not content
+// that uses terms, so spans inside it are skipped.
+func termsOf(lines []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	inFence := false
+	for _, line := range lines {
+		if fence.MatchString(line) {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		for _, m := range boldSpan.FindAllStringSubmatch(line, -1) {
+			term := strings.TrimRight(strings.TrimSpace(m[1]), ".,;:!?")
+			term = strings.TrimSpace(term)
+			if term == "" || seen[term] {
+				continue
+			}
+			seen[term] = true
+			out = append(out, term)
+		}
+	}
+	return out
+}
 
 var attributeNames = map[string]bool{"parent": true, "traces": true, "assumes": true, "level": true, "speculative": true}
 
@@ -233,6 +266,7 @@ func Parse(src []byte, families map[string]string) Index {
 	closeOpen := func(end int) {
 		if open >= 0 {
 			ix.Elements[open].ContentDigest = digestLines(lines[contentFrom:end])
+			ix.Elements[open].Terms = termsOf(lines[contentFrom:end])
 			open = -1
 		}
 	}
@@ -268,7 +302,7 @@ func Parse(src []byte, families map[string]string) Index {
 				continue
 			}
 			closeOpen(i)
-			e := Element{ID: id, Title: title, Line: i + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}}
+			e := Element{ID: id, Title: title, Line: i + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}, Terms: []string{}}
 			var a attrs
 			j := i + 1
 			for ; j < len(lines); j++ {
@@ -315,7 +349,7 @@ func Parse(src []byte, families map[string]string) Index {
 				if id == "" || rest != "" {
 					continue
 				}
-				e := Element{ID: id, Line: j + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}}
+				e := Element{ID: id, Line: j + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}, Terms: []string{}}
 				var a attrs
 				titled := false
 				var content []string
@@ -347,6 +381,7 @@ func Parse(src []byte, families map[string]string) Index {
 				e.Traces, e.Assumes, e.Speculative = orEmpty(a.traces), orEmptyS(a.assumes), orEmptyS(a.speculative)
 				sum := sha256.Sum256([]byte(strings.Join(content, "\n")))
 				e.ContentDigest = hex.EncodeToString(sum[:])
+				e.Terms = termsOf(content)
 				ix.Elements = append(ix.Elements, e)
 			}
 			i = j - 1

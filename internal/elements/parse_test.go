@@ -137,7 +137,62 @@ func TestDeterministicAndLineEndingBlind(t *testing.T) {
 	if string(one) != string(crlf) || d1 != d3 {
 		t.Error("CRLF and LF give the same index and digest")
 	}
-	if strings.HasSuffix(string(one), "\n") || !strings.HasPrefix(string(one), `{"grammarVersion":"1","elements":[`) {
+	if strings.HasSuffix(string(one), "\n") || !strings.HasPrefix(string(one), `{"grammarVersion":"1.1","elements":[`) {
 		t.Errorf("wire form: %s", one)
+	}
+}
+
+// Glossary terms (grammar 1.1): the bold spans on one line of an element's content.
+func TestTermsAreTheBoldSpansOfTheContent(t *testing.T) {
+	src := "## REQ-1 Refuse a cycle\n" +
+		"parent: REQ-0\n" +
+		"\n" +
+		"The **rework point** is where a **finding** lands. A **finding**, again, and **scope**.\n" +
+		"Bold that **runs across\n" +
+		"two lines** is not a term, and neither is ** ** or ****.\n" +
+		"```\n" +
+		"**inside a fence**\n" +
+		"```\n" +
+		"Trailing punctuation goes: **Element at release:**\n" +
+		"## REQ-2 The next element\n" +
+		"Its own **term**.\n"
+	ix := Parse([]byte(src), DefaultFamilies)
+	if ix.GrammarVersion != "1.1" {
+		t.Errorf("grammar %q", ix.GrammarVersion)
+	}
+	want := []string{"rework point", "finding", "scope", "Element at release"}
+	if got := ix.Elements[0].Terms; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("REQ-1 terms %q, want %q", got, want)
+	}
+	if got := ix.Elements[1].Terms; len(got) != 1 || got[0] != "term" {
+		t.Errorf("REQ-2 terms %q", got)
+	}
+}
+
+func TestTableRowTermsComeFromTheContentCells(t *testing.T) {
+	src := "## FN-1 Functions\n\n" +
+		"| id | title | parent | notes |\n" +
+		"|---|---|---|---|\n" +
+		"| FN-2 | The **title** is not content | FN-1 | uses the **rework point** |\n"
+	ix := Parse([]byte(src), DefaultFamilies)
+	var row *Element
+	for i := range ix.Elements {
+		if ix.Elements[i].ID == "FN-2" {
+			row = &ix.Elements[i]
+		}
+	}
+	if row == nil {
+		t.Fatalf("no FN-2 in %+v", ix.Elements)
+	}
+	if strings.Join(row.Terms, "|") != "rework point" {
+		t.Errorf("row terms %q", row.Terms)
+	}
+}
+
+func TestAnElementWithoutTermsSendsAnEmptyList(t *testing.T) {
+	ix := Parse([]byte("## REQ-9 Nothing bold\nplain words\n"), DefaultFamilies)
+	out, _, _ := Canonical(ix)
+	if !strings.Contains(string(out), `"terms":[]`) {
+		t.Errorf("wire form: %s", out)
 	}
 }
