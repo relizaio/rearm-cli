@@ -139,7 +139,8 @@ var agentBoardCoordinateCmd = &cobra.Command{
 	Short: "Claim the board's singleton coordinator seat for the calling session",
 	Long: `Claims the coordinator seat. The seat is held until the session closes
 and the seat session can take no task assignments. Returns the board
-including coordinatorPrompt - assume it.`,
+including servedCoordinatorPrompt - assume it: the board's coordinatorPrompt,
+then who merges on this board and how (delivery.merge).`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardCoordinateProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid}, "agentBoardCoordinateProgrammatic")
