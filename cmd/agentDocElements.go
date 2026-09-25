@@ -59,9 +59,9 @@ func summarise(ix *elements.Index) string {
 var agentDocElementsCmd = &cobra.Command{
 	Use:   "elements <path>",
 	Short: "Print the element index a document would publish, and its warnings, without publishing",
-	Long: `Parses a markdown file under the element grammar (elements.md, grammar version 1) and prints
-the index doc publish would send: each element's id, family, title, parent, links and content
-digest, and every warning. Nothing is sent.
+	Long: `Parses a markdown file under the element grammar (elements.md, grammar version 1.1) and prints
+the index doc publish would send: each element's id, family, title, parent, links, glossary terms
+(**term** in its content) and content digest, and every warning. Nothing is sent.
 
 Families come from --board (its effective element families), else the defaults.`,
 	Args: cobra.ExactArgs(1),
@@ -90,6 +90,11 @@ Families come from --board (its effective element families), else the defaults.`
 		fmt.Fprintln(os.Stderr, summarise(&ix))
 		for _, w := range ix.Warnings {
 			fmt.Fprintf(os.Stderr, "  %s %s: %s\n", w.Code, w.ElementID, strings.TrimSpace(w.Message))
+		}
+		for _, e := range ix.Elements {
+			if len(e.Terms) > 0 {
+				fmt.Fprintf(os.Stderr, "  %s terms: %s\n", e.ID, strings.Join(e.Terms, ", "))
+			}
 		}
 		return nil
 	},
