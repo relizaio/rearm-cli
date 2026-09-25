@@ -38,11 +38,31 @@ var (
 // boardEventsFollowEvery is how often --follow reads on.
 const boardEventsFollowEvery = 30 * time.Second
 
-// eventPage is one page of a board's event log (task 1c5442d2).
+// eventPage is one page of a board's event log (task 1c5442d2). TruncatedBefore is where the
+// board's retention window starts, and Gap says it deleted events this read asked for (task 04dedcc5).
 type eventPage struct {
-	Events    []map[string]interface{} `json:"events"`
-	NextAfter *int64                   `json:"nextAfter"`
-	HasMore   bool                     `json:"hasMore"`
+	Events          []map[string]interface{} `json:"events"`
+	NextAfter       *int64                   `json:"nextAfter"`
+	HasMore         bool                     `json:"hasMore"`
+	TruncatedBefore *string                  `json:"truncatedBefore"`
+	Gap             bool                     `json:"gap"`
+}
+
+// gapWarning is the line a read that lost events to the board's retention prints on stderr, or ""
+// when it lost none. The read goes on from the oldest event the board still keeps.
+func gapWarning(p eventPage, now time.Time) string {
+	if !p.Gap {
+		return ""
+	}
+	const reread = "; re-read the tasks with 'rearm agent task list'"
+	if p.TruncatedBefore != nil {
+		if at, err := time.Parse(time.RFC3339, *p.TruncatedBefore); err == nil {
+			days := int(now.Sub(at).Hours()/24 + 0.5)
+			return fmt.Sprintf("gap: events before %s were retained for %d days and are gone%s",
+				*p.TruncatedBefore, days, reread)
+		}
+	}
+	return "gap: events this read asked for were deleted by the board's retention" + reread
 }
 
 // boardEventsVars are the read's variables: after or since, never both, and the limit when set.
@@ -106,14 +126,16 @@ func pageOf(data map[string]interface{}) (eventPage, error) {
 }
 
 // followEvents reads page after page, each from the last one's nextAfter, and waits between reads
-// only when it has caught up. It stops when stop says so; a failed read ends it with the error.
+// only when it has caught up. A page that lost events to retention is warned about and followed
+// on. It stops when stop says so; a failed read ends it with the error.
 func followEvents(vars map[string]interface{}, read func(map[string]interface{}) (eventPage, error),
-	show func([]map[string]interface{}), wait func(), stop func() bool) error {
+	show func([]map[string]interface{}), warn func(eventPage), wait func(), stop func() bool) error {
 	for !stop() {
 		p, err := read(vars)
 		if err != nil {
 			return err
 		}
+		warn(p)
 		show(p.Events)
 		if p.NextAfter != nil {
 			vars["after"] = *p.NextAfter
@@ -132,7 +154,11 @@ var agentBoardEventsCmd = &cobra.Command{
 	Long: `Reads the board's event log (task 1c5442d2). board show carries only the newest 50 events;
 this is all of them. Start after a seq you already read (--after) or from a time (--since), and
 read on from the nextAfter printed at the end. --follow keeps reading every 30 seconds from where
-it stopped. Follow the feed this way; never by counting the entries of board show.`,
+it stopped. Follow the feed this way; never by counting the entries of board show.
+
+A board keeps its events for its eventRetentionDays (15 by default). When events this read asked
+for are gone, a "gap:" line on stderr says so and the read goes on from the oldest event kept:
+re-read the tasks rather than trusting the feed for the time between.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := boardEventsVars(args[0], boardEventsAfter, boardEventsSince, boardEventsLimit)
@@ -153,6 +179,7 @@ it stopped. Follow the feed this way; never by counting the entries of board sho
 				printGqlError(err)
 				os.Exit(1)
 			}
+			warnGap(p)
 			if boardEventsJson {
 				emitJson(p)
 				return
@@ -179,12 +206,19 @@ it stopped. Follow the feed this way; never by counting the entries of board sho
 				}
 			}
 		}
-		if err := followEvents(vars, read, show, func() { time.Sleep(boardEventsFollowEvery) },
+		if err := followEvents(vars, read, show, warnGap, func() { time.Sleep(boardEventsFollowEvery) },
 			func() bool { return false }); err != nil {
 			printGqlError(err)
 			os.Exit(1)
 		}
 	},
+}
+
+// warnGap prints a page's gap line on stderr, so it never mixes into the events or the JSON.
+func warnGap(p eventPage) {
+	if w := gapWarning(p, time.Now()); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
 }
 
 func init() {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The read's variables (task 1c5442d2): one starting point, a valid time, the limit when set.
@@ -78,6 +79,7 @@ func TestFollowEvents(t *testing.T) {
 				shown = append(shown, e["message"].(string))
 			}
 		},
+		func(eventPage) {},
 		func() { waits++ },
 		func() bool { return false })
 	if err == nil || err.Error() != "gone" {
@@ -91,5 +93,68 @@ func TestFollowEvents(t *testing.T) {
 	}
 	if waits != 2 {
 		t.Errorf("it waits only once caught up (after pages 2 and 3): %d", waits)
+	}
+}
+
+func strp(v string) *string { return &v }
+
+// Retention (task 04dedcc5): a page that lost events says so on one line, with the window.
+func TestGapWarning(t *testing.T) {
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	if w := gapWarning(eventPage{TruncatedBefore: strp("2026-09-10T12:00:00Z")}, now); w != "" {
+		t.Errorf("no gap, no line: %q", w)
+	}
+	w := gapWarning(eventPage{Gap: true, TruncatedBefore: strp("2026-09-10T12:00:03Z")}, now)
+	for _, want := range []string{"gap: events before 2026-09-10T12:00:03Z were retained for 15 days and are gone",
+		"rearm agent task list"} {
+		if !strings.Contains(w, want) {
+			t.Errorf("%q lacks %q", w, want)
+		}
+	}
+	if w := gapWarning(eventPage{Gap: true}, now); !strings.HasPrefix(w, "gap: events this read asked for were deleted") {
+		t.Errorf("a board that now keeps everything still says what was lost: %q", w)
+	}
+}
+
+// A gap is warned about and the follow goes on from the cursor the page returned.
+func TestFollowEventsAcrossAGap(t *testing.T) {
+	pages := []eventPage{
+		{Events: []map[string]interface{}{{"message": "kept"}}, NextAfter: i64(90), Gap: true,
+			TruncatedBefore: strp("2026-09-10T12:00:00Z")},
+		{Events: []map[string]interface{}{{"message": "next"}}, NextAfter: i64(91)},
+	}
+	var warned []bool
+	var asked []interface{}
+	var shown []string
+	i := 0
+	err := followEvents(map[string]interface{}{"boardUuid": "b1", "after": int64(5)},
+		func(v map[string]interface{}) (eventPage, error) {
+			asked = append(asked, v["after"])
+			if i >= len(pages) {
+				return eventPage{}, errors.New("gone")
+			}
+			p := pages[i]
+			i++
+			return p, nil
+		},
+		func(events []map[string]interface{}) {
+			for _, e := range events {
+				shown = append(shown, e["message"].(string))
+			}
+		},
+		func(p eventPage) { warned = append(warned, gapWarning(p, time.Now()) != "") },
+		func() {},
+		func() bool { return false })
+	if err == nil || err.Error() != "gone" {
+		t.Errorf("ends on the failed read: %v", err)
+	}
+	if len(warned) != 2 || !warned[0] || warned[1] {
+		t.Errorf("the gap page is warned about, the next is not: %v", warned)
+	}
+	if strings.Join(shown, ",") != "kept,next" {
+		t.Errorf("the events after the gap are shown: %v", shown)
+	}
+	if len(asked) < 2 || asked[0] != int64(5) || asked[1] != int64(90) {
+		t.Errorf("the follow goes on from the page's cursor: %v", asked)
 	}
 }
