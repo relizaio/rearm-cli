@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,5 +115,29 @@ func TestTheStaleTranscriptWarningIsPrintedOnlyOnce(t *testing.T) {
 	reread, err := readAgentState("c-1")
 	if err != nil || reread == nil || !reread.TruncationWarned {
 		t.Errorf("the warning flag was not persisted: %+v (%v)", reread, err)
+	}
+}
+
+func TestAllowanceWarningOnlyWhenTheHopIsOver(t *testing.T) {
+	over := map[string]interface{}{"task": "t-1", "hopAllowanceMicros": float64(1000), "hopSpentMicros": float64(5000)}
+	want := "hop allowance exceeded: spent 5000 of 1000 micros on task t-1 — consider returning the task"
+	if got := allowanceWarning(over); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// A server that quotes longs, and one that decodes with UseNumber, read the same.
+	quoted := map[string]interface{}{"task": "t-1", "hopAllowanceMicros": "1000", "hopSpentMicros": json.Number("5000")}
+	if got := allowanceWarning(quoted); got != want {
+		t.Errorf("quoted longs: got %q", got)
+	}
+	for name, ack := range map[string]map[string]interface{}{
+		"under":        {"hopAllowanceMicros": float64(1000), "hopSpentMicros": float64(400)},
+		"exactly":      {"hopAllowanceMicros": float64(1000), "hopSpentMicros": float64(1000)},
+		"no allowance": {"hopAllowanceMicros": nil, "hopSpentMicros": nil},
+		"older server": {"accepted": float64(1)},
+		"no ack":       nil,
+	} {
+		if got := allowanceWarning(ack); got != "" {
+			t.Errorf("%s: want no warning, got %q", name, got)
+		}
 	}
 }
