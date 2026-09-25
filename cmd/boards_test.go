@@ -201,3 +201,29 @@ func TestStrengthSetsOrClears(t *testing.T) {
 		}
 	}
 }
+
+// rearm boards budget (b6d7c308 round 3): dollars in, micros sent, --clear removes it.
+func TestBudgetVariables(t *testing.T) {
+	got, err := budgetVariables("t", "2.50", false)
+	if err != nil || got["budgetMicros"] != int64(2_500_000) || got["taskUuid"] != "t" {
+		t.Errorf("2.50 dollars is 2,500,000 micros: %v %v", got, err)
+	}
+	got, err = budgetVariables("t", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := got["budgetMicros"]; !ok || v != nil {
+		t.Errorf("--clear sends null: %v", got)
+	}
+	for _, bad := range []struct {
+		usd   string
+		clear bool
+	}{{"", false}, {"1", true}, {"-1", false}, {"lots", false}} {
+		if _, err := budgetVariables("t", bad.usd, bad.clear); err == nil {
+			t.Errorf("%+v should be refused", bad)
+		}
+	}
+	if boardsBudgetCmd.Flags().Lookup("usd") == nil || boardsBudgetCmd.Flags().Lookup("clear") == nil {
+		t.Error("boards budget takes --usd and --clear")
+	}
+}

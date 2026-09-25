@@ -46,6 +46,7 @@ import (
 //   rearm boards hold <task> --reason r | release <task> [--note n]
 //   rearm boards require-review <task> [--off]
 //   rearm boards strength <task> --required 6.5 | --clear
+//   rearm boards budget <task> --usd 2.50 | --clear
 //   rearm boards lock <board> --reason r | unlock <board>
 //   rearm boards apply -f board.yaml [--dry-run]
 
@@ -80,6 +81,7 @@ var (
 	boardsOff          bool
 	boardsStrength     string
 	boardsClear        bool
+	boardsBudget       string
 )
 
 const personOnly = "rearm boards acts as a person: sign in with `rearm login`, or use a personal key (USER__...). " +
@@ -521,6 +523,41 @@ func strengthVariables(task, required string, clear bool) (map[string]interface{
 	return vars, nil
 }
 
+// budgetVariables are a task budget's variables: dollars as the CLI takes them everywhere, sent in
+// micros; --clear sends null, which removes it (task 6f1b348d's setter, a person verb since
+// b6d7c308 round 3).
+func budgetVariables(task, usd string, clear bool) (map[string]interface{}, error) {
+	vars := map[string]interface{}{"taskUuid": task}
+	switch {
+	case clear && usd != "":
+		return nil, fmt.Errorf("give --usd or --clear, not both")
+	case clear:
+		vars["budgetMicros"] = nil
+	case usd != "":
+		micros, err := parseBudgetUSD(usd)
+		if err != nil {
+			return nil, fmt.Errorf("%s", strings.Replace(err.Error(), "--budget", "--usd", 1))
+		}
+		vars["budgetMicros"] = micros
+	default:
+		return nil, fmt.Errorf("give --usd N or --clear")
+	}
+	return vars, nil
+}
+
+var boardsBudgetCmd = &cobra.Command{
+	Use:   "budget <task-uuid>",
+	Short: "Set what one task may spend, in dollars, or --clear; a raise does not release a budget hold",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		vars, err := budgetVariables(args[0], boardsBudget, boardsClear)
+		if err != nil {
+			fail(err.Error())
+		}
+		runGql(rearm.AgentTaskSetBudget_Operation, vars, "agentTaskSetBudget")
+	},
+}
+
 var boardsStrengthCmd = &cobra.Command{
 	Use:   "strength <task-uuid>",
 	Short: "Require a model of at least this strength for one task, or --clear",
@@ -619,6 +656,9 @@ func init() {
 	boardsStrengthCmd.Flags().StringVar(&boardsStrength, "required", "", "the least model strength, e.g. 6.5")
 	boardsStrengthCmd.Flags().BoolVar(&boardsClear, "clear", false, "back to what the role asks for")
 
+	boardsBudgetCmd.Flags().StringVar(&boardsBudget, "usd", "", "what the task may spend, in dollars, e.g. 2.50")
+	boardsBudgetCmd.Flags().BoolVar(&boardsClear, "clear", false, "remove the task's budget")
+
 	boardsLockCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
 	_ = boardsLockCmd.MarkFlagRequired("reason")
 
@@ -628,7 +668,7 @@ func init() {
 
 	for _, c := range []*cobra.Command{boardsListCmd, boardsTasksCmd, boardsRegisterCmd, boardsAuthorizeCmd,
 		boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd, boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd,
-		boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd, boardsRequireReviewCmd, boardsStrengthCmd,
+		boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd, boardsRequireReviewCmd, boardsStrengthCmd, boardsBudgetCmd,
 		boardsLockCmd, boardsUnlockCmd, boardsApplyCmd} {
 		boardsCmd.AddCommand(c)
 	}
