@@ -202,6 +202,11 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
 	emitJson(release)
+	// The board checked the elements as it took the document (elements.md §7): say what it found
+	// now, while the author can still fix it, rather than at the sign-off it would refuse.
+	if _, withElements := input["elements"]; withElements && releaseUuid != "" && input["taskUuid"] != nil {
+		printCheckReport(releaseUuid)
+	}
 	return nil
 }
 
@@ -246,6 +251,10 @@ func runDocPublish() error {
 	spec := strings.ToUpper(strings.ReplaceAll(docType, "-", "_"))
 	if spec == "" {
 		return fmt.Errorf("--type is required, e.g. REVIEW_FINDINGS")
+	}
+	if spec == "CHECK_REPORT" {
+		return fmt.Errorf("the board cuts CHECK_REPORT rounds when a document with elements is published;" +
+			" run `rearm agent doc check` to re-run the checks")
 	}
 	if taskScopedTypes[spec] && docTask == "" {
 		return fmt.Errorf("--task is required for %s, which is a per-task document", spec)
