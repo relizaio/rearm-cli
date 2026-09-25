@@ -34,7 +34,10 @@ type mergeStep struct {
 	// round names a head for it; merged: already merged.
 	Status  string `json:"status"`
 	Command string `json:"command,omitempty"`
-	Note    string `json:"note,omitempty"`
+	// Attest is the command that records the merge where the board cannot see it (task 18c5c293):
+	// set on a ready PR that is unregistered here, or on a board whose delivery mode is ATTESTED.
+	Attest string `json:"attest,omitempty"`
+	Note   string `json:"note,omitempty"`
 }
 
 // prKey matches a PR URL as the board does: scheme and host lower-cased, a trailing slash and
@@ -133,6 +136,42 @@ func mergePlan(task map[string]interface{}) []mergeStep {
 	return steps
 }
 
+// needsBoardMode is whether the attest lines depend on the board's delivery mode: only a ready PR
+// registered here does, as an unregistered one is attested on any board.
+func needsBoardMode(steps []mergeStep) bool {
+	for _, s := range steps {
+		if s.Status == "ready" && s.Registered {
+			return true
+		}
+	}
+	return false
+}
+
+// withAttestLines adds, after each ready PR's merge command, the attestation that records the merge
+// when this board cannot see it: the PR is unregistered here, or the board's mode is ATTESTED.
+func withAttestLines(steps []mergeStep, task string, attestedBoard bool) []mergeStep {
+	for i := range steps {
+		if steps[i].Status != "ready" || (steps[i].Registered && !attestedBoard) {
+			continue
+		}
+		steps[i].Attest = "rearm agent task delivered " + task + " --session <seat-session> --unit " +
+			steps[i].PR + " --commit <merge sha>"
+	}
+	return steps
+}
+
+// boardAttests reads whether the task's board proves delivery by attestation (mode ATTESTED).
+func boardAttests(board string) (bool, error) {
+	data, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": board})
+	if err != nil {
+		return false, err
+	}
+	b, _ := data["agentBoardProgrammatic"].(map[string]interface{})
+	p, _ := b["effectiveDeliveryPolicy"].(map[string]interface{})
+	mode, _ := p["mode"].(string)
+	return mode == "ATTESTED", nil
+}
+
 func printMergePlan(steps []mergeStep) {
 	if len(steps) == 0 {
 		fmt.Println("The task links no PR.")
@@ -155,6 +194,9 @@ func printMergePlan(steps []mergeStep) {
 		if s.Command != "" {
 			fmt.Printf("  merge:  %s\n", s.Command)
 		}
+		if s.Attest != "" {
+			fmt.Printf("  attest: %s\n", s.Attest)
+		}
 		if s.Note != "" {
 			fmt.Printf("  note:   %s\n", s.Note)
 		}
@@ -170,7 +212,10 @@ var agentTaskMergeplanCmd = &cobra.Command{
 head ReARM last saw, and the command that merges only at the tested head:
 gh pr merge <url> --merge --match-head-commit <head> for GitHub, the merge API with sha for GitLab.
 The forge refuses a moved head, which covers PRs ReARM does not see. A PR marked moved or untested
-needs a review or test of its current head first.`,
+needs a review or test of its current head first.
+
+After the merge command, an attest line records the merge where the board cannot see it: for a PR
+CI does not report here, or on a board whose delivery mode is ATTESTED. Fill in the merge sha.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		data, err := sendGraphQLRequest(rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0]})
@@ -180,6 +225,15 @@ needs a review or test of its current head first.`,
 		}
 		task, _ := data["agentTaskProgrammatic"].(map[string]interface{})
 		steps := mergePlan(task)
+		attested := false
+		if needsBoardMode(steps) {
+			board, _ := task["board"].(string)
+			if attested, err = boardAttests(board); err != nil {
+				printGqlError(err)
+				os.Exit(1)
+			}
+		}
+		steps = withAttestLines(steps, args[0], attested)
 		if taskMergeplanJson {
 			emitJson(steps)
 			return
