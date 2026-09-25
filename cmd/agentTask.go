@@ -638,12 +638,25 @@ var agentTaskLinkprCmd = &cobra.Command{
 	},
 }
 
+// taskShowRequest is the read task show sends: one task as before, or several in one request (task
+// cc14f4cb), in the order given, printed as an array.
+func taskShowRequest(uuids []string) (string, map[string]interface{}, string) {
+	if len(uuids) == 1 {
+		return rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": uuids[0]}, "agentTaskProgrammatic"
+	}
+	return rearm.AgentTasksByUuidProgrammatic_Operation, map[string]interface{}{"taskUuids": uuids}, "agentTasksByUuidProgrammatic"
+}
+
 var agentTaskShowCmd = &cobra.Command{
-	Use:   "show <task-uuid>",
-	Short: "Show one task with assignment, sign-offs and returns",
-	Args:  cobra.ExactArgs(1),
+	Use:   "show <task-uuid> [<task-uuid>...]",
+	Short: "Show a task, or several in one request, with assignment, sign-offs and returns",
+	Long: `Shows one task, or several in one request (at most 100), printed as an array in the order
+given; a task the key cannot read is absent. To read a board's tasks by status use task list, one
+request for all of them: reading tasks one by one spends the rate limit.`,
+	Args: cobra.RangeArgs(1, 100),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0]}, "agentTaskProgrammatic")
+		op, vars, key := taskShowRequest(args)
+		runGql(op, vars, key)
 	},
 }
 
