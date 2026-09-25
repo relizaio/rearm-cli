@@ -70,6 +70,7 @@ var (
 	taskOutputs      []string
 	taskRoles        []string
 	taskStrength     string
+	taskBudget       string
 	taskStatusFilter string
 	taskLockReason   string
 	taskDependsOn    []string
@@ -293,6 +294,35 @@ for this session, so a following 'task assign' passes the same roles.`,
 // parseRequiredStrength reads --required-strength as a number. The coordinator can only raise a
 // requirement, so there is no way to clear one here. Precision and the raise-only rule are the
 // server's to enforce, so their refusals arrive with the server's message.
+// parseBudgetUSD reads --budget: dollars, as typed, into the USD micros the server stores. Refuses
+// anything that is not a non-negative amount with at most six decimals (a micro is the unit).
+func parseBudgetUSD(v string) (int64, error) {
+	s := strings.TrimPrefix(strings.TrimSpace(v), "$")
+	if s == "" {
+		return 0, fmt.Errorf("--budget must be an amount in dollars, got %q", v)
+	}
+	whole, frac, hasFrac := strings.Cut(s, ".")
+	if whole == "" {
+		whole = "0"
+	}
+	if hasFrac && (frac == "" || len(frac) > 6) {
+		return 0, fmt.Errorf("--budget must have between one and six decimals, got %q", v)
+	}
+	w, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil || w < 0 {
+		return 0, fmt.Errorf("--budget must be a non-negative amount in dollars, got %q", v)
+	}
+	micros := w * 1_000_000
+	if hasFrac {
+		f, err := strconv.ParseInt((frac + "000000")[:6], 10, 64)
+		if err != nil || strings.HasPrefix(frac, "-") || strings.HasPrefix(frac, "+") {
+			return 0, fmt.Errorf("--budget must be a non-negative amount in dollars, got %q", v)
+		}
+		micros += f
+	}
+	return micros, nil
+}
+
 func parseRequiredStrength(v string) (float64, error) {
 	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
 	if err != nil {
@@ -399,7 +429,11 @@ plan up front and the server releases work as dependencies land.
 its role usually asks, for work harder than the role usually is: a number
 with at most two decimals. Raise only -- the server refuses a value below
 the task's current requirement (its own, else the role's floor). To lower
-or clear one, ask the operator. Left out, the requirement is unchanged.`,
+or clear one, ask the operator. Left out, the requirement is unchanged.
+
+--budget seeds what the task may spend, in dollars (for example 2.50). Seed
+only: the server refuses it when the task already has a budget -- changing
+one is the operator's decision. Left out, the budget is unchanged.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -416,6 +450,14 @@ or clear one, ask the operator. Left out, the requirement is unchanged.`,
 				os.Exit(1)
 			}
 			variables["requiredStrength"] = strength
+		}
+		if cmd.Flags().Changed("budget") {
+			micros, err := parseBudgetUSD(taskBudget)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "rearm:", err)
+				os.Exit(1)
+			}
+			variables["budgetMicros"] = micros
 		}
 		runGql(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
 	},
@@ -620,6 +662,8 @@ func init() {
 	agentTaskAuthorizeCmd.PersistentFlags().StringSliceVar(&taskDependsOn, "depends-on", nil, "Task uuids that must be COMPLETED before this one is assignable (replaces the list)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskStrength, "required-strength", "",
 		"Raise the model strength this task needs above its role's floor (raise only)")
+	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskBudget, "budget", "",
+		"Seed what the task may spend, in dollars (only when it has no budget yet)")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
