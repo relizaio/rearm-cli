@@ -59,6 +59,7 @@ var (
 	taskSourceUrl    string
 	taskSessionUuid  string
 	taskRole         string
+	taskReopenReason string
 	taskOrder        int
 	taskOutcome      string
 	taskNote         string
@@ -496,6 +497,24 @@ var agentTaskCancelCmd = &cobra.Command{
 	},
 }
 
+var agentTaskReopenCmd = &cobra.Command{
+	Use:   "reopen <task-uuid>",
+	Short: "Coordinator: send a COMPLETED task back to a role, with a reason (e.g. its PR no longer merges)",
+	Long: `Sends a COMPLETED task back to an active role. The role's earlier passes stop counting,
+and whoever read its part re-runs once the redone hop republishes. A cancelled task is not
+reopened; register a new one. A round the budget does not cover holds for an operator.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runGql(rearm.AgentTaskReopenProgrammatic_Operation,
+			reopenVariables(args[0], taskSessionUuid, taskRole, taskReopenReason), "agentTaskReopenProgrammatic")
+	},
+}
+
+// reopenVariables is the reopen mutation's input: every field is required by the server.
+func reopenVariables(task, session, role, reason string) map[string]interface{} {
+	return map[string]interface{}{"taskUuid": task, "sessionUuid": session, "role": role, "reason": reason}
+}
+
 var agentTaskBindrefCmd = &cobra.Command{
 	Use:   "bindref <task-uuid>",
 	Short: "Bind a draft split child's tracker ref once its issue exists",
@@ -577,7 +596,8 @@ func init() {
 	_ = agentTaskNextCmd.MarkPersistentFlagRequired("session")
 
 	for _, c := range []*cobra.Command{agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd,
-		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd} {
+		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
+		agentTaskReopenCmd} {
 		c.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
 		_ = c.MarkPersistentFlagRequired("session")
 	}
@@ -615,6 +635,10 @@ func init() {
 	_ = agentTaskSplitCmd.MarkPersistentFlagRequired("children-json")
 	agentTaskCompleteCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Completion note")
 	agentTaskCancelCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Cancellation reason")
+	agentTaskReopenCmd.PersistentFlags().StringVar(&taskRole, "role", "", "Role that must redo its part — required")
+	agentTaskReopenCmd.PersistentFlags().StringVar(&taskReopenReason, "reason", "", "Why the delivery cannot land — required")
+	_ = agentTaskReopenCmd.MarkPersistentFlagRequired("role")
+	_ = agentTaskReopenCmd.MarkPersistentFlagRequired("reason")
 	agentTaskBindrefCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref — required")
 	agentTaskBindrefCmd.PersistentFlags().StringVar(&taskSourceUrl, "source-url", "", "Human-clickable tracker URL")
 	_ = agentTaskBindrefCmd.MarkPersistentFlagRequired("external-ref")
@@ -648,6 +672,7 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskSplitCmd)
 	agentTaskCmd.AddCommand(agentTaskCompleteCmd)
 	agentTaskCmd.AddCommand(agentTaskCancelCmd)
+	agentTaskCmd.AddCommand(agentTaskReopenCmd)
 	agentTaskCmd.AddCommand(agentTaskBindrefCmd)
 	agentTaskCmd.AddCommand(agentTaskLinkprCmd)
 	agentTaskCmd.AddCommand(agentTaskShowCmd)
