@@ -472,28 +472,67 @@ var agentTaskHoldCmd = &cobra.Command{
 	},
 }
 
-var taskReleaseRole string
+var (
+	taskReleaseRole    string
+	taskReleaseNote    string
+	taskEscalateReason string
+)
 
 // releaseHoldVars are the variables of a coordinator's release: the role only when one is named,
-// so a release without --role lets routing pick, as before (task 4c566d0d).
-func releaseHoldVars(task, session, role string) map[string]interface{} {
+// so a release without --role lets routing pick, as before (task 4c566d0d); the note only when
+// given (task c0a2134c).
+func releaseHoldVars(task, session, role, note string) map[string]interface{} {
 	vars := map[string]interface{}{"taskUuid": task, "sessionUuid": session}
 	if r := strings.TrimSpace(role); r != "" {
 		vars["role"] = r
 	}
+	if n := strings.TrimSpace(note); n != "" {
+		vars["note"] = n
+	}
 	return vars
+}
+
+// escalateHoldVars are the variables of a coordinator's escalation (task c0a2134c).
+func escalateHoldVars(task, session, reason string) (map[string]interface{}, error) {
+	r := strings.TrimSpace(reason)
+	if r == "" {
+		return nil, fmt.Errorf("--reason is required: say what the operator is to decide")
+	}
+	return map[string]interface{}{"taskUuid": task, "sessionUuid": session, "reason": r}, nil
 }
 
 var agentTaskReleaseholdCmd = &cobra.Command{
 	Use:   "releasehold <task-uuid>",
 	Short: "Coordinator: release a hold; the task routes on from its last hop, or to --role",
 	Long: `Releases a COORDINATOR-level hold. The task routes on from its last hop, as routing would
-have routed it; --role names an active role on the board to send it to instead.
+have routed it; --role names an active role on the board to send it to instead. --note says why,
+on the board feed.
 
-An OPERATOR hold (a loop stop, a budget stop, a person's hold) is the operator's to release.`,
+A no-progress or cycle-cap stop parks at COORDINATOR level first when the board allows it (the
+default): releasing it routes past the stop once. One release per stop kind per task; the next
+identical stop is the operator's. If it is a judgement call, escalate instead.
+
+An OPERATOR hold (a second loop stop, a budget stop, a person's hold) is the operator's to release.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole), "agentTaskReleaseHoldProgrammatic")
+		runGql(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole, taskReleaseNote), "agentTaskReleaseHoldProgrammatic")
+	},
+}
+
+var agentTaskEscalateCmd = &cobra.Command{
+	Use:   "escalate <task-uuid>",
+	Short: "Coordinator: hand a COORDINATOR-level hold to the operator, with your recommendation",
+	Long: `Moves a COORDINATOR-level hold to OPERATOR level: the hold keeps what it said, with --reason
+after it, and the board posts an ALERT naming both. For a judgement call -- two roles disagree, an
+item needs accepting. Refused on any other hold.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		vars, err := escalateHoldVars(args[0], taskSessionUuid, taskEscalateReason)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		runGql(rearm.AgentTaskEscalateHoldProgrammatic_Operation, vars, "agentTaskEscalateHoldProgrammatic")
 	},
 }
 
@@ -689,6 +728,11 @@ func init() {
 	agentTaskReleaseholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	_ = agentTaskReleaseholdCmd.MarkPersistentFlagRequired("session")
 	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseRole, "role", "", "Route the released task to this role instead of the one routing would pick")
+	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseNote, "note", "", "Why, posted to the board feed with the release")
+	agentTaskEscalateCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	_ = agentTaskEscalateCmd.MarkPersistentFlagRequired("session")
+	agentTaskEscalateCmd.Flags().StringVar(&taskEscalateReason, "reason", "", "Your recommendation: what the operator is to decide — required")
+	_ = agentTaskEscalateCmd.MarkFlagRequired("reason")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskEventKind, "kind", "INFO", "ALERT | INFO")
 	agentBoardPosteventCmd.PersistentFlags().StringVar(&taskNote, "message", "", "Notice text — required")
@@ -733,6 +777,7 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskOrderCmd)
 	agentTaskCmd.AddCommand(agentTaskHoldCmd)
 	agentTaskCmd.AddCommand(agentTaskReleaseholdCmd)
+	agentTaskCmd.AddCommand(agentTaskEscalateCmd)
 	agentTaskCmd.AddCommand(agentTaskRequireReviewCmd)
 	agentTaskCmd.AddCommand(agentTaskSplitCmd)
 	agentTaskCmd.AddCommand(agentTaskCompleteCmd)
