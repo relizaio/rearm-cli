@@ -326,6 +326,22 @@ func runDocPublish() error {
 	if docComponent != "" {
 		input["component"] = docComponent
 	}
+	// The element index, parsed from the committed file (gaps §2.A): what the server checks and
+	// keeps on the release. A document without ids sends nothing, as before.
+	source, err := os.ReadFile(filepath.Join(repoPath, file))
+	if err != nil {
+		return fmt.Errorf("could not read %s: %w", file, err)
+	}
+	extra, ix, err := elementsInput(spec, source, board)
+	if err != nil {
+		return err
+	}
+	for k, v := range extra {
+		input[k] = v
+	}
+	if extra != nil {
+		fmt.Fprintln(os.Stderr, "elements: "+summarise(ix))
+	}
 	if head.Message != "" {
 		input["commitMessage"] = head.Message
 	}
