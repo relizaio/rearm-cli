@@ -32,12 +32,20 @@ type mergeStep struct {
 	Head       string `json:"head,omitempty"`
 	// ready: merge with the command; moved: the PR is past the tested head; untested: no passing
 	// round names a head for it; merged: already merged.
-	Status  string `json:"status"`
-	Command string `json:"command,omitempty"`
+	Status string `json:"status"`
+	// Target is the branch the PR merges into, as CI reported it.
+	Target string `json:"target,omitempty"`
+	// Method, By and AtTestedHead are the board's merge procedure (task 71a3dd22).
+	Method       string `json:"method,omitempty"`
+	By           string `json:"by,omitempty"`
+	AtTestedHead bool   `json:"atTestedHead"`
+	Command      string `json:"command,omitempty"`
 	// Attest is the command that records the merge where the board cannot see it (task 18c5c293):
 	// set on a ready PR that is unregistered here, or on a board whose delivery mode is ATTESTED.
 	Attest string `json:"attest,omitempty"`
 	Note   string `json:"note,omitempty"`
+	// at is the full head a ready PR merges at.
+	at string
 }
 
 // prKey matches a PR URL as the board does: scheme and host lower-cased, a trailing slash and
@@ -107,6 +115,7 @@ func mergePlan(task map[string]interface{}) []mergeStep {
 		s.State, _ = m["state"].(string)
 		s.Registered, _ = m["registered"].(bool)
 		s.Head, _ = m["head"].(string)
+		s.Target, _ = m["targetBranch"].(string)
 		s.TestedHead = tested[prKey(s.PR)]
 		switch {
 		case s.State == "MERGED":
@@ -124,6 +133,7 @@ func mergePlan(task map[string]interface{}) []mergeStep {
 			if s.Head != "" && len(s.Head) > len(head) {
 				head = s.Head
 			}
+			s.at = head
 			s.Command = mergeCommand(s.PR, head)
 			if s.Command == "" {
 				s.Note = "merge at " + head + " by hand: not a GitHub or GitLab URL"
@@ -136,46 +146,171 @@ func mergePlan(task map[string]interface{}) []mergeStep {
 	return steps
 }
 
-// needsBoardMode is whether the attest lines depend on the board's delivery mode: only a ready PR
-// registered here does, as an unregistered one is attested on any board.
-func needsBoardMode(steps []mergeStep) bool {
-	for _, s := range steps {
-		if s.Status == "ready" && s.Registered {
-			return true
-		}
-	}
-	return false
+// mergeProcedure is the board's delivery.merge as effectiveDeliveryPolicy resolves it (task 71a3dd22).
+type mergeProcedure struct {
+	By                 string `json:"by"`
+	Method             string `json:"method"`
+	AtTestedHead       bool   `json:"atTestedHead"`
+	RequireAttestation bool   `json:"requireAttestation"`
+	Order              string `json:"order"`
 }
 
-// withAttestLines adds, after each ready PR's merge command, the attestation that records the merge
-// when this board cannot see it: the PR is unregistered here, or the board's mode is ATTESTED.
-func withAttestLines(steps []mergeStep, task string, attestedBoard bool) []mergeStep {
-	for i := range steps {
-		if steps[i].Status != "ready" || (steps[i].Registered && !attestedBoard) {
-			continue
-		}
-		steps[i].Attest = "rearm agent task delivered " + task + " --session <seat-session> --unit " +
-			steps[i].PR + " --commit <merge sha>"
+// procedureOf reads a board's effectiveDeliveryPolicy. A server from before the setting serves no
+// merge: the coordinator merges with a merge commit at the tested head, attesting on ATTESTED.
+func procedureOf(policy map[string]interface{}) mergeProcedure {
+	mode, _ := policy["mode"].(string)
+	p := mergeProcedure{By: "COORDINATOR", Method: "MERGE", AtTestedHead: true, RequireAttestation: mode == "ATTESTED",
+		Order: "NOTE_ORDER"}
+	m, ok := policy["merge"].(map[string]interface{})
+	if !ok {
+		return p
 	}
-	return steps
+	if v, ok := m["by"].(string); ok && v != "" {
+		p.By = v
+	}
+	if v, ok := m["method"].(string); ok && v != "" {
+		p.Method = v
+	}
+	if v, ok := m["atTestedHead"].(bool); ok {
+		p.AtTestedHead = v
+	}
+	if v, ok := m["requireAttestation"].(bool); ok {
+		p.RequireAttestation = v || mode == "ATTESTED"
+	}
+	if v, ok := m["order"].(string); ok && v != "" {
+		p.Order = v
+	}
+	return p
 }
 
-// boardAttests reads whether the task's board proves delivery by attestation (mode ATTESTED).
-func boardAttests(board string) (bool, error) {
+// boardProcedure reads the merge procedure of a task's board.
+func boardProcedure(board string) (mergeProcedure, error) {
 	data, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": board})
 	if err != nil {
-		return false, err
+		return mergeProcedure{}, err
 	}
 	b, _ := data["agentBoardProgrammatic"].(map[string]interface{})
 	p, _ := b["effectiveDeliveryPolicy"].(map[string]interface{})
-	mode, _ := p["mode"].(string)
-	return mode == "ATTESTED", nil
+	return procedureOf(p), nil
+}
+
+// mayMerge is whether the caller merges on this board, and the line it prints when it does not: a
+// person's board is never the caller's; a role's is the caller's when its session signed the task
+// off in that role.
+func mayMerge(p mergeProcedure, task map[string]interface{}, session string) (bool, string) {
+	const after = " -- do not merge; attest after they do if the board requires it"
+	switch {
+	case p.By == "COORDINATOR":
+		return true, ""
+	case strings.HasPrefix(strings.ToUpper(p.By), "ROLE:"):
+		role := strings.TrimSpace(p.By[len("ROLE:"):])
+		if session != "" {
+			offs, _ := task["signOffs"].([]interface{})
+			for _, o := range offs {
+				m, _ := o.(map[string]interface{})
+				r, _ := m["role"].(string)
+				s, _ := m["session"].(string)
+				if s == session && strings.EqualFold(r, role) {
+					return true, ""
+				}
+			}
+		}
+		return false, "merges on this board are the " + role + " role's (run with --session <your session> if that is you)" + after
+	default:
+		return false, "merges on this board are a person's" + after
+	}
+}
+
+// mergeCommandFor is the command that merges a PR by the board's method: gh pr merge with --merge,
+// --squash or --rebase on GitHub; GitLab's merge API; a git fast-forward sequence for FAST_FORWARD.
+// The head is held (--match-head-commit, sha) only when the board merges at the tested head.
+func mergeCommandFor(prURL, head, target, method string, atTestedHead bool) string {
+	if method == "FAST_FORWARD" {
+		onto := target
+		if onto == "" {
+			onto = "<target>"
+		}
+		at := "origin/<pr-branch>"
+		if atTestedHead {
+			at = head
+		}
+		return "git fetch origin <pr-branch> && git switch " + onto + " && git merge --ff-only " + at +
+			" && git push origin " + onto
+	}
+	u, err := url.Parse(strings.TrimSpace(prURL))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	path := strings.Trim(u.Path, "/")
+	if i := strings.Index(path, "/-/merge_requests/"); i >= 0 {
+		project := path[:i]
+		iid := strings.Trim(path[i+len("/-/merge_requests/"):], "/")
+		api := "projects/" + url.PathEscape(project) + "/merge_requests/" + iid + "/merge"
+		host := ""
+		if !strings.EqualFold(u.Host, "gitlab.com") {
+			host = " --hostname " + u.Host
+		}
+		cmd := "glab api" + host + " --method PUT " + api
+		if method == "SQUASH" {
+			cmd += " -f squash=true"
+		}
+		if atTestedHead {
+			cmd += " -f sha=" + head
+		}
+		return cmd
+	}
+	if strings.Contains(path, "/pull/") {
+		flag := map[string]string{"SQUASH": "--squash", "REBASE": "--rebase"}[method]
+		if flag == "" {
+			flag = "--merge"
+		}
+		cmd := "gh pr merge " + prURL + " " + flag
+		if atTestedHead {
+			cmd += " --match-head-commit " + head
+		}
+		return cmd
+	}
+	return ""
+}
+
+// withProcedure sets each step to the board's procedure: its method, who merges and whether at the
+// tested head; for a ready PR, the command for that method when the caller merges, or the line that
+// says who does; and the attest line when the board requires one or CI does not report the PR here.
+func withProcedure(steps []mergeStep, task string, p mergeProcedure, merges bool, notYours string) []mergeStep {
+	for i := range steps {
+		s := &steps[i]
+		s.Method, s.By, s.AtTestedHead = p.Method, p.By, p.AtTestedHead
+		if s.Status != "ready" {
+			continue
+		}
+		if !merges {
+			s.Command = ""
+			s.Note = notYours
+		} else if cmd := mergeCommandFor(s.PR, s.at, s.Target, p.Method, p.AtTestedHead); cmd != "" {
+			s.Command = cmd
+			if p.Method == "REBASE" && strings.Contains(cmd, "glab api") {
+				s.Note = "the GitLab project's merge method has to be rebase for this to rebase"
+			}
+		}
+		if p.RequireAttestation || !s.Registered {
+			s.Attest = "rearm agent task delivered " + task + " --session <seat-session> --unit " + s.PR +
+				" --commit <merge sha>"
+		}
+	}
+	return steps
 }
 
 func printMergePlan(steps []mergeStep) {
 	if len(steps) == 0 {
 		fmt.Println("The task links no PR.")
 		return
+	}
+	if steps[0].Method != "" {
+		held := "at the tested head"
+		if !steps[0].AtTestedHead {
+			held = "not held to the tested head"
+		}
+		fmt.Printf("merge procedure: by %s, method %s, %s\n", steps[0].By, steps[0].Method, held)
 	}
 	for _, s := range steps {
 		fmt.Printf("%s\n  status: %s", s.PR, s.Status)
@@ -214,8 +349,12 @@ gh pr merge <url> --merge --match-head-commit <head> for GitHub, the merge API w
 The forge refuses a moved head, which covers PRs ReARM does not see. A PR marked moved or untested
 needs a review or test of its current head first.
 
-After the merge command, an attest line records the merge where the board cannot see it: for a PR
-CI does not report here, or on a board whose delivery mode is ATTESTED. Fill in the merge sha.`,
+The board's delivery.merge decides the rest (task 71a3dd22): the method (--merge, --squash or
+--rebase; a git fast-forward sequence for FAST_FORWARD), whether the head is held (atTestedHead),
+and who merges. On a board where a person merges, or a role and --session is not a session that
+signed the task off in that role, the plan says so instead of printing merge commands. After each
+command, an attest line records the merge where the board requires it or cannot see it: fill in
+the merge sha.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		data, err := sendGraphQLRequest(rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0]})
@@ -225,15 +364,14 @@ CI does not report here, or on a board whose delivery mode is ATTESTED. Fill in 
 		}
 		task, _ := data["agentTaskProgrammatic"].(map[string]interface{})
 		steps := mergePlan(task)
-		attested := false
-		if needsBoardMode(steps) {
-			board, _ := task["board"].(string)
-			if attested, err = boardAttests(board); err != nil {
-				printGqlError(err)
-				os.Exit(1)
-			}
+		board, _ := task["board"].(string)
+		procedure, err := boardProcedure(board)
+		if err != nil {
+			printGqlError(err)
+			os.Exit(1)
 		}
-		steps = withAttestLines(steps, args[0], attested)
+		merges, notYours := mayMerge(procedure, task, taskSessionUuid)
+		steps = withProcedure(steps, args[0], procedure, merges, notYours)
 		if taskMergeplanJson {
 			emitJson(steps)
 			return
@@ -244,5 +382,6 @@ CI does not report here, or on a board whose delivery mode is ATTESTED. Fill in 
 
 func init() {
 	agentTaskMergeplanCmd.Flags().BoolVar(&taskMergeplanJson, "json", false, "print the plan as JSON")
+	agentTaskMergeplanCmd.Flags().StringVar(&taskSessionUuid, "session", "", "your session, when the board's merges are a role's")
 	agentTaskCmd.AddCommand(agentTaskMergeplanCmd)
 }
