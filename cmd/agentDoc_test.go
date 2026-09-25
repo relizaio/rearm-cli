@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -258,4 +259,53 @@ func TestPendingOutputsAreKeyedByTaskAndTakenOnce(t *testing.T) {
 // is: the same call the sign-off path makes, with the id an agent actually holds.
 func takePendingOutputsProbe(sessionRef, taskUuid string) []string {
 	return takePendingOutputs(sessionRef, taskUuid)
+}
+
+func TestPublishWithoutAFileAsksTheBoard(t *testing.T) {
+	var asked []string
+	queryDocumentPath = func(board, spec, task, component string) (string, error) {
+		asked = append(asked, board, spec, task, component)
+		return "docs/detailed_design/1a2b3c4d/round-2.md", nil
+	}
+	defer func() { queryDocumentPath = defaultQueryDocumentPath }()
+	docFile, docTask, docComponent = "", "1a2b3c4d-0000-0000-0000-000000000000", ""
+	defer func() { docFile, docTask, docComponent = "", "", "" }()
+
+	got, err := documentFile(map[string]interface{}{"uuid": "board-1"}, "DETAILED_DESIGN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "docs/detailed_design/1a2b3c4d/round-2.md" {
+		t.Errorf("the server's path is used, got %q", got)
+	}
+	if want := []string{"board-1", "DETAILED_DESIGN", "1a2b3c4d-0000-0000-0000-000000000000", ""}; strings.Join(asked, "|") != strings.Join(want, "|") {
+		t.Errorf("asked with %v, want %v", asked, want)
+	}
+}
+
+func TestAFileBypassesTheBoard(t *testing.T) {
+	queryDocumentPath = func(_, _, _, _ string) (string, error) {
+		t.Fatal("--file must not ask the board")
+		return "", nil
+	}
+	defer func() { queryDocumentPath = defaultQueryDocumentPath }()
+	docFile = "impl/mine.md"
+	defer func() { docFile = "" }()
+	if got, err := documentFile(map[string]interface{}{"uuid": "board-1"}, "DETAILED_DESIGN"); err != nil || got != "impl/mine.md" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+func TestTheServersRefusalIsPassedOnWithTheWayRoundIt(t *testing.T) {
+	_, err := pathFromResponse(nil, errors.New("the DETAILED_DESIGN path on board b (docs/{type}/{task}/round-{round}.md) is per task; name the task"), "DETAILED_DESIGN")
+	if err == nil || !strings.Contains(err.Error(), "name the task") || !strings.Contains(err.Error(), "pass --file") {
+		t.Errorf("the refusal and the way round it are both said: %v", err)
+	}
+	if _, err := pathFromResponse(map[string]interface{}{"agentBoardProgrammatic": map[string]interface{}{"documentPath": nil}}, nil, "GLOSSARY"); err == nil {
+		t.Error("an empty answer is an error, not an empty path")
+	}
+	got, err := pathFromResponse(map[string]interface{}{"agentBoardProgrammatic": map[string]interface{}{"documentPath": "docs/glossary/api.md"}}, nil, "GLOSSARY")
+	if err != nil || got != "docs/glossary/api.md" {
+		t.Errorf("got %q, %v", got, err)
+	}
 }

@@ -282,12 +282,9 @@ func runDocPublish() error {
 		return fmt.Errorf("could not read HEAD of %s: %w", repoPath, err)
 	}
 
-	file := docFile
-	if file == "" {
-		file, err = resolveTemplatePath(board, spec)
-		if err != nil {
-			return err
-		}
+	file, err := documentFile(board, spec)
+	if err != nil {
+		return err
 	}
 	indexFile := docIndexFile
 	if indexFile == "" && taskScopedTypes[spec] {
@@ -364,36 +361,44 @@ func runDocPublish() error {
 	return sendDocPublish(st, input)
 }
 
-// resolveTemplatePath fills the board's path template for this type and the task's next round.
-func resolveTemplatePath(board map[string]interface{}, spec string) (string, error) {
-	tmpl := ""
-	if paths, ok := board["documentPaths"].(map[string]interface{}); ok {
-		if v, ok := paths[spec].(string); ok {
-			tmpl = v
-		}
+// queryDocumentPath asks the server where a new document of this type goes on the board: its
+// template after overrides and scope defaults, with {task}, {round}, {type} and {component} filled
+// the way publish itself counts rounds. A variable so tests can stand in for the server.
+var queryDocumentPath = defaultQueryDocumentPath
+
+func defaultQueryDocumentPath(boardUuid, spec, task, component string) (string, error) {
+	vars := map[string]interface{}{"boardUuid": boardUuid, "specification": spec}
+	if task != "" {
+		vars["task"] = task
 	}
-	if tmpl == "" {
-		switch spec {
-		case "REVIEW_FINDINGS":
-			tmpl = "findings/{task}/round-{round}.md"
-		case "TEST_REPORT":
-			tmpl = "tests/{task}/run-{round}.md"
-		default:
-			return "", fmt.Errorf("this board has no path template for %s; pass --file", spec)
-		}
+	if component != "" {
+		vars["component"] = component
 	}
-	round, err := nextRound(spec)
+	data, err := sendGraphQLRequest(rearm.AgentDocumentPath_Operation, vars)
+	return pathFromResponse(data, err, spec)
+}
+
+// pathFromResponse reads the server's answer. Its refusal -- a task-scoped type with no --task, a
+// component-scoped one with no --component -- is passed on with the one way round it.
+func pathFromResponse(data map[string]interface{}, err error, spec string) (string, error) {
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("the board could not give a path for %s: %w; pass --file", spec, err)
 	}
-	short := docTask
-	if len(short) > 8 {
-		short = short[:8]
+	b, _ := data["agentBoardProgrammatic"].(map[string]interface{})
+	p, _ := b["documentPath"].(string)
+	if p == "" {
+		return "", fmt.Errorf("the board gave no path for %s; pass --file", spec)
 	}
-	p := strings.ReplaceAll(tmpl, "{task}", short)
-	p = strings.ReplaceAll(p, "{round}", fmt.Sprintf("%d", round))
-	p = strings.ReplaceAll(p, "{type}", strings.ToLower(spec))
 	return p, nil
+}
+
+// documentFile is --file when given, else the path the board gives for this type.
+func documentFile(board map[string]interface{}, spec string) (string, error) {
+	if docFile != "" {
+		return docFile, nil
+	}
+	boardUuid, _ := board["uuid"].(string)
+	return queryDocumentPath(boardUuid, spec, docTask, docComponent)
 }
 
 func init() {
@@ -402,7 +407,7 @@ func init() {
 	f.StringVar(&docType, "type", "", "specification type, e.g. REVIEW_FINDINGS")
 	f.StringVar(&docTask, "task", "", "task this round belongs to (task-scoped types)")
 	f.StringVar(&docComponent, "component", "", "document series (component-scoped types)")
-	f.StringVar(&docFile, "file", "", "repo-relative path; resolved from the board's template when omitted")
+	f.StringVar(&docFile, "file", "", "repo-relative path; asked of the board (its template, placeholders filled) when omitted")
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
 	f.BoolVar(&docIndexOnlyFlag, "index-only", false,
 		"publish the index alone, with no file: the items ARE the document, which is the usual"+
@@ -432,7 +437,6 @@ func boardOfSession(st *agentSessionState) (map[string]interface{}, string, erro
 		if task == nil {
 			return nil, "", fmt.Errorf("task %s not found", docTask)
 		}
-		cachedTask = task
 		boardUuid, _ = task["board"].(string)
 	} else if boardUuid == "" && st != nil {
 		boardUuid = st.Board
@@ -462,37 +466,4 @@ func boardOfSession(st *agentSessionState) (map[string]interface{}, string, erro
 			"an operator must set one before documents can be published", boardUuid)
 	}
 	return board, repo, nil
-}
-
-// cachedTask is the task read during board resolution, reused for the round count so publishing
-// does not read the same task twice.
-var cachedTask map[string]interface{}
-
-// nextRound counts this task's existing rounds of a type and returns the next.
-//
-// Mirrors the server's rule, and only ever feeds the PATH template: the server computes the round
-// it stores under the task lock, which is the authoritative one. They agree because the agent
-// holding the assignment is the only thing publishing for this task.
-func nextRound(spec string) (int, error) {
-	if cachedTask == nil {
-		return 0, fmt.Errorf("no task read; pass --task")
-	}
-	docs, _ := cachedTask["documents"].([]interface{})
-	n := 0
-	for _, d := range docs {
-		rel, ok := d.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		ref, ok := rel["document"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if s, _ := ref["specification"].(string); s == spec {
-			if t, _ := ref["task"].(string); t == docTask {
-				n++
-			}
-		}
-	}
-	return n + 1, nil
 }
