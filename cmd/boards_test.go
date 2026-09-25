@@ -227,3 +227,25 @@ func TestBudgetVariables(t *testing.T) {
 		t.Error("boards budget takes --usd and --clear")
 	}
 }
+
+// A person's release sends the role only when one is named, and the note only when given: a bare
+// release lets routing pick (task 4c566d0d).
+func TestOperatorReleaseVars(t *testing.T) {
+	bare := operatorReleaseVars("t", "", "")
+	if bare["taskUuid"] != "t" || bare["hold"] != false {
+		t.Errorf("a release is hold=false on the task: %v", bare)
+	}
+	if _, ok := bare["role"]; ok {
+		t.Errorf("no --role sends no role: %v", bare)
+	}
+	if _, ok := bare["reason"]; ok {
+		t.Errorf("no --note sends no reason: %v", bare)
+	}
+	named := operatorReleaseVars("t", "go on", " coder ")
+	if named["role"] != "coder" || named["reason"] != "go on" {
+		t.Errorf("--role and --note are sent, the role trimmed: %v", named)
+	}
+	if boardsReleaseCmd.Flags().Lookup("role") == nil {
+		t.Error("boards release takes --role")
+	}
+}

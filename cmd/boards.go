@@ -481,16 +481,29 @@ var boardsHoldCmd = &cobra.Command{
 	},
 }
 
+// operatorReleaseVars are the variables of a person's release: the note and the role only when
+// given, so a bare release lets routing pick, as before (task 4c566d0d).
+func operatorReleaseVars(task, note, role string) map[string]interface{} {
+	vars := map[string]interface{}{"taskUuid": task, "hold": false}
+	if note != "" {
+		vars["reason"] = note
+	}
+	if r := strings.TrimSpace(role); r != "" {
+		vars["role"] = r
+	}
+	return vars
+}
+
 var boardsReleaseCmd = &cobra.Command{
 	Use:   "release <task-uuid>",
 	Short: "Release a hold; on a question hold, --note is the answer",
-	Args:  cobra.ExactArgs(1),
+	Long: `Releases a hold. The task routes on from its last hop, as routing would have routed it;
+--role names an active role on the board to send it to instead. Releasing a no-progress or
+cycle-cap stop routes past that stop once. On a question hold, --note is the answer, and an
+answer takes no --role.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars := map[string]interface{}{"taskUuid": args[0], "hold": false}
-		if boardsNote != "" {
-			vars["reason"] = boardsNote
-		}
-		runGql(rearm.AgentTaskOperatorHold_Operation, vars, "agentTaskOperatorHold")
+		runGql(rearm.AgentTaskOperatorHold_Operation, operatorReleaseVars(args[0], boardsNote, boardsRole), "agentTaskOperatorHold")
 	},
 }
 
@@ -650,6 +663,7 @@ func init() {
 	boardsHoldCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
 	_ = boardsHoldCmd.MarkFlagRequired("reason")
 	boardsReleaseCmd.Flags().StringVar(&boardsNote, "note", "", "on a question hold, the answer")
+	boardsReleaseCmd.Flags().StringVar(&boardsRole, "role", "", "an active role to route the task to instead of the one routing would pick")
 
 	boardsRequireReviewCmd.Flags().BoolVar(&boardsOff, "off", false, "clear the requirement")
 
