@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/relizaio/rearm-client-go"
 	"github.com/spf13/cobra"
@@ -72,6 +73,7 @@ var (
 	taskStrength     string
 	taskBudget       string
 	taskStatusFilter string
+	taskChangedSince string
 	taskLockReason   string
 	taskDependsOn    []string
 	taskEventKind    string
@@ -661,13 +663,36 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 	},
 }
 
+// taskListVariables is the task list read's variables (task 9540d3b6): a board, optionally a
+// status, and optionally an RFC 3339 instant, checked here so a typo is refused before the call.
+func taskListVariables(board, status, changedSince string) (map[string]interface{}, error) {
+	variables := map[string]interface{}{"boardUuid": board}
+	if status != "" {
+		variables["status"] = status
+	}
+	if changedSince != "" {
+		if _, err := time.Parse(time.RFC3339Nano, changedSince); err != nil {
+			return nil, fmt.Errorf("--changed-since takes an RFC 3339 instant, such as a task's updatedAt (2026-09-26T03:29:08.471Z): %w", err)
+		}
+		variables["changedSince"] = changedSince
+	}
+	return variables, nil
+}
+
 var agentTaskListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List a board's tasks, optionally by status",
+	Short: "List a board's tasks, optionally by status or by what changed since an instant",
+	Long: `Lists a board's tasks, each with its updatedAt.
+
+With --changed-since, only the tasks that changed at or after the instant, oldest change first:
+keep the last one's updatedAt as the next --changed-since. The board's events carry what needs a
+person; forward hand-overs, authorizes and assignments post no event, so this is how a follower
+sees them. A poll is 'board events --after <seq>' plus 'task list --changed-since <updatedAt>'.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		variables := map[string]interface{}{"boardUuid": taskBoardUuid}
-		if taskStatusFilter != "" {
-			variables["status"] = taskStatusFilter
+		variables, err := taskListVariables(taskBoardUuid, taskStatusFilter, taskChangedSince)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		runGql(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
 	},
@@ -769,6 +794,8 @@ func init() {
 	_ = agentTaskLinkprCmd.MarkPersistentFlagRequired("pr-url")
 	agentTaskListCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Board uuid — required")
 	agentTaskListCmd.PersistentFlags().StringVar(&taskStatusFilter, "status", "", taskStatusHelp)
+	agentTaskListCmd.PersistentFlags().StringVar(&taskChangedSince, "changed-since", "",
+		"Only tasks changed at or after this RFC 3339 instant, oldest change first (a task's updatedAt)")
 	_ = agentTaskListCmd.MarkPersistentFlagRequired("board")
 
 	agentBoardRoleconfigCmd.AddCommand(agentBoardRoleconfigSetCmd)
