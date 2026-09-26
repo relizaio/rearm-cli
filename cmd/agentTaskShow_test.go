@@ -28,3 +28,16 @@ func TestTaskShowRequest(t *testing.T) {
 		t.Error("more than 100 is refused before the call")
 	}
 }
+
+// task show prints what each sign-off reviewed and what its review promoted, and what a guard kept
+// back with the reason (task fda2c9f1).
+func TestTaskShowReadsWhatEachSignOffReviewed(t *testing.T) {
+	for _, uuids := range [][]string{{"t1"}, {"t1", "t2"}} {
+		op, _, _ := taskShowRequest(uuids)
+		n := strings.Join(strings.Fields(op), " ")
+		if !strings.Contains(n, "reviewedInputs { release specification round promotedTo }") ||
+			!strings.Contains(n, "refusedPromotions { release specification round reason }") {
+			t.Errorf("task show of %d task(s) does not read what a sign-off reviewed", len(uuids))
+		}
+	}
+}
