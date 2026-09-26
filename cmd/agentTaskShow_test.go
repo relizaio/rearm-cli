@@ -28,3 +28,14 @@ func TestTaskShowRequest(t *testing.T) {
 		t.Error("more than 100 is refused before the call")
 	}
 }
+
+// task show prints each finding's correction flag (task cac71351): an item a person filed while
+// approving at a gate, which never blocks.
+func TestTaskShowReadsTheCorrectionFlag(t *testing.T) {
+	for _, uuids := range [][]string{{"t1"}, {"t1", "t2"}} {
+		op, _, _ := taskShowRequest(uuids)
+		if !strings.Contains(strings.Join(strings.Fields(op), " "), "resolvedBy resolution correction }") {
+			t.Errorf("task show of %d task(s) does not read correction", len(uuids))
+		}
+	}
+}
