@@ -28,3 +28,14 @@ func TestTaskShowRequest(t *testing.T) {
 		t.Error("more than 100 is refused before the call")
 	}
 }
+
+// task show prints the task's budget, its coordinator share and spentMicros, what the board
+// charges it (task 02bfab7c).
+func TestTaskShowReadsTheTaskSpend(t *testing.T) {
+	for _, uuids := range [][]string{{"t1"}, {"t1", "t2"}} {
+		op, _, _ := taskShowRequest(uuids)
+		if !strings.Contains(strings.Join(strings.Fields(op), " "), "budgetMicros coordinatorEstimateMicros spentMicros") {
+			t.Errorf("task show of %d task(s) does not read the task's spend", len(uuids))
+		}
+	}
+}
