@@ -237,7 +237,10 @@ var agentTaskCmd = &cobra.Command{
 	Long: `Hub-and-spoke task lifecycle: the coordinator authorizes and orders
 tasks, workers pull role-lessly (the server answers with the role to
 assume and its served prompt), and every sign-off or return redirects
-the task back to the coordinator.`,
+the task back to the coordinator.
+
+A task argument, and --task, --depends-on and --parent, take the task's uuid
+or its key, e.g. RD-42: the key is resolved to the uuid before the call.`,
 }
 
 var agentTaskRegisterCmd = &cobra.Command{

@@ -118,7 +118,10 @@ buttons on the board page, recorded under your name.
 
 For people, not agents. They run on a browser login (` + "`rearm login`" + `) or a
 personal key, as you, and need the organization's admin permission. An
-organization key is refused; an agent session keeps using ` + "`rearm agent task`" + `.`,
+organization key is refused; an agent session keeps using ` + "`rearm agent task`" + `.
+
+A task argument, --depends-on and --parent take the task's uuid or its key,
+e.g. RD-42.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initConfig(cmd)
 		if p := personCredentialProblem(resolvedAuthMode(), apiKeyId); p != "" {
