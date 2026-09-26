@@ -29,6 +29,30 @@ func TestTaskShowRequest(t *testing.T) {
 	}
 }
 
+// task show prints each finding's correction flag (task cac71351): an item a person filed while
+// approving at a gate, which never blocks.
+func TestTaskShowReadsTheCorrectionFlag(t *testing.T) {
+	for _, uuids := range [][]string{{"t1"}, {"t1", "t2"}} {
+		op, _, _ := taskShowRequest(uuids)
+		if !strings.Contains(strings.Join(strings.Fields(op), " "), "resolvedBy resolution correction }") {
+			t.Errorf("task show of %d task(s) does not read correction", len(uuids))
+		}
+	}
+}
+
+// task show prints what each sign-off reviewed and what its review promoted, and what a guard kept
+// back with the reason (task fda2c9f1).
+func TestTaskShowReadsWhatEachSignOffReviewed(t *testing.T) {
+	for _, uuids := range [][]string{{"t1"}, {"t1", "t2"}} {
+		op, _, _ := taskShowRequest(uuids)
+		n := strings.Join(strings.Fields(op), " ")
+		if !strings.Contains(n, "reviewedInputs { release specification round promotedTo }") ||
+			!strings.Contains(n, "refusedPromotions { release specification round reason }") {
+			t.Errorf("task show of %d task(s) does not read what a sign-off reviewed", len(uuids))
+		}
+	}
+}
+
 // task show prints the task's budget, its coordinator share and spentMicros, what the board
 // charges it (task 02bfab7c).
 func TestTaskShowReadsTheTaskSpend(t *testing.T) {
