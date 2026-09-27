@@ -53,6 +53,7 @@ import (
 var (
 	boardsStatus       string
 	boardsTitle        string
+	boardsDescription  string
 	boardsExternalRef  string
 	boardsSourceUrl    string
 	boardsParent       string
@@ -166,8 +167,11 @@ var boardsTasksCmd = &cobra.Command{
 	},
 }
 
-func registerVariables(board, title, externalRef, sourceUrl, parent string, level int) map[string]interface{} {
+func registerVariables(board, title, description, externalRef, sourceUrl, parent string, level int) map[string]interface{} {
 	input := map[string]interface{}{"title": title}
+	if description != "" {
+		input["description"] = description
+	}
 	if externalRef != "" {
 		input["externalRef"] = externalRef
 	}
@@ -188,7 +192,7 @@ var boardsRegisterCmd = &cobra.Command{
 	Short: "Register a task by hand (PENDING_INTAKE); on a board with sources --external-ref is required",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskRegister_Operation, registerVariables(args[0], boardsTitle, boardsExternalRef,
+		runGql(rearm.AgentTaskRegister_Operation, registerVariables(args[0], boardsTitle, boardsDescription, boardsExternalRef,
 			boardsSourceUrl, boardsParent, boardsLevel), "agentTaskRegister")
 	},
 }
@@ -618,7 +622,8 @@ var boardsApplyCmd = &cobra.Command{
 func init() {
 	boardsTasksCmd.Flags().StringVar(&boardsStatus, "status", "", "only tasks in this status (e.g. QUEUED, ON_HOLD, DELIVERING, COMPLETED)")
 
-	boardsRegisterCmd.Flags().StringVar(&boardsTitle, "title", "", "task title — required")
+	boardsRegisterCmd.Flags().StringVar(&boardsTitle, "title", "", "task title, one line of at most 120 characters — required")
+	boardsRegisterCmd.Flags().StringVar(&boardsDescription, "description", "", "what the task is, beyond its title (at most 4000 characters)")
 	boardsRegisterCmd.Flags().StringVar(&boardsExternalRef, "external-ref", "", "tracker reference; required on a board with sources")
 	boardsRegisterCmd.Flags().StringVar(&boardsSourceUrl, "source-url", "", "link to the issue")
 	boardsRegisterCmd.Flags().StringVar(&boardsParent, "parent", "", "parent task uuid")
