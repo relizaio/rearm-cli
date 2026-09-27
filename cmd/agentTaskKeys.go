@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 
 	rearm "github.com/relizaio/rearm-client-go"
@@ -127,4 +130,51 @@ func init() {
 	acceptTaskKeys(agentDocPublishCmd, noTaskArgs, []*string{&docTask}, nil)
 	acceptTaskKeys(agentDocCheckCmd, noTaskArgs, []*string{&checkTask}, nil)
 	acceptTaskKeys(agentSessionUsageCmd, noTaskArgs, []*string{&usageTask}, nil)
+}
+
+// runGqlTasks is runGql for replies that are a task or a list of tasks: each task is printed with its
+// key first (board-documents.md §3.6), the rest in the usual sorted order. emitJson writes through a
+// map, whose keys come out sorted, so the selection order alone does not lead with the key.
+func runGqlTasks(query string, variables map[string]interface{}, key string) {
+	data, err := sendGraphQLRequest(query, variables)
+	if err != nil {
+		printGqlError(err)
+		os.Exit(1)
+	}
+	fmt.Println(string(keyFirstJSON(data[key])))
+}
+
+// keyFirstJSON is json.Marshal with "key" leading in a task object, or in each object of a list.
+func keyFirstJSON(v interface{}) []byte {
+	switch t := v.(type) {
+	case []interface{}:
+		parts := make([][]byte, len(t))
+		for i, e := range t {
+			parts[i] = keyFirstJSON(e)
+		}
+		return append(append([]byte("["), bytes.Join(parts, []byte(","))...), ']')
+	case map[string]interface{}:
+		k, has := t["key"]
+		if !has {
+			out, _ := json.Marshal(t)
+			return out
+		}
+		rest := make(map[string]interface{}, len(t)-1)
+		for name, val := range t {
+			if name != "key" {
+				rest[name] = val
+			}
+		}
+		head, _ := json.Marshal(k)
+		body, _ := json.Marshal(rest)
+		out := append([]byte(`{"key":`), head...)
+		if len(body) > 2 {
+			out = append(append(out, ','), body[1:]...)
+			return out
+		}
+		return append(out, '}')
+	default:
+		out, _ := json.Marshal(v)
+		return out
+	}
 }

@@ -662,7 +662,7 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 	Args: cobra.RangeArgs(1, 100),
 	Run: func(cmd *cobra.Command, args []string) {
 		op, vars, key := taskShowRequest(args)
-		runGql(op, vars, key)
+		runGqlTasks(op, vars, key)
 	},
 }
 
@@ -697,7 +697,7 @@ sees them. A poll is 'board events --after <seq>' plus 'task list --changed-sinc
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
+		runGqlTasks(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
 	},
 }
 

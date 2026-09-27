@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -59,5 +60,26 @@ func TestTaskCommandsAcceptKeys(t *testing.T) {
 	}
 	if !strings.Contains(agentTaskCmd.Long, "RD-42") {
 		t.Error("the task command's help does not say task arguments take a key")
+	}
+}
+
+// task show / task list print each task with its key first (T-1 of tests/3d1f9dd7/run-1.md): the
+// usual printer writes through a map, whose keys come out sorted.
+func TestTaskReadsPrintTheKeyFirst(t *testing.T) {
+	task := map[string]interface{}{"uuid": "u1", "board": "b1", "title": "Reopen <it>", "key": "RD-42", "number": 42.0}
+	one := string(keyFirstJSON(task))
+	if !strings.HasPrefix(one, `{"key":"RD-42",`) {
+		t.Errorf("a task leads with its key: %s", one)
+	}
+	var back map[string]interface{}
+	if err := json.Unmarshal([]byte(one), &back); err != nil || len(back) != len(task) || back["title"] != "Reopen <it>" {
+		t.Errorf("and is otherwise the same object: %s %v", one, err)
+	}
+	list := string(keyFirstJSON([]interface{}{task, map[string]interface{}{"key": "RD-43"}, map[string]interface{}{"uuid": "old"}}))
+	if !strings.HasPrefix(list, `[{"key":"RD-42",`) || !strings.Contains(list, `{"key":"RD-43"}`) || !strings.Contains(list, `{"uuid":"old"}`) {
+		t.Errorf("each task of a list, a key-only one and one from before keys: %s", list)
+	}
+	if string(keyFirstJSON(nil)) != "null" {
+		t.Errorf("nothing found prints null, as before: %s", keyFirstJSON(nil))
 	}
 }

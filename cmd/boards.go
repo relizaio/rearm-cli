@@ -162,7 +162,7 @@ var boardsTasksCmd = &cobra.Command{
 		if boardsStatus != "" {
 			vars["status"] = strings.ToUpper(boardsStatus)
 		}
-		runGql(rearm.AgentTasksOfBoard_Operation, vars, "agentTasksOfBoard")
+		runGqlTasks(rearm.AgentTasksOfBoard_Operation, vars, "agentTasksOfBoard")
 	},
 }
 
