@@ -131,10 +131,21 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 	deadline := clk.now().Add(o.timeout)
 	var coord *coordinatorWait
 	if o.coordinator {
-		coord = &coordinatorWait{opts: o, startedAt: clk.now()}
-		if o.after > 0 {
+		coord = &coordinatorWait{opts: o}
+		// Where the event cursor starts (RD2-32 T-1): --after when given; else where the last run
+		// stopped, kept in --state, so what was posted while the coordinator worked its turn is read;
+		// else from now, the first time on this host.
+		st := readWaitState(o.statePath)
+		switch {
+		case o.after > 0:
 			a := o.after
 			coord.after = &a
+		case st.After != nil:
+			coord.after = st.After
+		case st.Since != "":
+			coord.since = st.Since
+		default:
+			coord.since = clk.now().UTC().Format(time.RFC3339)
 		}
 	}
 	failures := 0
@@ -162,7 +173,14 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 			}
 		}
 		if !clk.now().Add(o.interval).Before(deadline) {
-			emitTo(out, map[string]interface{}{"timeout": true})
+			timeout := map[string]interface{}{"timeout": true}
+			if coord != nil {
+				// What was read before the timeout, and where the next run reads on from.
+				for k, v := range coord.cursorOut() {
+					timeout[k] = v
+				}
+			}
+			emitTo(out, timeout)
 			return waitExitTimeout
 		}
 		clk.sleep(o.interval)
@@ -189,15 +207,32 @@ func (t waitTrigger) id() string {
 	return t.Task + " " + t.Kind
 }
 
-// coordinatorWait is the coordinator's loop state: the event cursor, the events and ALERTs seen
-// since the last wake, and who merges on the board, read once.
+// coordinatorWait is the coordinator's loop state: the event cursor (a seq once one is known, the
+// instant to read from before), the events and ALERTs seen in this run, and who merges, read once.
 type coordinatorWait struct {
-	opts      waitOpts
-	startedAt time.Time
-	after     *int64
-	events    []map[string]interface{}
-	alerts    []int64
-	merge     *string
+	opts   waitOpts
+	after  *int64
+	since  string
+	events []map[string]interface{}
+	alerts []int64
+	merge  *string
+}
+
+// cursorOut is what every exit prints about the events: those read in this run (INFO and ALERT),
+// nextAfter when a seq is known, and else the instant the next run reads from. The same cursor is
+// kept in --state, so a run started without --after reads on from here.
+func (w *coordinatorWait) cursorOut() map[string]interface{} {
+	events := w.events
+	if events == nil {
+		events = []map[string]interface{}{}
+	}
+	out := map[string]interface{}{"events": events, "nextAfter": nil}
+	if w.after != nil {
+		out["nextAfter"] = *w.after
+	} else {
+		out["since"] = w.since
+	}
+	return out
 }
 
 // poll reads the board once: the events since the cursor, the snapshot, and the seat's touch.
@@ -230,47 +265,50 @@ func (w *coordinatorWait) poll(c waitClient) (bool, interface{}, error) {
 			triggers = append(triggers, deliveryTriggers(delivering)...)
 		}
 	}
-	for _, seq := range w.alerts {
-		triggers = append(triggers, waitTrigger{Kind: "ALERT", Alert: seq})
-	}
+	// The dedupe compares the task triggers only: an ALERT is new each time and wakes on its own, and
+	// keeping it in the set would make the next run wake again on the tasks alone once it drops out.
 	sort.Slice(triggers, func(i, j int) bool { return triggers[i].id() < triggers[j].id() })
 	ids := make([]string, 0, len(triggers))
 	for _, t := range triggers {
 		ids = append(ids, t.id())
 	}
-	last := readWaitState(w.opts.statePath)
-	if len(ids) == 0 {
-		// An emptied set clears the state, so the same triggers coming back later wake it again.
-		if len(last) > 0 {
-			writeWaitState(w.opts.statePath, nil)
-		}
+	for _, seq := range w.alerts {
+		triggers = append(triggers, waitTrigger{Kind: "ALERT", Alert: seq})
+	}
+	sort.Slice(triggers, func(i, j int) bool { return triggers[i].id() < triggers[j].id() })
+	st := readWaitState(w.opts.statePath)
+	last := st.Triggers
+	// The cursor is kept every poll, so a run that ends -- woken, timed out or killed -- hands the
+	// next one the place it stopped reading.
+	st.After, st.Since = w.after, ""
+	if w.after == nil {
+		st.Since = w.since
+	}
+	if len(w.alerts) == 0 && len(ids) == 0 {
+		// An emptied set clears the triggers, so the same ones coming back later wake it again.
+		st.Triggers = nil
+		writeWaitState(w.opts.statePath, st)
 		return false, nil, nil
 	}
-	if sameIds(ids, last) {
+	if len(w.alerts) == 0 && sameIds(ids, last) {
+		writeWaitState(w.opts.statePath, st)
 		return false, nil, nil
 	}
-	writeWaitState(w.opts.statePath, ids)
-	var nextAfter interface{}
-	if w.after != nil {
-		nextAfter = *w.after
-	}
-	events := w.events
-	if events == nil {
-		events = []map[string]interface{}{}
-	}
-	result := map[string]interface{}{"triggers": triggers, "events": events, "nextAfter": nextAfter}
+	st.Triggers = ids
+	writeWaitState(w.opts.statePath, st)
+	result := w.cursorOut()
+	result["triggers"] = triggers
 	return true, result, nil
 }
 
-// readEvents reads on from the cursor to the end, keeping INFO and ALERT events for the wake's
-// output and the ALERTs as triggers. The cursor starts at the moment the loop started, so events
-// from before never wake it.
+// readEvents reads on from the cursor to the end, keeping INFO and ALERT events for the output and
+// the ALERTs as triggers.
 func (w *coordinatorWait) readEvents(c waitClient) error {
-	since := ""
-	if w.after == nil {
-		since = w.startedAt.UTC().Format(time.RFC3339)
-	}
 	for {
+		since := ""
+		if w.after == nil {
+			since = w.since
+		}
 		p, err := c.events(w.opts.board, w.after, since)
 		if err != nil {
 			return err
@@ -290,7 +328,7 @@ func (w *coordinatorWait) readEvents(c waitClient) error {
 		if p.NextAfter != nil {
 			a := *p.NextAfter
 			w.after = &a
-			since = ""
+			w.since = ""
 		}
 		if !p.HasMore {
 			return nil
@@ -371,31 +409,36 @@ func sameIds(a, b []string) bool {
 	return true
 }
 
-// readWaitState is the trigger set the last wake saw; none when the file is absent or unreadable.
-func readWaitState(path string) []string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var s struct {
-		Triggers []string `json:"triggers"`
-	}
-	if json.Unmarshal(b, &s) != nil {
-		return nil
-	}
-	return s.Triggers
+// waitKept is what a coordinator's wait keeps between runs: the trigger set the last wake saw, and
+// the event cursor -- a seq once one is known, else the instant to read from.
+type waitKept struct {
+	Triggers []string `json:"triggers,omitempty"`
+	After    *int64   `json:"after,omitempty"`
+	Since    string   `json:"since,omitempty"`
 }
 
-func writeWaitState(path string, ids []string) {
+// readWaitState is the kept state; empty when the file is absent or unreadable.
+func readWaitState(path string) waitKept {
+	var s waitKept
+	if path == "" {
+		return s
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return s
+	}
+	if json.Unmarshal(b, &s) != nil {
+		return waitKept{}
+	}
+	return s
+}
+
+func writeWaitState(path string, s waitKept) {
 	if path == "" {
 		return
 	}
-	if len(ids) == 0 {
-		_ = os.Remove(path)
-		return
-	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
-	b, _ := json.Marshal(map[string]interface{}{"triggers": ids})
+	b, _ := json.Marshal(s)
 	_ = os.WriteFile(path, b, 0o600)
 }
 
@@ -491,9 +534,14 @@ A coordinator (--coordinator, with the seat's session and --board) reads the boa
 snapshot, and touches the seat, every interval. It exits 0 when something waits on it: a task in
 PENDING_INTAKE or AWAITING_COORDINATOR, a hold at the coordinator's level, a DELIVERING task with a
 PR not merged when the board's merge is the coordinator's, or an ALERT. It prints the triggers, the
-INFO and ALERT events since the cursor, and nextAfter. The set it woke on is kept in --state, and
-the same set does not wake it twice; a set that empties and comes back does. A task waiting on a
-person (an operator-level hold, a human gate) does not wake it.
+INFO and ALERT events it read, and nextAfter. The set it woke on is kept in --state, and the same
+set does not wake it twice; a set that empties and comes back does. A task waiting on a person (an
+operator-level hold, a human gate) does not wake it.
+
+The event cursor is kept in --state too: a wait started without --after reads on from where the
+last one stopped, so what was posted while you worked your turn is read. Pass --after <nextAfter>
+when the last exit printed one; nothing is lost when it printed null. The timeout prints the events
+it read and the cursor as well.
 
 --interval is 30 s or more (default 60): every agent on a host shares a limit of about 50 commands
 per 30 s. --timeout (default 4h) exits 2 with {"timeout": true}: re-arm. One failed poll is
@@ -523,7 +571,7 @@ func init() {
 	agentWaitCmd.Flags().StringVar(&waitBoard, "board", "", "the board; required with --coordinator")
 	agentWaitCmd.Flags().StringSliceVar(&waitRoles, "role", nil, "a worker's roles, as for 'task next' (repeat or comma-separate)")
 	agentWaitCmd.Flags().BoolVar(&waitCoordinator, "coordinator", false, "wait as the board's coordinator")
-	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator: the event seq to read on from (default: from now)")
+	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator: the event seq to read on from (default: where the last wait stopped, else now)")
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
 	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator: where the last wake's triggers are kept (default ~/.rearm/wait-<board>.json)")

@@ -266,7 +266,7 @@ func TestTheSameTriggersDoNotWakeTwiceAndAnEmptiedSetComesBack(t *testing.T) {
 	if code, printed := runCoordinator(t, o, &fakeBoard{snapshots: back}); code != waitExitWork || kinds(printed)[0] != "RD-1 PENDING_INTAKE" {
 		t.Errorf("an emptied set coming back: exit %d, %v", code, kinds(printed))
 	}
-	if readWaitState(o.statePath) == nil {
+	if readWaitState(o.statePath).Triggers == nil {
 		t.Error("the wake's set is not kept")
 	}
 }
@@ -314,5 +314,71 @@ func TestWaitIsAttachedUnderAgent(t *testing.T) {
 		if agentWaitCmd.Flags().Lookup(f) == nil {
 			t.Errorf("no --%s", f)
 		}
+	}
+}
+
+// RD2-32 T-1: a wake on tasks alone read no event, so it printed nextAfter null and the next wait
+// started from its own start -- what was posted during the coordinator's turn was never read. The
+// cursor is kept in --state and the next run reads on from it.
+func TestTheCursorIsHandedOverBetweenRuns(t *testing.T) {
+	o := coordinator(t)
+	seq := func(n int64) *int64 { return &n }
+	intake := [][]map[string]interface{}{{entry("RD-1", "PENDING_INTAKE", nil)}}
+
+	// Run 1 wakes on intake with no event: nextAfter null, and it says where it read from.
+	f1 := &fakeBoard{snapshots: intake}
+	code, printed := runCoordinator(t, o, f1)
+	if code != waitExitWork || printed["nextAfter"] != nil || printed["since"] != "2026-09-27T12:00:00Z" {
+		t.Fatalf("run 1: exit %d, %v", code, printed)
+	}
+	if st := readWaitState(o.statePath); st.Since != "2026-09-27T12:00:00Z" || st.After != nil {
+		t.Errorf("run 1 kept %+v", st)
+	}
+
+	// An ALERT is posted while the coordinator works; run 2, without --after, reads it.
+	o2 := o
+	o2.timeout = 3 * time.Minute
+	f2 := &fakeBoard{snapshots: intake, pages: []eventPage{
+		{Events: []map[string]interface{}{{"seq": float64(50), "kind": "ALERT", "message": "posted during the turn"}}, NextAfter: seq(50)}}}
+	var out bytes.Buffer
+	clk := &fakeClock{t: time.Date(2026, 9, 27, 12, 1, 30, 0, time.UTC)}
+	if code := runWait(o2, f2, clk, &out); code != waitExitWork {
+		t.Fatalf("run 2: exit %d: %s", code, out.String())
+	}
+	if f2.eventCalls[0] != "since=2026-09-27T12:00:00Z" {
+		t.Errorf("run 2 read %v, want from where run 1 stopped", f2.eventCalls)
+	}
+	var woke map[string]interface{}
+	_ = json.Unmarshal(out.Bytes(), &woke)
+	if strings.Join(kinds(woke), ",") != "ALERT 50,RD-1 PENDING_INTAKE" || woke["nextAfter"].(float64) != 50 {
+		t.Errorf("run 2 woke on %v nextAfter %v", kinds(woke), woke["nextAfter"])
+	}
+	if st := readWaitState(o.statePath); st.After == nil || *st.After != 50 || st.Since != "" {
+		t.Errorf("run 2 kept %+v", st)
+	}
+
+	// Run 3 reads on after 50, and its timeout prints the cursor and what it read.
+	f3 := &fakeBoard{snapshots: intake, pages: []eventPage{
+		{Events: []map[string]interface{}{{"seq": float64(51), "kind": "INFO", "message": "fyi"}}, NextAfter: seq(51)}}}
+	out.Reset()
+	if code := runWait(o2, f3, start(), &out); code != waitExitTimeout {
+		t.Fatalf("run 3: exit %d", code)
+	}
+	if f3.eventCalls[0] != "after=50" {
+		t.Errorf("run 3 read %v", f3.eventCalls)
+	}
+	var timedOut map[string]interface{}
+	_ = json.Unmarshal(out.Bytes(), &timedOut)
+	if timedOut["timeout"] != true || timedOut["nextAfter"].(float64) != 51 || len(timedOut["events"].([]interface{})) != 1 {
+		t.Errorf("the timeout printed %v", timedOut)
+	}
+
+	// --after still wins over what was kept.
+	o4 := o2
+	o4.after = 7
+	f4 := &fakeBoard{snapshots: [][]map[string]interface{}{{}}}
+	runWait(o4, f4, start(), &bytes.Buffer{})
+	if f4.eventCalls[0] != "after=7" {
+		t.Errorf("--after 7 read %v", f4.eventCalls)
 	}
 }
