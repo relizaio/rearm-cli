@@ -237,7 +237,10 @@ var agentTaskCmd = &cobra.Command{
 	Long: `Hub-and-spoke task lifecycle: the coordinator authorizes and orders
 tasks, workers pull role-lessly (the server answers with the role to
 assume and its served prompt), and every sign-off or return redirects
-the task back to the coordinator.`,
+the task back to the coordinator.
+
+A task argument, and --task, --depends-on and --parent, take the task's uuid
+or its key, e.g. RD-42: the key is resolved to the uuid before the call.`,
 }
 
 var agentTaskRegisterCmd = &cobra.Command{
@@ -659,7 +662,7 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 	Args: cobra.RangeArgs(1, 100),
 	Run: func(cmd *cobra.Command, args []string) {
 		op, vars, key := taskShowRequest(args)
-		runGql(op, vars, key)
+		runGqlTasks(op, vars, key)
 	},
 }
 
@@ -694,7 +697,7 @@ sees them. A poll is 'board events --after <seq>' plus 'task list --changed-sinc
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
+		runGqlTasks(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
 	},
 }
 
