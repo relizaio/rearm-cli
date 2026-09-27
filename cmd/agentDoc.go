@@ -390,8 +390,9 @@ func runDocPublish() error {
 }
 
 // queryDocumentPath asks the server where a new document of this type goes on the board: its
-// template after overrides and scope defaults, with {task}, {round}, {type} and {component} filled
-// the way publish itself counts rounds. A variable so tests can stand in for the server.
+// template after overrides and scope defaults, with {key}, {round}, {type} and {component} filled
+// the way publish itself counts rounds, and the board's documents root (boards/<board>/ on a shared
+// repository) in front. A variable so tests can stand in for the server.
 var queryDocumentPath = defaultQueryDocumentPath
 
 func defaultQueryDocumentPath(boardUuid, spec, task, component string) (string, error) {
