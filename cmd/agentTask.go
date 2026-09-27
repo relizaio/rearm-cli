@@ -864,6 +864,7 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskReturnCmd)
 	agentTaskCmd.AddCommand(agentTaskAuthorizeCmd)
 	agentTaskCmd.AddCommand(agentTaskOrderCmd)
+	agentTaskCmd.AddCommand(agentTaskLevelCmd)
 	agentTaskCmd.AddCommand(agentTaskHoldCmd)
 	agentTaskCmd.AddCommand(agentTaskReleaseholdCmd)
 	agentTaskCmd.AddCommand(agentTaskEscalateCmd)
