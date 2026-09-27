@@ -335,7 +335,7 @@ func TestAFileBypassesTheBoard(t *testing.T) {
 }
 
 func TestTheServersRefusalIsPassedOnWithTheWayRoundIt(t *testing.T) {
-	_, err := pathFromResponse(nil, errors.New("the DETAILED_DESIGN path on board b (docs/{type}/{task}/round-{round}.md) is per task; name the task"), "DETAILED_DESIGN")
+	_, err := pathFromResponse(nil, errors.New("the DETAILED_DESIGN path on board b (impl/{key}/notes-{round}.md) is per task; name the task"), "DETAILED_DESIGN")
 	if err == nil || !strings.Contains(err.Error(), "name the task") || !strings.Contains(err.Error(), "pass --file") {
 		t.Errorf("the refusal and the way round it are both said: %v", err)
 	}

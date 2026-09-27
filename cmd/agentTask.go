@@ -112,7 +112,7 @@ var agentBoardListCmd = &cobra.Command{
 
 var agentBoardShowCmd = &cobra.Command{
 	Use:   "show <board-uuid>",
-	Short: "Show one board incl. sources, lock state, seat, coordinator prompt and document components",
+	Short: "Show one board incl. sources, lock state, seat, coordinator prompt, document components and documents root",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0]}, "agentBoardProgrammatic")
