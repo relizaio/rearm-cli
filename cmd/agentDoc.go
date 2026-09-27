@@ -254,13 +254,21 @@ func publishIndexOnly(st *agentSessionState) error {
 				" sends it to the role that produces that input")
 		}
 	}
+	return sendDocPublish(st, indexOnlyInput(sessionUuidOf(st, docSession), spec, idx))
+}
+
+// indexOnlyInput is an index-alone publish as sent, with --advisory applied like any other publish
+// (task e97fde56, T-1): an index type is never advisory, and the server says so only if it is told
+// the publish asked to be.
+func indexOnlyInput(session, spec string, idx map[string]interface{}) map[string]interface{} {
 	input := map[string]interface{}{
-		"sessionUuid":   sessionUuidOf(st, docSession),
+		"sessionUuid":   session,
 		"specification": spec,
 		"index":         idx,
 		"taskUuid":      docTask,
 	}
-	return sendDocPublish(st, input)
+	applyAdvisory(input)
+	return input
 }
 
 func runDocPublish() error {

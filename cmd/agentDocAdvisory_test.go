@@ -28,6 +28,16 @@ func TestAdvisoryPublishSendsTheFlagAndIsNoOutput(t *testing.T) {
 	if remembersAsOutput() {
 		t.Error("an advisory round must not be offered at the publisher's sign-off")
 	}
+	// An index-only publish sends it too (T-1): the server then refuses it as an index type.
+	idx := indexOnlyInput("s-1", "REVIEW_FINDINGS", map[string]interface{}{"kind": "REVIEW_FINDINGS"})
+	if idx["advisory"] != true || idx["specification"] != "REVIEW_FINDINGS" || idx["sessionUuid"] != "s-1" {
+		t.Errorf("--advisory on --index-only sends advisory: true, got %v", idx)
+	}
+	docAdvisory = false
+	if _, sent := indexOnlyInput("s-1", "QUESTIONS", map[string]interface{}{})["advisory"]; sent {
+		t.Error("without --advisory an index-only publish sends nothing")
+	}
+	docAdvisory = true
 	if !strings.Contains(agentDocPublishCmd.Long, "--advisory") {
 		t.Error("the help should say what --advisory is for")
 	}
