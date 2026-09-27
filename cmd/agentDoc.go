@@ -55,6 +55,7 @@ var (
 	docRepoPath      string
 	docDryRun        bool
 	docBoard         string
+	docAdvisory      bool
 )
 
 // taskScopedTypes need a task and carry a findings index; everything else is a document series
@@ -162,7 +163,11 @@ checked against it: every id in one must appear in the other.
 
 Publishing is idempotent on the task, the type, the commit and the digest, so a
 re-run after a failure returns the release the first attempt created rather than
-opening a new round.`,
+opening a new round.
+
+--advisory puts a round on a task another role holds, for example an architect's
+amendment answering a finding while the coder works the task. Only a prose type a
+role you have held on the board produces, on an active task; never an index type.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocPublish(); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
@@ -197,8 +202,8 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	releaseUuid, _ := release["uuid"].(string)
 	// Remembered so `task signoff` can send it without the agent copying a uuid by hand. Recorded
 	// per task, because a session may work several tasks in its life and one hop's outputs must
-	// never be offered as another's.
-	if releaseUuid != "" && docTask != "" {
+	// never be offered as another's. An advisory round is no hop's output, so it is not remembered.
+	if releaseUuid != "" && docTask != "" && remembersAsOutput() {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
 	emitJson(release)
@@ -208,6 +213,20 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 		printCheckReport(releaseUuid)
 	}
 	return nil
+}
+
+// applyAdvisory marks the publish advisory when --advisory is set (task e97fde56): a round on a task
+// another session holds. The server decides whether it may be one.
+func applyAdvisory(input map[string]interface{}) {
+	if docAdvisory {
+		input["advisory"] = true
+	}
+}
+
+// remembersAsOutput is whether the release becomes an output this session's sign-off offers. An
+// advisory round is nobody's hop output, and the server would refuse it as one.
+func remembersAsOutput() bool {
+	return !docAdvisory
 }
 
 func docIndexOnly() bool {
@@ -335,6 +354,7 @@ func runDocPublish() error {
 	if docComponent != "" {
 		input["component"] = docComponent
 	}
+	applyAdvisory(input)
 	// The element index, parsed from the committed file (gaps §2.A): what the server checks and
 	// keeps on the release. A document without ids sends nothing, as before.
 	source, err := os.ReadFile(filepath.Join(repoPath, file))
@@ -444,6 +464,10 @@ func init() {
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
 	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
 	f.BoolVar(&docDryRun, "dry-run", false, "print what would be sent and exit")
+	f.BoolVar(&docAdvisory, "advisory", false,
+		"publish on a task another session holds, as an advisory round: a prose type a role you have"+
+			" held on this board produces. Assembled at once, announced on the board, and never an output"+
+			" of your own sign-off; ignored when you hold the task")
 
 	agentDocCmd.AddCommand(agentDocPublishCmd)
 }
