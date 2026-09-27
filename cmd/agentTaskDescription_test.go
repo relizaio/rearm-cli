@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -41,5 +42,28 @@ func TestTaskShowReadsTheDescription(t *testing.T) {
 		if !strings.Contains(strings.Join(strings.Fields(op), " "), "externalRef title description sourceUrl") {
 			t.Errorf("task show of %d task(s) does not read the description", len(uuids))
 		}
+	}
+}
+
+// task show and task list print the title and the description right after the key
+// (tests/fceb1e57/run-1.md T-1); the rest keeps the sorted order.
+func TestTaskReadsLeadWithKeyTitleAndDescription(t *testing.T) {
+	task := map[string]interface{}{"uuid": "u1", "board": "b1", "dependsOn": []interface{}{}, "key": "RD-42",
+		"title": "Cap titles", "description": "Why: briefs in titles.\nWhat: a description.", "documents": nil}
+	one := string(keyFirstJSON(task))
+	want := `{"key":"RD-42","title":"Cap titles","description":"Why: briefs in titles.\nWhat: a description.","board":"b1",`
+	if !strings.HasPrefix(one, want) {
+		t.Errorf("key, title, description lead, then the rest sorted:\n%s", one)
+	}
+	var back map[string]interface{}
+	if err := json.Unmarshal([]byte(one), &back); err != nil || len(back) != len(task) {
+		t.Errorf("and it is the same object: %s %v", one, err)
+	}
+	noDescription := string(keyFirstJSON(map[string]interface{}{"uuid": "u2", "key": "RD-43", "title": "Short"}))
+	if noDescription != `{"key":"RD-43","title":"Short","uuid":"u2"}` {
+		t.Errorf("a task without a description: %s", noDescription)
+	}
+	if got := string(keyFirstJSON(map[string]interface{}{"title": "not a task", "a": 1})); got != `{"a":1,"title":"not a task"}` {
+		t.Errorf("an object without a key keeps the sorted order: %s", got)
 	}
 }

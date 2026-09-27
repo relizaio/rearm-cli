@@ -133,8 +133,9 @@ func init() {
 }
 
 // runGqlTasks is runGql for replies that are a task or a list of tasks: each task is printed with its
-// key first (board-documents.md §3.6), the rest in the usual sorted order. emitJson writes through a
-// map, whose keys come out sorted, so the selection order alone does not lead with the key.
+// key, title and description first (board-documents.md §3.6, §4.5), the rest in the usual sorted
+// order. emitJson writes through a map, whose keys come out sorted, so the selection order alone does
+// not lead with them.
 func runGqlTasks(query string, variables map[string]interface{}, key string) {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
@@ -144,7 +145,11 @@ func runGqlTasks(query string, variables map[string]interface{}, key string) {
 	fmt.Println(string(keyFirstJSON(data[key])))
 }
 
-// keyFirstJSON is json.Marshal with "key" leading in a task object, or in each object of a list.
+// taskLeadFields lead a task object, in this order, when it has them: what a reader looks for first.
+var taskLeadFields = []string{"key", "title", "description"}
+
+// keyFirstJSON is json.Marshal with the lead fields first in a task object, or in each object of a
+// list. An object without a key is not a task and keeps the sorted order.
 func keyFirstJSON(v interface{}) []byte {
 	switch t := v.(type) {
 	case []interface{}:
@@ -154,20 +159,29 @@ func keyFirstJSON(v interface{}) []byte {
 		}
 		return append(append([]byte("["), bytes.Join(parts, []byte(","))...), ']')
 	case map[string]interface{}:
-		k, has := t["key"]
-		if !has {
+		if _, has := t["key"]; !has {
 			out, _ := json.Marshal(t)
 			return out
 		}
-		rest := make(map[string]interface{}, len(t)-1)
+		rest := make(map[string]interface{}, len(t))
 		for name, val := range t {
-			if name != "key" {
-				rest[name] = val
-			}
+			rest[name] = val
 		}
-		head, _ := json.Marshal(k)
+		out := []byte("{")
+		for _, name := range taskLeadFields {
+			val, ok := rest[name]
+			if !ok {
+				continue
+			}
+			delete(rest, name)
+			k, _ := json.Marshal(name)
+			vb, _ := json.Marshal(val)
+			if len(out) > 1 {
+				out = append(out, ',')
+			}
+			out = append(append(append(out, k...), ':'), vb...)
+		}
 		body, _ := json.Marshal(rest)
-		out := append([]byte(`{"key":`), head...)
 		if len(body) > 2 {
 			out = append(append(out, ','), body[1:]...)
 			return out
