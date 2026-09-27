@@ -164,7 +164,7 @@ var boardsTasksCmd = &cobra.Command{
 		if boardsStatus != "" {
 			vars["status"] = strings.ToUpper(boardsStatus)
 		}
-		runGqlTasks(rearm.AgentTasksOfBoard_Operation, vars, "agentTasksOfBoard")
+		runGqlTasks(rearm.AgentTasksOfBoard_Operation, withListFilters(vars, taskListGroup, taskListTags), "agentTasksOfBoard")
 	},
 }
 
@@ -202,8 +202,10 @@ var boardsRegisterCmd = &cobra.Command{
 	Short: "Register a task by hand (PENDING_INTAKE); on a board with sources --external-ref is required",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskRegister_Operation, registerVariables(args[0], boardsTitle, boardsDescription, boardsExternalRef,
-			boardsSourceUrl, boardsParent, levelFlag(cmd, boardsLevel)), "agentTaskRegister")
+		vars := registerVariables(args[0], boardsTitle, boardsDescription, boardsExternalRef,
+			boardsSourceUrl, boardsParent, levelFlag(cmd, boardsLevel))
+		withGroupAndTags(vars["input"].(map[string]interface{}), taskGroupKey, taskTagKeys)
+		runGql(rearm.AgentTaskRegister_Operation, vars, "agentTaskRegister")
 	},
 }
 
