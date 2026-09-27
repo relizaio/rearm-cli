@@ -54,7 +54,9 @@ var agentBoardApplyCmd = &cobra.Command{
 	Long: `Applies one board file as one transaction: if anything in it is wrong, nothing is
 applied and every problem is listed. A field left out is untouched; a field set to null
 is cleared. A role the file does not list is deactivated, never deleted; when tasks wait
-on it the change says so. --dry-run shows the change set the apply would make.
+on it the change says so. A task group the file's groups list leaves out is closed, never
+deleted, and groups: null or [] deletes them all while none holds tasks. --dry-run shows
+the change set the apply would make.
 
 Where the file comes from -- its repository, commit and path -- is read from git and
 recorded on the board, unless --no-source.`,
