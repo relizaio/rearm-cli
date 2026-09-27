@@ -57,6 +57,7 @@ var (
 	taskBoardUuid    string
 	taskExternalRef  string
 	taskTitle        string
+	taskDescription  string
 	taskSourceUrl    string
 	taskSessionUuid  string
 	taskRole         string
@@ -246,19 +247,34 @@ or its key, e.g. RD-42: the key is resolved to the uuid before the call.`,
 var agentTaskRegisterCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Register a tracker item as a PENDING_INTAKE task (idempotent; source-validated)",
+	Long: `Registers a tracker item as a PENDING_INTAKE task.
+
+The title is one line of at most 120 characters -- what a card shows; the
+server refuses a longer one or one with a line break. Everything else goes in
+--description (at most 4000 characters, kept whole).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		input := map[string]interface{}{"boardUuid": taskBoardUuid, "title": taskTitle}
-		if taskExternalRef != "" {
-			input["externalRef"] = taskExternalRef
-		}
-		if taskSourceUrl != "" {
-			input["sourceUrl"] = taskSourceUrl
-		}
-		if taskSessionUuid != "" {
-			input["sessionUuid"] = taskSessionUuid
-		}
-		runGql(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": input}, "agentTaskRegisterProgrammatic")
+		runGql(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": agentRegisterInput()},
+			"agentTaskRegisterProgrammatic")
 	},
+}
+
+// agentRegisterInput is the agent's register input from the flags: the description goes with the
+// title when one was given (task fceb1e57).
+func agentRegisterInput() map[string]interface{} {
+	input := map[string]interface{}{"boardUuid": taskBoardUuid, "title": taskTitle}
+	if taskDescription != "" {
+		input["description"] = taskDescription
+	}
+	if taskExternalRef != "" {
+		input["externalRef"] = taskExternalRef
+	}
+	if taskSourceUrl != "" {
+		input["sourceUrl"] = taskSourceUrl
+	}
+	if taskSessionUuid != "" {
+		input["sessionUuid"] = taskSessionUuid
+	}
+	return input
 }
 
 var agentTaskNextCmd = &cobra.Command{
@@ -563,7 +579,11 @@ var agentTaskOrderCmd = &cobra.Command{
 var agentTaskSplitCmd = &cobra.Command{
 	Use:   "split <task-uuid>",
 	Short: "Coordinator: split into PENDING_INTAKE children (authorize each separately)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Splits a task into PENDING_INTAKE children, given as --children-json: a list of
+{"title", "description", "externalRef", "sourceUrl", "level", "producesComponent",
+"dependsOnSiblingIndexes"}. Each title is one line of at most 120 characters;
+the rest goes in the child's description.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var children []map[string]interface{}
 		if err := json.Unmarshal([]byte(taskChildrenJson), &children); err != nil {
@@ -724,7 +744,8 @@ func init() {
 	// task flags
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Board uuid — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref, e.g. github:owner/repo#123")
-	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title — required")
+	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title, one line of at most 120 characters — required")
+	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskDescription, "description", "", "What the task is, beyond its title (at most 4000 characters)")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSourceUrl, "source-url", "", "Human-clickable tracker URL")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Registering session (intake provenance)")
 	_ = agentTaskRegisterCmd.MarkPersistentFlagRequired("board")

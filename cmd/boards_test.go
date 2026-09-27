@@ -75,7 +75,7 @@ func TestRequiredFlags(t *testing.T) {
 }
 
 func TestRegisterSendsOnlyWhatWasGiven(t *testing.T) {
-	got := registerVariables("b-1", "fix it", "#12", "", "", 0)
+	got := registerVariables("b-1", "fix it", "", "#12", "", "", 0)
 	want := map[string]interface{}{"boardUuid": "b-1", "input": map[string]interface{}{"title": "fix it", "externalRef": "#12"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
