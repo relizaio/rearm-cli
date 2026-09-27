@@ -281,7 +281,7 @@ func agentRegisterInput() map[string]interface{} {
 	if taskLevelSet {
 		input["level"] = taskLevel
 	}
-	return input
+	return withGroupAndTags(input, taskGroupKey, taskTagKeys)
 }
 
 var agentTaskNextCmd = &cobra.Command{
@@ -738,7 +738,8 @@ sees them. A poll is 'board events --after <seq>' plus 'task list --changed-sinc
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		runGqlTasks(rearm.AgentTasksProgrammatic_Operation, variables, "agentTasksProgrammatic")
+		runGqlTasks(rearm.AgentTasksProgrammatic_Operation, withListFilters(variables, taskListGroup, taskListTags),
+			"agentTasksProgrammatic")
 	},
 }
 
