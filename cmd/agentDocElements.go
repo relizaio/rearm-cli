@@ -30,6 +30,22 @@ func familiesOf(board map[string]interface{}) map[string]string {
 	return out
 }
 
+// reservedOf reads a board's task prefixes, the current one and every one held before: a token with
+// one of them as its family is a task key, not an element id (task RD2-28). None without a board.
+func reservedOf(board map[string]interface{}) map[string]bool {
+	out := map[string]bool{}
+	if p, _ := board["taskPrefix"].(string); p != "" {
+		out[p] = true
+	}
+	history, _ := board["taskPrefixHistory"].([]interface{})
+	for _, h := range history {
+		if p, _ := h.(string); p != "" {
+			out[p] = true
+		}
+	}
+	return out
+}
+
 // elementsInput is what a publish of spec adds for the document src (gaps §2.A): the element
 // index as the JSON text it digested, and the digest. Nothing for a type that carries a findings
 // index, with --no-elements, or for a document with no elements and nothing to warn about -- which
@@ -38,7 +54,7 @@ func elementsInput(spec string, src []byte, board map[string]interface{}) (map[s
 	if docNoElements || taskScopedTypes[spec] {
 		return nil, nil, nil
 	}
-	ix := elements.Parse(src, familiesOf(board))
+	ix := elements.Parse(src, familiesOf(board), reservedOf(board))
 	if len(ix.Elements) == 0 && len(ix.Warnings) == 0 {
 		return nil, &ix, nil
 	}
@@ -63,7 +79,10 @@ var agentDocElementsCmd = &cobra.Command{
 the index doc publish would send: each element's id, family, title, parent, links, glossary terms
 (**term** in its content) and content digest, and every warning. Nothing is sent.
 
-Families come from --board (its effective element families), else the defaults.`,
+Families come from --board (its effective element families), else the defaults. With --board, a
+token whose family is one of the board's task prefixes (the current one or one held before) is a task
+key, not an id: "# RD2-1 — Title" is a prose heading. Without --board no prefix is reserved, and a
+task key in a heading reads as an element of an unknown family.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		src, err := os.ReadFile(args[0])
@@ -71,6 +90,7 @@ Families come from --board (its effective element families), else the defaults.`
 			return err
 		}
 		families := elements.DefaultFamilies
+		var reserved map[string]bool
 		if docBoard != "" {
 			data, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation,
 				map[string]interface{}{"boardUuid": docBoard})
@@ -78,10 +98,12 @@ Families come from --board (its effective element families), else the defaults.`
 				return fmt.Errorf("could not read board %s: %w", docBoard, err)
 			}
 			if board, _ := data["agentBoardProgrammatic"].(map[string]interface{}); board != nil {
-				families = familiesOf(board)
+				families, reserved = familiesOf(board), reservedOf(board)
 			}
+		} else {
+			fmt.Fprintln(os.Stderr, "no --board: no task prefix is reserved, so a task key in a heading reads as an element")
 		}
-		ix := elements.Parse(src, families)
+		ix := elements.Parse(src, families, reserved)
 		out, err := json.MarshalIndent(ix, "", "  ")
 		if err != nil {
 			return err

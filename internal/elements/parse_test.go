@@ -12,7 +12,7 @@ func parseFile(t *testing.T, name string) Index {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Parse(b, DefaultFamilies)
+	return Parse(b, DefaultFamilies, nil)
 }
 
 func byID(ix Index) map[string]Element {
@@ -74,7 +74,7 @@ func TestAttributes(t *testing.T) {
 func TestANonElementSubheadingIsContent(t *testing.T) {
 	a := parseFile(t, "nested.md")
 	b, _ := os.ReadFile("testdata/nested.md")
-	changed := Parse([]byte(strings.Replace(string(b), "Still REQ-1.1's content.", "Changed.", 1)), DefaultFamilies)
+	changed := Parse([]byte(strings.Replace(string(b), "Still REQ-1.1's content.", "Changed.", 1)), DefaultFamilies, nil)
 	if byID(a)["REQ-1.1"].ContentDigest == byID(changed)["REQ-1.1"].ContentDigest {
 		t.Error("text under a non-element subheading is the element's content")
 	}
@@ -128,9 +128,9 @@ func TestNoIdTokensNoElements(t *testing.T) {
 
 func TestDeterministicAndLineEndingBlind(t *testing.T) {
 	b, _ := os.ReadFile("testdata/nested.md")
-	one, d1, _ := Canonical(Parse(b, DefaultFamilies))
-	two, d2, _ := Canonical(Parse(b, DefaultFamilies))
-	crlf, d3, _ := Canonical(Parse([]byte(strings.ReplaceAll(string(b), "\n", "\r\n")), DefaultFamilies))
+	one, d1, _ := Canonical(Parse(b, DefaultFamilies, nil))
+	two, d2, _ := Canonical(Parse(b, DefaultFamilies, nil))
+	crlf, d3, _ := Canonical(Parse([]byte(strings.ReplaceAll(string(b), "\n", "\r\n")), DefaultFamilies, nil))
 	if string(one) != string(two) || d1 != d2 {
 		t.Error("the same bytes give the same canonical form")
 	}
@@ -156,7 +156,7 @@ func TestTermsAreTheBoldSpansOfTheContent(t *testing.T) {
 		"Trailing punctuation goes: **Element at release:**\n" +
 		"## REQ-2 The next element\n" +
 		"Its own **term**.\n"
-	ix := Parse([]byte(src), DefaultFamilies)
+	ix := Parse([]byte(src), DefaultFamilies, nil)
 	if ix.GrammarVersion != "1.1" {
 		t.Errorf("grammar %q", ix.GrammarVersion)
 	}
@@ -174,7 +174,7 @@ func TestTableRowTermsComeFromTheContentCells(t *testing.T) {
 		"| id | title | parent | notes |\n" +
 		"|---|---|---|---|\n" +
 		"| FN-2 | The **title** is not content | FN-1 | uses the **rework point** |\n"
-	ix := Parse([]byte(src), DefaultFamilies)
+	ix := Parse([]byte(src), DefaultFamilies, nil)
 	var row *Element
 	for i := range ix.Elements {
 		if ix.Elements[i].ID == "FN-2" {
@@ -190,9 +190,47 @@ func TestTableRowTermsComeFromTheContentCells(t *testing.T) {
 }
 
 func TestAnElementWithoutTermsSendsAnEmptyList(t *testing.T) {
-	ix := Parse([]byte("## REQ-9 Nothing bold\nplain words\n"), DefaultFamilies)
+	ix := Parse([]byte("## REQ-9 Nothing bold\nplain words\n"), DefaultFamilies, nil)
 	out, _, _ := Canonical(ix)
 	if !strings.Contains(string(out), `"terms":[]`) {
 		t.Errorf("wire form: %s", out)
+	}
+}
+
+// A task key is not an element id (task RD2-28): a heading or a table row led by a token whose
+// family is a reserved task prefix is prose or content; a genuinely unknown family still warns.
+func TestATaskKeyIsNotAnElement(t *testing.T) {
+	doc := []byte("# RD2-1 — Task level on the surfaces people read\n\nIntro naming RD2-1.\n\n" +
+		"## REQ-1 The board shows a level\n\nBody.\n\n" +
+		"| Id | Title |\n|---|---|\n| RD2-7 | a sibling task |\n| REQ-2 | a real row |\n")
+	ix := Parse(doc, DefaultFamilies, map[string]bool{"RD2": true})
+	ids := []string{}
+	for _, e := range ix.Elements {
+		ids = append(ids, e.ID)
+	}
+	if strings.Join(ids, ",") != "REQ-1,REQ-2" {
+		t.Fatalf("elements = %v, want REQ-1,REQ-2 (no task keys)", ids)
+	}
+	if len(ix.Warnings) != 0 {
+		t.Errorf("warnings = %v, want none", ix.Warnings)
+	}
+	if ix.Elements[0].Parent != "" {
+		t.Errorf("REQ-1 parent = %q: a task-key heading is prose, not a parent", ix.Elements[0].Parent)
+	}
+
+	// A board renamed from RD keeps RD reserved through its history.
+	renamed := Parse([]byte("# RD-4 — an older task\n\nBody.\n"), DefaultFamilies, map[string]bool{"RD2": true, "RD": true})
+	if len(renamed.Elements) != 0 || len(renamed.Warnings) != 0 {
+		t.Errorf("a key under a held prefix = %v / %v, want nothing", renamed.Elements, renamed.Warnings)
+	}
+
+	// Without the reservation the key is read as before; an unknown family still warns when reserved.
+	plain := Parse(doc, DefaultFamilies, nil)
+	if len(plain.Elements) != 4 || plain.Elements[0].ID != "RD2-1" {
+		t.Errorf("without a reservation = %d elements, first %q; want the old reading", len(plain.Elements), plain.Elements[0].ID)
+	}
+	unknown := Parse([]byte("# REQX-1 Something\n\nBody.\n"), DefaultFamilies, map[string]bool{"RD2": true})
+	if len(unknown.Elements) != 1 || len(unknown.Warnings) != 1 || unknown.Warnings[0].Code != UnknownFamily {
+		t.Errorf("REQX-1 = %v / %v, want one element with an UNKNOWN_FAMILY warning", unknown.Elements, unknown.Warnings)
 	}
 }
