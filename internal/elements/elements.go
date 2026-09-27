@@ -254,8 +254,11 @@ type heading struct {
 	id    string // "" for a heading that is not an element
 }
 
-// Parse reads src under the families (prefix to family name).
-func Parse(src []byte, families map[string]string) Index {
+// Parse reads src under the families (prefix to family name). A token whose family part is in
+// reserved -- the board's task prefix, current or held before -- is a task key, not an id (task
+// RD2-28): a heading starting with one is prose and a table row starting with one is content, so
+// "# RD2-1 — Title" yields no element. Nil reserves nothing.
+func Parse(src []byte, families map[string]string, reserved map[string]bool) Index {
 	text := strings.ReplaceAll(strings.ReplaceAll(string(src), "\r\n", "\n"), "\r", "\n")
 	lines := strings.Split(text, "\n")
 	ix := Index{GrammarVersion: GrammarVersion, Elements: []Element{}, Warnings: []Warning{}}
@@ -297,7 +300,7 @@ func Parse(src []byte, families map[string]string) Index {
 				stack = stack[:len(stack)-1]
 			}
 			id, title := token(m[2])
-			if id == "" {
+			if id == "" || reserved[familyOf(id)] {
 				stack = append(stack, heading{depth: depth})
 				continue
 			}
@@ -346,7 +349,7 @@ func Parse(src []byte, families map[string]string) Index {
 					continue
 				}
 				id, rest := token(cells[0])
-				if id == "" || rest != "" {
+				if id == "" || rest != "" || reserved[familyOf(id)] {
 					continue
 				}
 				e := Element{ID: id, Line: j + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}, Terms: []string{}}
