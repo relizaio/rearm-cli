@@ -9,7 +9,7 @@ import (
 
 // A task's description goes with its title when one is given and not otherwise (task fceb1e57).
 func TestRegisterSendsTheDescriptionWhenGiven(t *testing.T) {
-	got := registerVariables("b-1", "fix it", "the long story", "", "", "", 0)
+	got := registerVariables("b-1", "fix it", "the long story", "", "", "", nil)
 	want := map[string]interface{}{"boardUuid": "b-1", "input": map[string]interface{}{"title": "fix it", "description": "the long story"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("boards register: got %v, want %v", got, want)
