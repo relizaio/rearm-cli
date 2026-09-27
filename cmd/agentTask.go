@@ -58,6 +58,9 @@ var (
 	taskExternalRef  string
 	taskTitle        string
 	taskDescription  string
+	taskLevel        int
+	taskLevelSet     bool
+	taskLevelClear   bool
 	taskSourceUrl    string
 	taskSessionUuid  string
 	taskRole         string
@@ -253,6 +256,7 @@ The title is one line of at most 120 characters -- what a card shows; the
 server refuses a longer one or one with a line break. Everything else goes in
 --description (at most 4000 characters, kept whole).`,
 	Run: func(cmd *cobra.Command, args []string) {
+		taskLevelSet = cmd.Flags().Changed("level")
 		runGql(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": agentRegisterInput()},
 			"agentTaskRegisterProgrammatic")
 	},
@@ -273,6 +277,9 @@ func agentRegisterInput() map[string]interface{} {
 	}
 	if taskSessionUuid != "" {
 		input["sessionUuid"] = taskSessionUuid
+	}
+	if taskLevelSet {
+		input["level"] = taskLevel
 	}
 	return input
 }
@@ -576,6 +583,20 @@ var agentTaskOrderCmd = &cobra.Command{
 	},
 }
 
+var agentTaskLevelCmd = &cobra.Command{
+	Use:   "level <task-uuid>",
+	Short: "Coordinator: set a task's level, 0 to 9, or --clear so it reads the board's default",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		vars, err := levelVariables(args[0], taskLevel, cmd.Flags().Changed("level"), taskLevelClear)
+		if err != nil {
+			fail(err.Error())
+		}
+		vars["sessionUuid"] = taskSessionUuid
+		runGql(rearm.AgentTaskSetLevelProgrammatic_Operation, vars, "agentTaskSetLevelProgrammatic")
+	},
+}
+
 var agentTaskSplitCmd = &cobra.Command{
 	Use:   "split <task-uuid>",
 	Short: "Coordinator: split into PENDING_INTAKE children (authorize each separately)",
@@ -746,6 +767,7 @@ func init() {
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref, e.g. github:owner/repo#123")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title, one line of at most 120 characters — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskDescription, "description", "", "What the task is, beyond its title (at most 4000 characters)")
+	agentTaskRegisterCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, 0 to 9; left out, it reads the board's default")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSourceUrl, "source-url", "", "Human-clickable tracker URL")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Registering session (intake provenance)")
 	_ = agentTaskRegisterCmd.MarkPersistentFlagRequired("board")
@@ -760,7 +782,7 @@ func init() {
 	_ = agentTaskNextCmd.MarkPersistentFlagRequired("session")
 
 	for _, c := range []*cobra.Command{agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd,
-		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
+		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
 		agentTaskReopenCmd} {
 		c.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
 		_ = c.MarkPersistentFlagRequired("session")
@@ -802,6 +824,8 @@ func init() {
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("session")
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("message")
 	agentTaskOrderCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order — required")
+	agentTaskLevelCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, 0 to 9")
+	agentTaskLevelCmd.PersistentFlags().BoolVar(&taskLevelClear, "clear", false, "Clear it: the task reads the board's default level")
 	_ = agentTaskOrderCmd.MarkPersistentFlagRequired("order")
 	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]' — required`)
 	_ = agentTaskSplitCmd.MarkPersistentFlagRequired("children-json")

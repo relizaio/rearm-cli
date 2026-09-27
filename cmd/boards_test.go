@@ -75,7 +75,7 @@ func TestRequiredFlags(t *testing.T) {
 }
 
 func TestRegisterSendsOnlyWhatWasGiven(t *testing.T) {
-	got := registerVariables("b-1", "fix it", "", "#12", "", "", 0)
+	got := registerVariables("b-1", "fix it", "", "#12", "", "", nil)
 	want := map[string]interface{}{"boardUuid": "b-1", "input": map[string]interface{}{"title": "fix it", "externalRef": "#12"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -83,10 +83,10 @@ func TestRegisterSendsOnlyWhatWasGiven(t *testing.T) {
 }
 
 func TestAuthorizeSendsTheOrderOnlyWhenSet(t *testing.T) {
-	if _, ok := authorizeVariables("t", "coder", 0, false, nil, 0)["orderIndex"]; ok {
+	if _, ok := authorizeVariables("t", "coder", 0, false, nil, nil)["orderIndex"]; ok {
 		t.Error("orderIndex sent without --order")
 	}
-	got := authorizeVariables("t", "coder", 0, true, []string{"d-1"}, 2)
+	got := authorizeVariables("t", "coder", 0, true, []string{"d-1"}, intp(2))
 	want := map[string]interface{}{"taskUuid": "t", "role": "coder", "orderIndex": 0, "dependsOn": []string{"d-1"}, "level": 2}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)

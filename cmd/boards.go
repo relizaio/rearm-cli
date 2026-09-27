@@ -47,6 +47,7 @@ import (
 //   rearm boards require-review <task> [--off]
 //   rearm boards strength <task> --required 6.5 | --clear
 //   rearm boards budget <task> --usd 2.50 | --clear
+//   rearm boards level <task> --level 2 | --clear
 //   rearm boards lock <board> --reason r | unlock <board>
 //   rearm boards apply -f board.yaml [--dry-run]
 
@@ -167,7 +168,16 @@ var boardsTasksCmd = &cobra.Command{
 	},
 }
 
-func registerVariables(board, title, description, externalRef, sourceUrl, parent string, level int) map[string]interface{} {
+// levelFlag is the --level a command was given, or nil when it was not: 0 (requirements) is a
+// level, so "not given" cannot be told by the value (RD2-1).
+func levelFlag(cmd *cobra.Command, level int) *int {
+	if !cmd.Flags().Changed("level") {
+		return nil
+	}
+	return &level
+}
+
+func registerVariables(board, title, description, externalRef, sourceUrl, parent string, level *int) map[string]interface{} {
 	input := map[string]interface{}{"title": title}
 	if description != "" {
 		input["description"] = description
@@ -181,8 +191,8 @@ func registerVariables(board, title, description, externalRef, sourceUrl, parent
 	if parent != "" {
 		input["parentTask"] = parent
 	}
-	if level > 0 {
-		input["level"] = level
+	if level != nil {
+		input["level"] = *level
 	}
 	return map[string]interface{}{"boardUuid": board, "input": input}
 }
@@ -193,11 +203,11 @@ var boardsRegisterCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentTaskRegister_Operation, registerVariables(args[0], boardsTitle, boardsDescription, boardsExternalRef,
-			boardsSourceUrl, boardsParent, boardsLevel), "agentTaskRegister")
+			boardsSourceUrl, boardsParent, levelFlag(cmd, boardsLevel)), "agentTaskRegister")
 	},
 }
 
-func authorizeVariables(task, role string, order int, orderSet bool, dependsOn []string, level int) map[string]interface{} {
+func authorizeVariables(task, role string, order int, orderSet bool, dependsOn []string, level *int) map[string]interface{} {
 	vars := map[string]interface{}{"taskUuid": task, "role": role}
 	if orderSet {
 		vars["orderIndex"] = order
@@ -205,8 +215,8 @@ func authorizeVariables(task, role string, order int, orderSet bool, dependsOn [
 	if len(dependsOn) > 0 {
 		vars["dependsOn"] = dependsOn
 	}
-	if level > 0 {
-		vars["level"] = level
+	if level != nil {
+		vars["level"] = *level
 	}
 	return vars
 }
@@ -217,7 +227,7 @@ var boardsAuthorizeCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentTaskAuthorize_Operation, authorizeVariables(args[0], boardsRole, boardsOrder,
-			cmd.Flags().Changed("order"), boardsDependsOn, boardsLevel), "agentTaskAuthorize")
+			cmd.Flags().Changed("order"), boardsDependsOn, levelFlag(cmd, boardsLevel)), "agentTaskAuthorize")
 	},
 }
 
@@ -578,6 +588,39 @@ var boardsBudgetCmd = &cobra.Command{
 	},
 }
 
+// levelVariables are a task level's variables (RD2-1): 0 to 9, or --clear, which sends null so the
+// task reads the board's default again.
+func levelVariables(task string, level int, levelSet, clear bool) (map[string]interface{}, error) {
+	vars := map[string]interface{}{"taskUuid": task}
+	switch {
+	case clear && levelSet:
+		return nil, fmt.Errorf("give --level or --clear, not both")
+	case clear:
+		vars["level"] = nil
+	case levelSet:
+		if level < 0 || level > 9 {
+			return nil, fmt.Errorf("--level is 0 to 9")
+		}
+		vars["level"] = level
+	default:
+		return nil, fmt.Errorf("give --level N or --clear")
+	}
+	return vars, nil
+}
+
+var boardsTaskLevelCmd = &cobra.Command{
+	Use:   "level <task-uuid>",
+	Short: "Set a task's level, 0 to 9 (0 requirements, 1 solution blocks, 2 objects, 3 components, 4 modules), or --clear to read the board's default",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		vars, err := levelVariables(args[0], boardsLevel, cmd.Flags().Changed("level"), boardsClear)
+		if err != nil {
+			fail(err.Error())
+		}
+		runGql(rearm.AgentTaskSetLevel_Operation, vars, "agentTaskSetLevel")
+	},
+}
+
 var boardsStrengthCmd = &cobra.Command{
 	Use:   "strength <task-uuid>",
 	Short: "Require a model of at least this strength for one task, or --clear",
@@ -680,6 +723,8 @@ func init() {
 
 	boardsBudgetCmd.Flags().StringVar(&boardsBudget, "usd", "", "what the task may spend, in dollars, e.g. 2.50")
 	boardsBudgetCmd.Flags().BoolVar(&boardsClear, "clear", false, "remove the task's budget")
+	boardsTaskLevelCmd.Flags().IntVar(&boardsLevel, "level", 0, "the task's level, 0 to 9")
+	boardsTaskLevelCmd.Flags().BoolVar(&boardsClear, "clear", false, "clear it: the task reads the board's default level")
 
 	boardsLockCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
 	_ = boardsLockCmd.MarkFlagRequired("reason")
@@ -690,7 +735,7 @@ func init() {
 
 	for _, c := range []*cobra.Command{boardsListCmd, boardsTasksCmd, boardsRegisterCmd, boardsAuthorizeCmd,
 		boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd, boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd,
-		boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd, boardsRequireReviewCmd, boardsStrengthCmd, boardsBudgetCmd,
+		boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd, boardsRequireReviewCmd, boardsStrengthCmd, boardsBudgetCmd, boardsTaskLevelCmd,
 		boardsLockCmd, boardsUnlockCmd, boardsApplyCmd} {
 		boardsCmd.AddCommand(c)
 	}
