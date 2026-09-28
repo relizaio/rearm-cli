@@ -73,6 +73,9 @@ var (
 	taskChildrenJson string
 	taskPrUrl        string
 	taskOutputs      []string
+	// Task documents read by other means, added to what show and assign recorded (RD2-34).
+	taskSeen         []string
+	taskShowSession  string
 	taskRoles        []string
 	taskStrength     string
 	taskBudget       string
@@ -91,12 +94,18 @@ var (
 )
 
 func runGql(query string, variables map[string]interface{}, key string) {
+	runGqlRead(query, variables, key)
+}
+
+// runGqlRead is runGql that also hands back what it printed, for a command that records part of it.
+func runGqlRead(query string, variables map[string]interface{}, key string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 	emitJson(data[key])
+	return data[key]
 }
 
 // ---------- board ----------
@@ -398,7 +407,9 @@ var agentTaskAssignCmd = &cobra.Command{
 		if len(roles) > 0 {
 			variables["roles"] = roles
 		}
-		runGql(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
+		assigned := runGqlRead(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
+		// The assign prints the task's documents: they are what the hop starts from, recorded as read (RD2-34).
+		rememberSeenFromRead(taskSessionUuid, assigned)
 		// Record the assignment locally so the usage hooks attribute this session's spend to it
 		// without the agent having to pass --task on every turn. Runs only after the server
 		// accepted the assignment, so the local file never claims a task the session does not hold.
@@ -420,7 +431,14 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if outputs := resolveOutputs(taskSessionUuid, args[0]); len(outputs) > 0 {
 			variables["outputs"] = outputs
 		}
+		// What the hop read of the task's documents (RD2-34): the server refuses a sign-off that does not
+		// acknowledge one published since the assignment. Kept until the sign-off is accepted, so a refusal
+		// followed by `task show` sends the fuller set.
+		if seen := seenInputsFor(taskSessionUuid, args[0], taskSeen); seen != nil {
+			variables["seenInputs"] = seen
+		}
 		runGql(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
+		forgetSeen(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
 		clearCurrentTask(taskSessionUuid, args[0])
 	},
@@ -703,7 +721,9 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 	Args: cobra.RangeArgs(1, 100),
 	Run: func(cmd *cobra.Command, args []string) {
 		op, vars, key := taskShowRequest(args)
-		runGqlTasks(op, vars, key)
+		// What it prints is recorded as read, for the session holding the task (RD2-34): the acknowledgement
+		// a sign-off sends.
+		rememberSeenFromRead(taskShowSession, runGqlTasksRead(op, vars, key))
 	},
 }
 
@@ -790,6 +810,10 @@ func init() {
 	}
 	agentTaskSignoffCmd.PersistentFlags().StringVar(&taskOutcome, "outcome", "", "PASSED | REJECTED — required")
 	agentTaskSignoffCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Sign-off note")
+	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskSeen, "seen", nil,
+		"Task documents read by other means than task show or assign; added to what they recorded")
+	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
+		"Session to record the shown documents for; defaults to the local session holding the task")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
 		"Document releases produced by this hop; defaults to what `doc publish` recorded")
 	_ = agentTaskSignoffCmd.MarkPersistentFlagRequired("outcome")

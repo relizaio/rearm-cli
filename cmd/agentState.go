@@ -69,6 +69,9 @@ type agentSessionState struct {
 	// The roles the last 'task next' declared, so 'task assign' can pass the same ones. Empty
 	// when the last poll declared none.
 	DeclaredRoles []string `json:"declaredRoles,omitempty"`
+	// The task documents this session has read, keyed by TASK uuid (task RD2-34): what `task show` and
+	// `task assign` printed, sent by `task signoff` as seenInputs and forgotten once it is accepted.
+	SeenInputs map[string][]string `json:"seenInputs,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling

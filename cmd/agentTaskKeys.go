@@ -137,12 +137,18 @@ func init() {
 // order. emitJson writes through a map, whose keys come out sorted, so the selection order alone does
 // not lead with them.
 func runGqlTasks(query string, variables map[string]interface{}, key string) {
+	runGqlTasksRead(query, variables, key)
+}
+
+// runGqlTasksRead is runGqlTasks that also hands back what it printed.
+func runGqlTasksRead(query string, variables map[string]interface{}, key string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		printGqlError(err)
 		os.Exit(1)
 	}
 	fmt.Println(string(keyFirstJSON(data[key])))
+	return data[key]
 }
 
 // taskLeadFields lead a task object, in this order, when it has them: what a reader looks for first.
