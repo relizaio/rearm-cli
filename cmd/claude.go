@@ -55,8 +55,11 @@ type claudeHookPayload struct {
 	TranscriptPath string `json:"transcript_path"`
 	Cwd            string `json:"cwd"`
 	HookEventName  string `json:"hook_event_name"`
-	StopHookActive bool   `json:"stop_hook_active"`
-	Reason         string `json:"reason"`
+	// SubagentStop: the ending context's own transcript, when the harness names it. The sweep finds
+	// it by glob either way.
+	AgentTranscriptPath string `json:"agent_transcript_path"`
+	StopHookActive      bool   `json:"stop_hook_active"`
+	Reason              string `json:"reason"`
 }
 
 // claudeReasoningFromEnv reads the effort level when the transcript did not carry one.
@@ -186,7 +189,8 @@ func runClaudeUsageFromHook() {
 		return
 	}
 	st.TranscriptPath = transcript
-	delta, err := parseClaudeTranscript(transcript, st.LastSeq)
+	// the parent and every spawned context's transcript, each from its own offset (task RD3-12)
+	delta, err := sweepClaudeTranscripts(st, transcript, p.AgentTranscriptPath)
 	if err != nil {
 		usageBail("could not read transcript: %v", err)
 		return
@@ -197,15 +201,26 @@ func runClaudeUsageFromHook() {
 func runClaudeUsageFromTranscript(args []string) {
 	st := resolveUsageState(args)
 	if st == nil {
+		// No session named: the Claude session id in the file's rows finds it, as a hook's payload
+		// does -- a subagent file carries its parent's id.
+		if id := claudeSessionIdOf(usageFromTranscript); id != "" {
+			if found, err := readAgentState(id); err == nil && found != nil {
+				st = found
+			} else {
+				st = adoptClaudeSession(id)
+			}
+		}
+	}
+	if st == nil {
 		usageBail("need a session uuid, --client-session-id, or local session state")
 		return
 	}
-	since := st.LastSeq
-	if usageSinceSeq >= 0 {
-		since = usageSinceSeq
+	// The recorded transcript stays the parent's: a subagent file named here is kept under its own
+	// path in the offsets, and a second run reports nothing new.
+	if st.TranscriptPath == "" && !strings.Contains(filepath.ToSlash(usageFromTranscript), "/subagents/") {
+		st.TranscriptPath = usageFromTranscript
 	}
-	st.TranscriptPath = usageFromTranscript
-	delta, err := parseClaudeTranscript(usageFromTranscript, since)
+	delta, err := sweepOneTranscript(st, usageFromTranscript, usageSinceSeq)
 	if err != nil {
 		usageBail("could not read transcript: %v", err)
 		return

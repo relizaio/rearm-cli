@@ -84,6 +84,9 @@ type usageDelta struct {
 	Truncated bool
 	// Agent-specific facts worth keeping beside the numbers; merged into the report's raw payload.
 	Extra map[string]interface{}
+	// Where each source file was read to, recorded in the state with LastSeq once the report is in;
+	// nil for a source that is not a set of files.
+	FileOffsets map[string]int64
 }
 
 // usageLine is one (model, band, service tier) group: exactly what the server stores as a row and
@@ -412,6 +415,9 @@ func reportDelta(st *agentSessionState, delta *usageDelta, source string, final 
 	// with a duplicate count and no rows written. That is precisely what the idempotency key was
 	// built for, and a cheap duplicate beats a silent hole.
 	st.LastSeq = delta.EndOffset
+	if delta.FileOffsets != nil {
+		st.TranscriptOffsets = delta.FileOffsets
+	}
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: could not record usage offset: %v\n", err)
 	}

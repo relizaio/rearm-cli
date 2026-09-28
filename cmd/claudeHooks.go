@@ -27,8 +27,9 @@ import (
 
 // Hook installation for Claude Code.
 //
-// Two hooks: Stop reports each turn as it finishes, SessionEnd sends the final flush. Both read the
-// transcript Claude Code already writes, so they add no token cost.
+// Three hooks: Stop reports each turn as it finishes, SubagentStop reports a spawned context when it
+// ends, SessionEnd sends the final flush. Each sweeps the transcript Claude Code already writes and
+// its subagent files, so they add no token cost.
 //
 // The settings file belongs to the user, not to us. Everything here merges rather than replaces,
 // touches only entries whose command is recognisably ours, and rewrites the file with its other
@@ -38,6 +39,37 @@ const (
 	claudeStopHookCommand       = "rearm agent claude usage --from-hook"
 	claudeSessionEndHookCommand = "rearm agent claude usage --from-hook --final"
 )
+
+// claudeUsageHooks is every hook this CLI installs, as (event, command). SubagentStop runs the same
+// sweep as Stop, so a fresh context's usage lands when it ends rather than at the parent's next turn;
+// a harness without the event loses nothing, because Stop and SessionEnd read the same files.
+var claudeUsageHooks = [][2]string{
+	{"Stop", claudeStopHookCommand},
+	{"SubagentStop", claudeStopHookCommand},
+	{"SessionEnd", claudeSessionEndHookCommand},
+}
+
+// installClaudeUsageHooks adds every usage hook; true when anything changed.
+func installClaudeUsageHooks(settings map[string]interface{}) bool {
+	changed := false
+	for _, h := range claudeUsageHooks {
+		if installClaudeHook(settings, h[0], h[1]) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+// uninstallClaudeUsageHooks removes every usage hook; true when anything changed.
+func uninstallClaudeUsageHooks(settings map[string]interface{}) bool {
+	changed := false
+	for _, h := range claudeUsageHooks {
+		if uninstallClaudeHook(settings, h[0], h[1]) {
+			changed = true
+		}
+	}
+	return changed
+}
 
 var (
 	hooksProject bool
@@ -211,14 +243,17 @@ var agentClaudeHooksCmd = &cobra.Command{
 var agentClaudeHooksInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Wire usage reporting into Claude Code's settings (merges; safe to re-run)",
-	Long: `Adds two hooks to .claude/settings.json (--project, the default) or
+	Long: `Adds three hooks to .claude/settings.json (--project, the default) or
 ~/.claude/settings.json (--user):
 
-  Stop        rearm agent claude usage --from-hook
-  SessionEnd  rearm agent claude usage --from-hook --final
+  Stop          rearm agent claude usage --from-hook
+  SubagentStop  rearm agent claude usage --from-hook
+  SessionEnd    rearm agent claude usage --from-hook --final
 
-Existing hooks are preserved and ours is added once, so re-running changes
-nothing. 'hooks uninstall' removes exactly these two.
+Each reads the session's transcript and the transcripts of the contexts it
+spawned (<session>/subagents/*.jsonl). Existing hooks are preserved and ours is
+added once, so re-running changes nothing. 'hooks uninstall' removes exactly
+these three.
 
 The hooks read the transcript Claude Code already writes, so they cost no extra
 tokens, and they exit 0 on any failure so they cannot block your work.`,
@@ -237,9 +272,7 @@ tokens, and they exit 0 on any failure so they cannot block your work.`,
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		a := installClaudeHook(settings, "Stop", claudeStopHookCommand)
-		b := installClaudeHook(settings, "SessionEnd", claudeSessionEndHookCommand)
-		if !a && !b {
+		if !installClaudeUsageHooks(settings) {
 			fmt.Printf("hooks already installed in %s\n", path)
 			return
 		}
@@ -265,9 +298,7 @@ var agentClaudeHooksUninstallCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
-		a := uninstallClaudeHook(settings, "Stop", claudeStopHookCommand)
-		b := uninstallClaudeHook(settings, "SessionEnd", claudeSessionEndHookCommand)
-		if !a && !b {
+		if !uninstallClaudeUsageHooks(settings) {
 			fmt.Printf("no rearm usage hooks found in %s\n", path)
 			return
 		}

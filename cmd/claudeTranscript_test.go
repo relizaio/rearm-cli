@@ -179,8 +179,9 @@ func TestAHalfWrittenFinalLineIsLeftForNextTime(t *testing.T) {
 }
 
 func TestSubagentTurnsAreCountedAndFlagged(t *testing.T) {
-	// Subagent turns are written into the PARENT's transcript with isSidechain. They are real spend
-	// on this session, so they count; the flag travels so the number is explainable.
+	// Rows flagged isSidechain -- a spawned context's, in its own file under <session>/subagents/
+	// (claudeSweep.go) -- are real spend on this session, so they count; the flag travels so the
+	// number is explainable.
 	side := strings.Replace(assistantRow("m2", "claude-opus-5", "text", 0, 70, 5, 0, 0),
 		`"type":"assistant"`, `"type":"assistant","isSidechain":true`, 1)
 	path := writeTranscript(t, assistantRow("m1", "claude-opus-5", "text", 0, 30, 5, 0, 0), side)
