@@ -51,7 +51,7 @@ import (
 //   rearm agent task complete|cancel <task-uuid> --session <uuid> [--note n]
 //   rearm agent task bindref <task-uuid> --external-ref <ref> [--source-url u]
 //   rearm agent task linkpr <task-uuid> --pr-url <u>
-//   rearm agent task show <task-uuid> | list --board <uuid> [--status S]
+//   rearm agent task show <task-uuid> [--session s] | list --board <uuid> [--status S]
 
 var (
 	taskBoardUuid    string
@@ -433,7 +433,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 		}
 		// What the hop read of the task's documents (RD2-34): the server refuses a sign-off that does not
 		// acknowledge one published since the assignment. Kept until the sign-off is accepted, so a refusal
-		// followed by `task show` sends the fuller set.
+		// followed by `task show --session` sends the fuller set.
 		if seen := seenInputsFor(taskSessionUuid, args[0], taskSeen); seen != nil {
 			variables["seenInputs"] = seen
 		}
@@ -721,8 +721,8 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 	Args: cobra.RangeArgs(1, 100),
 	Run: func(cmd *cobra.Command, args []string) {
 		op, vars, key := taskShowRequest(args)
-		// What it prints is recorded as read, for the session holding the task (RD2-34): the acknowledgement
-		// a sign-off sends.
+		// With --session, what it prints is recorded as read by that session (RD2-34): the acknowledgement its
+		// sign-off sends. Without it, nothing is recorded.
 		rememberSeenFromRead(taskShowSession, runGqlTasksRead(op, vars, key))
 	},
 }
@@ -813,7 +813,7 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskSeen, "seen", nil,
 		"Task documents read by other means than task show or assign; added to what they recorded")
 	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
-		"Session to record the shown documents for; defaults to the local session holding the task")
+		"Session reading the task: its sign-off acknowledges the shown documents. Without it, nothing is recorded")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
 		"Document releases produced by this hop; defaults to what `doc publish` recorded")
 	_ = agentTaskSignoffCmd.MarkPersistentFlagRequired("outcome")

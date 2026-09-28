@@ -12,7 +12,7 @@ import (
 	rearm "github.com/relizaio/rearm-client-go"
 )
 
-// What a hop read of its task (task RD2-34): `task show` and `task assign` print the task's documents and
+// What a hop read of its task (task RD2-34): `task show --session` and `task assign` print the task's documents and
 // record them for the session working it; `task signoff` sends them as seenInputs, with --seen added, and
 // forgets them once the sign-off is accepted.
 
@@ -66,12 +66,11 @@ func seenTask(uuid string, releases ...string) map[string]any {
 	return map[string]any{"uuid": uuid, "key": "RD-1", "documents": docs}
 }
 
-func TestShowRecordsWhatItPrintedForTheSessionHoldingTheTask(t *testing.T) {
+// Tester run 1 T-1: a show with no session recorded for every local state holding the task, so any read on the
+// host acknowledged for the holder. Only a read the session made counts (architecture-3 §1).
+func TestShowWithoutASessionRecordsNothingEvenForTheHolder(t *testing.T) {
 	withStateDir(t)
 	if err := writeAgentState(&agentSessionState{SessionUuid: "s-1", ClientSessionId: "c-1", CurrentTask: "t-1"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeAgentState(&agentSessionState{SessionUuid: "s-2", ClientSessionId: "c-2", CurrentTask: "t-other"}); err != nil {
 		t.Fatal(err)
 	}
 	f := &seenBoard{}
@@ -79,11 +78,37 @@ func TestShowRecordsWhatItPrintedForTheSessionHoldingTheTask(t *testing.T) {
 	defer srv.Close()
 	useFake(t, srv)
 	agentTaskShowCmd.Run(agentTaskShowCmd, []string{"t-1"})
+	if got := lookupAgentState("s-1").SeenInputs; len(got) != 0 {
+		t.Errorf("a sessionless show acknowledged for the holder: %v", got)
+	}
+	taskSessionUuid, taskOutcome = "s-1", "PASSED"
+	agentTaskSignoffCmd.Run(agentTaskSignoffCmd, []string{"t-1"})
+	if got := f.signed["seenInputs"]; !reflect.DeepEqual(got, []any{}) {
+		t.Errorf("the holder's sign-off sent %v after a bystander's show, want []", got)
+	}
+}
+
+func TestShowWithASessionRecordsIntoThatStateOnly(t *testing.T) {
+	withStateDir(t)
+	for _, st := range []*agentSessionState{
+		{SessionUuid: "s-1", ClientSessionId: "c-1", CurrentTask: "t-1"},
+		{SessionUuid: "s-2", ClientSessionId: "c-2", CurrentTask: "t-1"},
+	} {
+		if err := writeAgentState(st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := &seenBoard{}
+	srv := f.serve(t, seenTask("t-1", "r-1", "r-2"))
+	defer srv.Close()
+	useFake(t, srv)
+	taskShowSession = "s-1"
+	agentTaskShowCmd.Run(agentTaskShowCmd, []string{"t-1"})
 	if got := lookupAgentState("s-1").SeenInputs["t-1"]; !reflect.DeepEqual(got, []string{"r-1", "r-2"}) {
-		t.Errorf("the holder recorded %v", got)
+		t.Errorf("the named session recorded %v", got)
 	}
 	if got := lookupAgentState("s-2").SeenInputs; len(got) != 0 {
-		t.Errorf("a session not holding the task recorded %v", got)
+		t.Errorf("another state holding the same task recorded %v", got)
 	}
 }
 

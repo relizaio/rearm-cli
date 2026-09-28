@@ -1,16 +1,13 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 // What a hop has read of its task's documents (task RD2-34). The server refuses a sign-off that does not
-// acknowledge a document published on the task since the assignment; `task show` and `task assign` print the
-// task's documents and record them here, per session and task, so `task signoff` sends them as seenInputs with
+// acknowledge a document published on the task since the assignment; `task show --session` and `task assign` print
+// the task's documents and record them here, per session and task, so `task signoff` sends them as seenInputs with
 // no uuids copied by hand -- as `doc publish` records outputs.
 
 // taskDocumentReleases picks the document releases of each task in a task read (one task, a list of tasks,
@@ -74,52 +71,21 @@ func rememberSeen(st *agentSessionState, taskUuid string, releases []string) {
 	}
 }
 
-// statesHoldingTask is every local session whose current task is this one: the hop reading it here.
-func statesHoldingTask(taskUuid string) []*agentSessionState {
-	dir, err := agentStateDir()
-	if err != nil || taskUuid == "" {
-		return nil
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []*agentSessionState
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var st agentSessionState
-		if json.Unmarshal(raw, &st) != nil || st.CurrentTask != taskUuid || seen[st.SessionUuid] {
-			continue
-		}
-		seen[st.SessionUuid] = true
-		s := st
-		out = append(out, &s)
-	}
-	return out
-}
-
-// rememberSeenFromRead records a task read's documents as read: for the named session, or else for every local
-// session holding the task.
+// rememberSeenFromRead records a task read's documents as read by the named session, into that session's state
+// only. A read that names no session records nothing: the state directory is per host and user, so a
+// coordinator's, another role's or a person's read there must not acknowledge for the holder (RD2-34 run 1 T-1,
+// architecture-3 §1).
 func rememberSeenFromRead(sessionRef string, read interface{}) {
+	if sessionRef == "" {
+		return
+	}
+	st := lookupAgentState(sessionRef)
+	if st == nil {
+		fmt.Fprintf(os.Stderr, "rearm: no local state for session %s, so nothing is recorded as read; pass --seen at sign-off\n", sessionRef)
+		return
+	}
 	for taskUuid, releases := range taskDocumentReleases(read) {
-		var targets []*agentSessionState
-		if sessionRef != "" {
-			if st := lookupAgentState(sessionRef); st != nil {
-				targets = []*agentSessionState{st}
-			}
-		} else {
-			targets = statesHoldingTask(taskUuid)
-		}
-		for _, st := range targets {
-			rememberSeen(st, taskUuid, releases)
-		}
+		rememberSeen(st, taskUuid, releases)
 	}
 }
 
