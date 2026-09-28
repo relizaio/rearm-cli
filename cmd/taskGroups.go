@@ -194,7 +194,7 @@ var agentTaskSetGroupCmd = &cobra.Command{
 			fail(err.Error())
 		}
 		vars["sessionUuid"] = taskSessionUuid
-		runGql(rearm.AgentTaskSetGroupProgrammatic_Operation, vars, "agentTaskSetGroupProgrammatic")
+		runGqlCompact(rearm.AgentTaskSetGroupProgrammatic_Operation, vars, "agentTaskSetGroupProgrammatic")
 	},
 }
 
@@ -222,7 +222,7 @@ var agentTaskTagCmd = &cobra.Command{
 			current, _ := t["tags"].([]interface{})
 			tags = tagsAfter(current, taskTagAdd, taskTagRemove)
 		}
-		runGql(rearm.AgentTaskSetTagsProgrammatic_Operation, map[string]interface{}{
+		runGqlCompact(rearm.AgentTaskSetTagsProgrammatic_Operation, map[string]interface{}{
 			"taskUuid": args[0], "sessionUuid": taskSessionUuid, "tags": tags}, "agentTaskSetTagsProgrammatic")
 	},
 }

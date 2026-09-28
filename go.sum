@@ -58,6 +58,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/relizaio/rearm-client-go v0.1.7-0.20260928054107-b6bf72c8c8b7 h1:cvT3zZ4ghFk1gA1Jh8ncNCSI0g3H76NgOaqc9yd7bJw=
 github.com/relizaio/rearm-client-go v0.1.7-0.20260928054107-b6bf72c8c8b7/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260928145805-ca7131aa1f80 h1:InkJf8+IexjQGethERqzw2ei1YCxdaennEBCsYX01ug=
+github.com/relizaio/rearm-client-go v0.1.7-0.20260928145805-ca7131aa1f80/go.mod h1:ahP0z6vzkEo3dTG6Rsz0TXPe1/CI/H5UEoC/Dfky/AY=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

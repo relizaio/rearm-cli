@@ -266,7 +266,7 @@ server refuses a longer one or one with a line break. Everything else goes in
 --description (at most 4000 characters, kept whole).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		taskLevelSet = cmd.Flags().Changed("level")
-		runGql(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": agentRegisterInput()},
+		runGqlCompact(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": agentRegisterInput()},
 			"agentTaskRegisterProgrammatic")
 	},
 }
@@ -407,7 +407,7 @@ var agentTaskAssignCmd = &cobra.Command{
 		if len(roles) > 0 {
 			variables["roles"] = roles
 		}
-		assigned := runGqlRead(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
+		assigned := runGqlReadCompact(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
 		// The assign prints the task's documents: they are what the hop starts from, recorded as read (RD2-34).
 		rememberSeenFromRead(taskSessionUuid, assigned)
 		// Record the assignment locally so the usage hooks attribute this session's spend to it
@@ -437,7 +437,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if seen := seenInputsFor(taskSessionUuid, args[0], taskSeen); seen != nil {
 			variables["seenInputs"] = seen
 		}
-		runGql(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
+		runGqlCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
 		forgetSeen(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
 		clearCurrentTask(taskSessionUuid, args[0])
@@ -459,7 +459,7 @@ var agentTaskReturnCmd = &cobra.Command{
 		if outputs := resolveOutputs(taskSessionUuid, args[0]); len(outputs) > 0 {
 			variables["outputs"] = outputs
 		}
-		runGql(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic")
+		runGqlCompact(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic")
 		clearCurrentTask(taskSessionUuid, args[0])
 	},
 }
@@ -506,7 +506,7 @@ one is the operator's decision. Left out, the budget is unchanged.`,
 			}
 			variables["budgetMicros"] = micros
 		}
-		runGql(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
+		runGqlCompact(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
 	},
 }
 
@@ -515,7 +515,7 @@ var agentTaskHoldCmd = &cobra.Command{
 	Short: "Coordinator: put the task ON_HOLD pending human input (excluded from polls)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskHoldProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskNote}, "agentTaskHoldProgrammatic")
+		runGqlCompact(rearm.AgentTaskHoldProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskNote}, "agentTaskHoldProgrammatic")
 	},
 }
 
@@ -562,7 +562,7 @@ identical stop is the operator's. If it is a judgement call, escalate instead.
 An OPERATOR hold (a second loop stop, a budget stop, a person's hold) is the operator's to release.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole, taskReleaseNote), "agentTaskReleaseHoldProgrammatic")
+		runGqlCompact(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole, taskReleaseNote), "agentTaskReleaseHoldProgrammatic")
 	},
 }
 
@@ -579,7 +579,7 @@ item needs accepting. Refused on any other hold.`,
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTaskEscalateHoldProgrammatic_Operation, vars, "agentTaskEscalateHoldProgrammatic")
+		runGqlCompact(rearm.AgentTaskEscalateHoldProgrammatic_Operation, vars, "agentTaskEscalateHoldProgrammatic")
 	},
 }
 
@@ -588,7 +588,7 @@ var agentTaskRequireReviewCmd = &cobra.Command{
 	Short: "Coordinator: require human review of the task's next sign-off (add-only; clearing is operator-only)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskRequireHumanReviewProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}, "agentTaskRequireHumanReviewProgrammatic")
+		runGqlCompact(rearm.AgentTaskRequireHumanReviewProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}, "agentTaskRequireHumanReviewProgrammatic")
 	},
 }
 
@@ -597,7 +597,7 @@ var agentTaskOrderCmd = &cobra.Command{
 	Short: "Coordinator: re-prioritize a task",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskOrderProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "orderIndex": taskOrder}, "agentTaskOrderProgrammatic")
+		runGqlCompact(rearm.AgentTaskOrderProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "orderIndex": taskOrder}, "agentTaskOrderProgrammatic")
 	},
 }
 
@@ -611,7 +611,7 @@ var agentTaskLevelCmd = &cobra.Command{
 			fail(err.Error())
 		}
 		vars["sessionUuid"] = taskSessionUuid
-		runGql(rearm.AgentTaskSetLevelProgrammatic_Operation, vars, "agentTaskSetLevelProgrammatic")
+		runGqlCompact(rearm.AgentTaskSetLevelProgrammatic_Operation, vars, "agentTaskSetLevelProgrammatic")
 	},
 }
 
@@ -629,7 +629,7 @@ the rest goes in the child's description.`,
 			printGqlError(err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTaskSplitProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "children": children}, "agentTaskSplitProgrammatic")
+		runGqlCompact(rearm.AgentTaskSplitProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "children": children}, "agentTaskSplitProgrammatic")
 	},
 }
 
@@ -642,7 +642,7 @@ var agentTaskCompleteCmd = &cobra.Command{
 		if taskNote != "" {
 			variables["note"] = taskNote
 		}
-		runGql(rearm.AgentTaskCompleteProgrammatic_Operation, variables, "agentTaskCompleteProgrammatic")
+		runGqlCompact(rearm.AgentTaskCompleteProgrammatic_Operation, variables, "agentTaskCompleteProgrammatic")
 	},
 }
 
@@ -655,7 +655,7 @@ var agentTaskCancelCmd = &cobra.Command{
 		if taskNote != "" {
 			variables["note"] = taskNote
 		}
-		runGql(rearm.AgentTaskCancelProgrammatic_Operation, variables, "agentTaskCancelProgrammatic")
+		runGqlCompact(rearm.AgentTaskCancelProgrammatic_Operation, variables, "agentTaskCancelProgrammatic")
 	},
 }
 
@@ -667,7 +667,7 @@ and whoever read its part re-runs once the redone hop republishes. A cancelled t
 reopened; register a new one. A round the budget does not cover holds for an operator.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskReopenProgrammatic_Operation,
+		runGqlCompact(rearm.AgentTaskReopenProgrammatic_Operation,
 			reopenVariables(args[0], taskSessionUuid, taskRole, taskReopenReason), "agentTaskReopenProgrammatic")
 	},
 }
@@ -690,7 +690,7 @@ var agentTaskBindrefCmd = &cobra.Command{
 		if taskSourceUrl != "" {
 			variables["sourceUrl"] = taskSourceUrl
 		}
-		runGql(rearm.AgentTaskBindExternalRefProgrammatic_Operation, variables, "agentTaskBindExternalRefProgrammatic")
+		runGqlCompact(rearm.AgentTaskBindExternalRefProgrammatic_Operation, variables, "agentTaskBindExternalRefProgrammatic")
 	},
 }
 
@@ -699,7 +699,7 @@ var agentTaskLinkprCmd = &cobra.Command{
 	Short: "Attach a delivering pull-request URL to the task",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskLinkPrProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "prUrl": taskPrUrl}, "agentTaskLinkPrProgrammatic")
+		runGqlCompact(rearm.AgentTaskLinkPrProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "prUrl": taskPrUrl}, "agentTaskLinkPrProgrammatic")
 	},
 }
 
