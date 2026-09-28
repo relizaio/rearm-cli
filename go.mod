@@ -6,7 +6,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/relizaio/rearm-client-go v0.1.7-0.20260927222542-6080b15f1763
+	github.com/relizaio/rearm-client-go v0.1.7-0.20260928012538-27dd9865a947
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
