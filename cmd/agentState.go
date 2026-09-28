@@ -47,9 +47,13 @@ type agentSessionState struct {
 	// file is shared: only the code under `rearm agent claude` knows which tool filled it in.
 	ExternalSessionId string `json:"externalSessionId,omitempty"`
 	TranscriptPath    string `json:"transcriptPath,omitempty"`
-	// Byte offset into the transcript after the last line already reported. The server dedupes on
-	// this, so it is both the resume point and the idempotency key.
+	// The sequence of the last report the server took, and so the idempotency key. For a Claude
+	// session that never spawned a context it is the byte offset into the transcript; since task
+	// RD3-12 it is the running total of bytes read across the transcript and its subagent files.
 	LastSeq int64 `json:"lastSeq"`
+	// Where each transcript file was read to: the parent's and every subagent file's, by path. A
+	// state written before RD3-12 has none, and its LastSeq is the parent's entry.
+	TranscriptOffsets map[string]int64 `json:"transcriptOffsets,omitempty"`
 	// The task usage should be attributed to, or empty. Set by `task assign`, cleared by
 	// `task signoff` and `task return`.
 	CurrentTask string `json:"currentTask,omitempty"`

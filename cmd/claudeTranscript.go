@@ -158,9 +158,10 @@ func parseClaudeTranscript(path string, sinceOffset int64) (*usageDelta, error) 
 			claudeSessionId = row.SessionId
 		}
 		if row.IsSidechain {
-			// Subagent turns are written into the PARENT's transcript with this flag. They are
-			// real spend on this session, so they are counted here rather than dropped; the count
-			// travels with the report so the server can see the session had subagent activity.
+			// A spawned context's rows carry this flag. Claude Code writes them to the context's own
+			// file under <session>/subagents/, not into the parent transcript (observed 2026-09-28);
+			// the sweep in claudeSweep.go reads those files. They are real spend on this session, so
+			// they are counted, and the count travels with the report.
 			sidechainRows++
 		}
 
