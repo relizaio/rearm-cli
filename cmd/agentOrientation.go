@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,17 +34,36 @@ import (
 
 var orientationSection string
 
-// orientationError is a section the server does not have; its body names the sections there are.
+// orientationError is a section the server did not serve. Its words are the CLI's own, never the response
+// body: in a deployment a proxy in front of /api/agents replaces error bodies with its own page (RD3-10 T-1),
+// so the names come from the core's table instead.
 type orientationError struct {
+	name   string
 	status int
-	body   string
+	names  []string
 }
 
 func (e *orientationError) Error() string {
-	if strings.TrimSpace(e.body) != "" {
-		return strings.TrimSpace(e.body)
+	if len(e.names) > 0 {
+		return fmt.Sprintf("No orientation section named '%s'. The sections are: core, %s.", e.name, strings.Join(e.names, ", "))
 	}
-	return fmt.Sprintf("orientation request failed with status %d", e.status)
+	return fmt.Sprintf("orientation section '%s' not served (status %d)", e.name, e.status)
+}
+
+// orientationRow is a row of the core's "Where to read what" table: | when you need to | `section` |
+var orientationRow = regexp.MustCompile("(?m)^\\| .+? \\| `([a-z0-9-]+)` \\|$")
+
+// sectionNames reads the section names from the core's "Where to read what" table.
+func sectionNames(core string) []string {
+	at := strings.Index(core, "## Where to read what")
+	if at < 0 {
+		return nil
+	}
+	var names []string
+	for _, m := range orientationRow.FindAllStringSubmatch(core[at:], -1) {
+		names = append(names, m[1])
+	}
+	return names
 }
 
 // fetchOrientation reads the core ("core") or one section by name from the server.
@@ -57,7 +77,13 @@ func fetchOrientation(name string) (string, error) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode != http.StatusOK {
-		return "", &orientationError{status: resp.StatusCode, body: string(body)}
+		oe := &orientationError{name: name, status: resp.StatusCode}
+		if name != "core" {
+			if core, err := fetchOrientation("core"); err == nil {
+				oe.names = sectionNames(core)
+			}
+		}
+		return "", oe
 	}
 	return string(body), nil
 }

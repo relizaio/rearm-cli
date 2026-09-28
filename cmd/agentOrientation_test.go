@@ -17,6 +17,11 @@ import (
 
 var orientationNames = []string{"core", "taking-a-task", "publishing", "asking", "waiting", "commit-trailers", "signing-key"}
 
+// fakeCore is a core with its table, as the server serves it.
+const fakeCore = "<<CORE TEXT>>\n\n## Where to read what\n\n| when you need to | read |\n|---|---|\n" +
+	"| take a task on a board | `taking-a-task` |\n| publish a document | `publishing` |\n| ask a question | `asking` |\n" +
+	"| wait for work | `waiting` |\n| push code with attribution | `commit-trailers` |\n| enrol a signing key | `signing-key` |\n"
+
 // orientationWorld serves the orientation URLs and the GraphQL reads a brief makes, from one server.
 func orientationWorld(t *testing.T, caps []any) {
 	t.Helper()
@@ -24,14 +29,19 @@ func orientationWorld(t *testing.T, caps []any) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/agents/orientation/") {
 			name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/agents/orientation/"), ".md")
+			if name == "core" {
+				_, _ = w.Write([]byte(fakeCore))
+				return
+			}
 			for _, n := range orientationNames {
 				if n == name {
 					_, _ = w.Write([]byte("<<" + strings.ToUpper(name) + " TEXT>>\n"))
 					return
 				}
 			}
+			// what the deployed proxy answers in place of the backend's 404 body (RD3-10 T-1)
 			w.WriteHeader(404)
-			_, _ = w.Write([]byte("No orientation section named '" + name + "'. The sections are: " + strings.Join(orientationNames, ", ") + ".\n"))
+			_, _ = w.Write([]byte("<html>Your request has returned an error with the code: 404 (Not Found).</html>\n"))
 			return
 		}
 		var req struct {
@@ -71,16 +81,21 @@ func orientationWorld(t *testing.T, caps []any) {
 
 func TestTheOrientationCommandPrintsTheCoreOrASection(t *testing.T) {
 	orientationWorld(t, nil)
-	if out := stdoutOf(t, func() { agentOrientationCmd.Run(agentOrientationCmd, nil) }); out != "<<CORE TEXT>>\n" {
+	if out := stdoutOf(t, func() { agentOrientationCmd.Run(agentOrientationCmd, nil) }); out != fakeCore {
 		t.Fatalf("the core by default, got %q", out)
 	}
 	orientationSection = "taking-a-task"
 	if out := stdoutOf(t, func() { agentOrientationCmd.Run(agentOrientationCmd, nil) }); out != "<<TAKING-A-TASK TEXT>>\n" {
 		t.Fatalf("the named section, got %q", out)
 	}
+	// through a proxy that replaces the 404 body, the names still come from the core's table (T-1)
 	_, err := fetchOrientation("fishing")
-	if err == nil || !strings.Contains(err.Error(), "No orientation section named 'fishing'") || !strings.Contains(err.Error(), "taking-a-task") {
-		t.Fatalf("an unknown name lists the sections, got %v", err)
+	want := "No orientation section named 'fishing'. The sections are: core, taking-a-task, publishing, asking, waiting, commit-trailers, signing-key."
+	if err == nil || err.Error() != want {
+		t.Fatalf("an unknown name lists the sections from the core, got %v", err)
+	}
+	if strings.Contains(err.Error(), "<html>") {
+		t.Fatal("never the proxy's page")
 	}
 }
 
