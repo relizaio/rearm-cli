@@ -544,11 +544,11 @@ func renderTaskBrief(b *taskBrief) string {
 			keys = append(keys, sec.Key)
 		}
 		fmt.Fprintf(&sb, "\n## 7. Orientation: the core, then %s\n\n", strings.Join(keys, ", "))
-		sb.WriteString(strings.TrimRight(b.OrientationCore, "\n"))
+		sb.WriteString(strings.TrimRight(demoteHeadings(b.OrientationCore), "\n"))
 		sb.WriteString("\n")
 		for _, sec := range b.OrientationSections {
 			sb.WriteString("\n")
-			sb.WriteString(strings.TrimRight(sec.Content, "\n"))
+			sb.WriteString(strings.TrimRight(demoteHeadings(sec.Content), "\n"))
 			sb.WriteString("\n")
 		}
 	}
