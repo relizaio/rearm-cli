@@ -42,7 +42,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "AI Agent commands (coding agents — Claude Code, Cursor, Codex, …)",
-	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection.`,
+	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection. Its core, and each section by the action it covers, print with 'rearm agent orientation [--section <name>]'.`,
 }
 
 var agentSessionCmd = &cobra.Command{

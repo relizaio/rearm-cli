@@ -76,6 +76,9 @@ type agentSessionState struct {
 	// The task documents this session has read, keyed by TASK uuid (task RD2-34): what `task show` and
 	// `task assign` printed, sent by `task signoff` as seenInputs and forgotten once it is accepted.
 	SeenInputs map[string][]string `json:"seenInputs,omitempty"`
+	// The orientation sections a brief has already printed for this session (task RD3-10), so the
+	// once-a-session ones are not printed again.
+	OrientationShown []string `json:"orientationShown,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling
@@ -423,4 +426,47 @@ func rememberBoard(sessionRef, boardUuid string) {
 		fmt.Fprintf(os.Stderr, "rearm: could not record the board locally; pass --board on "+
 			"component-scoped publishes: %v\n", err)
 	}
+}
+
+// orientationShown reports whether a brief already printed the section for this session.
+func orientationShown(sessionRef, key string) bool {
+	st := lookupAgentState(sessionRef)
+	if st == nil {
+		return false
+	}
+	for _, k := range st.OrientationShown {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// rememberOrientationShown records the sections a brief printed for the session.
+func rememberOrientationShown(sessionRef string, secs []briefSection) {
+	st := lookupAgentState(sessionRef)
+	if st == nil || len(secs) == 0 {
+		return
+	}
+	changed := false
+	for _, s := range secs {
+		if !stringListHas(st.OrientationShown, s.Key) {
+			st.OrientationShown = append(st.OrientationShown, s.Key)
+			changed = true
+		}
+	}
+	if changed {
+		if err := writeAgentState(st); err != nil {
+			fmt.Fprintf(os.Stderr, "rearm: could not record the orientation shown: %v\n", err)
+		}
+	}
+}
+
+func stringListHas(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
