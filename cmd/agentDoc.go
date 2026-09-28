@@ -488,6 +488,9 @@ func init() {
 // to write in the wrong place.
 func boardOfSession(st *agentSessionState) (map[string]interface{}, string, error) {
 	boardUuid := docBoard
+	if boardUuid != "" {
+		boardUuid = boardArg(boardUuid)
+	}
 	if boardUuid == "" && docTask != "" {
 		data, err := sendGraphQLRequest(rearm.AgentTaskProgrammatic_Operation,
 			map[string]interface{}{"taskUuid": docTask})
