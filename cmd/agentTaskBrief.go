@@ -100,6 +100,49 @@ type taskBrief struct {
 	Rules         []string          `json:"rules"`
 	NotesPath     string            `json:"notesPath,omitempty"`
 	Notes         []string          `json:"notes"`
+	// The orientation's core and the sections this task's actions need (task RD3-10); empty against a
+	// server that does not serve the split, which leaves the URL above.
+	OrientationCore     string         `json:"orientationCore,omitempty"`
+	OrientationSections []briefSection `json:"orientationSections,omitempty"`
+}
+
+type briefSection struct {
+	Key     string `json:"key"`
+	Content string `json:"content"`
+}
+
+// briefSectionKeys are the orientation sections a task's actions need (task RD3-10): taking a task and
+// publishing always; asking when the role reads documents it may have to ask about; commit trailers when
+// the role pushes code; waiting only on the session's first brief, since the wait loop is the session's.
+func briefSectionKeys(asks, pushesCode, firstBrief bool) []string {
+	keys := []string{"taking-a-task", "publishing"}
+	if asks {
+		keys = append(keys, "asking")
+	}
+	if pushesCode {
+		keys = append(keys, "commit-trailers")
+	}
+	if firstBrief {
+		keys = append(keys, "waiting")
+	}
+	return keys
+}
+
+// briefOrientation fetches the core and the sections; any failure leaves the brief with the URL alone.
+func briefOrientation(b *taskBrief, keys []string) {
+	core, err := fetchOrientation("core")
+	if err != nil {
+		return
+	}
+	var secs []briefSection
+	for _, k := range keys {
+		text, err := fetchOrientation(k)
+		if err != nil {
+			return
+		}
+		secs = append(secs, briefSection{Key: k, Content: text})
+	}
+	b.OrientationCore, b.OrientationSections = core, secs
 }
 
 var agentTaskBriefCmd = &cobra.Command{
@@ -122,6 +165,7 @@ ordinary flow -- brief, work, publish, sign off -- needs no task show.`,
 		}
 		// What it printed is recorded as read by the session (RD2-34): the acknowledgement its sign-off sends.
 		rememberSeenFromRead(briefSession, read)
+		rememberOrientationShown(briefSession, b.OrientationSections)
 		if briefJson {
 			out, _ := json.MarshalIndent(b, "", "  ")
 			fmt.Println(string(out))
@@ -161,7 +205,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		roles, composed = fallback, false
 	}
 	var inputs []string
-	found := false
+	found, pushesCode := false, false
 	for _, r := range asList(roles["agentTaskRoleConfigsProgrammatic"]) {
 		if !strings.EqualFold(str(r["name"]), role) {
 			continue
@@ -176,6 +220,13 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		for _, in := range asList(r["requiredInputs"]) {
 			if str(in["kind"]) == "DOCUMENT" && str(in["specification"]) != "" {
 				inputs = append(inputs, str(in["specification"]))
+			}
+		}
+		if caps, ok := r["requiredCapabilities"].([]interface{}); ok {
+			for _, c := range caps {
+				if str(c) == "CODE_PUSH" {
+					pushesCode = true
+				}
 			}
 		}
 	}
@@ -210,6 +261,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 	if inline {
 		b.Inline = briefInlineInputs(b.Documents, inputs, b.Repository.LocalPath)
 	}
+	briefOrientation(b, briefSectionKeys(len(inputs) > 0, pushesCode, !orientationShown(session, "waiting")))
 	return b, task, nil
 }
 
@@ -380,6 +432,13 @@ func renderTaskBrief(b *taskBrief) string {
 	if b.Inline != nil {
 		fmt.Fprintf(&sb, ", inline %d bytes", inlineBytes)
 	}
+	if b.OrientationCore != "" {
+		n := len(b.OrientationCore)
+		for _, s := range b.OrientationSections {
+			n += len(s.Content)
+		}
+		fmt.Fprintf(&sb, ", orientation %d bytes", n)
+	}
 	sb.WriteString("\n\n")
 
 	fmt.Fprintf(&sb, "## 1. Your prompt (%s", b.Role)
@@ -478,6 +537,20 @@ func renderTaskBrief(b *taskBrief) string {
 	}
 	for _, n := range b.Notes {
 		sb.WriteString(n + "\n")
+	}
+	if b.OrientationCore != "" {
+		keys := make([]string, 0, len(b.OrientationSections))
+		for _, sec := range b.OrientationSections {
+			keys = append(keys, sec.Key)
+		}
+		fmt.Fprintf(&sb, "\n## 7. Orientation: the core, then %s\n\n", strings.Join(keys, ", "))
+		sb.WriteString(strings.TrimRight(demoteHeadings(b.OrientationCore), "\n"))
+		sb.WriteString("\n")
+		for _, sec := range b.OrientationSections {
+			sb.WriteString("\n")
+			sb.WriteString(strings.TrimRight(demoteHeadings(sec.Content), "\n"))
+			sb.WriteString("\n")
+		}
 	}
 	return sb.String()
 }
