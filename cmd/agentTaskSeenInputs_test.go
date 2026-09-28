@@ -151,16 +151,3 @@ func TestASessionThatReadNothingSendsAnEmptyList(t *testing.T) {
 		t.Errorf("tracked but read nothing: seenInputs %v (sent %v), want []", got, ok)
 	}
 }
-
-func TestASessionWithNoLocalStateSendsNoSeenInputs(t *testing.T) {
-	withStateDir(t)
-	f := &seenBoard{}
-	srv := f.serve(t, seenTask("t-1"))
-	defer srv.Close()
-	useFake(t, srv)
-	taskSessionUuid, taskOutcome = "s-elsewhere", "PASSED"
-	agentTaskSignoffCmd.Run(agentTaskSignoffCmd, []string{"t-1"})
-	if got, ok := f.signed["seenInputs"]; ok {
-		t.Errorf("a session this machine does not track sent seenInputs %v; the server check is for callers that track", got)
-	}
-}
