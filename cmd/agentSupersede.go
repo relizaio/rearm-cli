@@ -55,7 +55,8 @@ force-pushed -- for example to drop commits without their ReARM trailers.
 
 The old PR must be closed without merging, as its CI reported it; the replacement must be linked to the
 task first (task linkpr) and be on the same repository. A merged PR is never superseded. The session
-holding the task, in a role with CODE_PUSH; a person declares it on the task page.`,
+holding the task, in a role with CODE_PUSH; a person with BOARD_WRITE can declare it too, through the
+agentTaskSupersedePullRequest mutation.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := supersedeVars(args[0], supersedeSession, supersedeOld, supersedeBy, supersedeNote)
