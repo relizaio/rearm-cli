@@ -176,7 +176,7 @@ re-read the tasks rather than trusting the feed for the time between.`,
 		if !boardEventsFollow {
 			p, err := read(vars)
 			if err != nil {
-				printGqlError(err)
+				printRefusal(err)
 				os.Exit(1)
 			}
 			warnGap(p)
@@ -208,7 +208,7 @@ re-read the tasks rather than trusting the feed for the time between.`,
 		}
 		if err := followEvents(vars, read, show, warnGap, func() { time.Sleep(boardEventsFollowEvery) },
 			func() bool { return false }); err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 	},

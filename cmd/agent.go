@@ -132,7 +132,7 @@ owner. --no-device-info stops the CLI reporting the machine.`,
 		variables := map[string]interface{}{"sessionInit": input}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		session := data["sessionInitializeProgrammatic"]
@@ -194,7 +194,7 @@ var agentSessionTouchCmd = &cobra.Command{
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["sessionTouchProgrammatic"])
@@ -210,7 +210,7 @@ var agentSessionCloseCmd = &cobra.Command{
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		// The session is over; its local state is now just a stale mapping that a later Claude
@@ -238,7 +238,7 @@ the current full state.`,
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["sessionProgrammatic"])
@@ -307,7 +307,7 @@ permission on its component/product.`,
 		}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["agenticReleaseProgrammatic"])
@@ -353,7 +353,7 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 		variables := map[string]interface{}{"inboxRequest": inboxRequest}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["agentSessionInboxProgrammatic"])

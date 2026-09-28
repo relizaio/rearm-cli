@@ -101,7 +101,7 @@ func runGql(query string, variables map[string]interface{}, key string) {
 func runGqlRead(query string, variables map[string]interface{}, key string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	emitJson(data[key])
@@ -213,7 +213,7 @@ var agentBoardRoleconfigSetCmd = &cobra.Command{
 		if rolePromptFile != "" {
 			b, err := os.ReadFile(rolePromptFile)
 			if err != nil {
-				printGqlError(err)
+				printRefusal(err)
 				os.Exit(1)
 			}
 			prompt = string(b)
@@ -318,7 +318,7 @@ for this session, so a following 'task assign' passes the same roles.`,
 		}
 		data, err := sendGraphQLRequest(rearm.AgentTaskNextProgrammatic_Operation, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		// Remembered only once the server has answered, and cleared by an undeclared poll, so
@@ -629,7 +629,7 @@ the rest goes in the child's description.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var children []map[string]interface{}
 		if err := json.Unmarshal([]byte(taskChildrenJson), &children); err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		runGqlCompact(rearm.AgentTaskSplitProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "children": children}, "agentTaskSplitProgrammatic")

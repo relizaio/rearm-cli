@@ -195,7 +195,7 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	data, err := sendGraphQLRequest(rearm.AgentDocumentPublishProgrammatic_Operation,
 		map[string]interface{}{"input": input})
 	if err != nil {
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	release, _ := data["agentDocumentPublishProgrammatic"].(map[string]interface{})

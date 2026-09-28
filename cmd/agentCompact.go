@@ -38,11 +38,17 @@ func runGqlCompact(query string, variables map[string]interface{}, key string) {
 func runGqlReadCompact(query string, variables map[string]interface{}, key string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	printCompact(data[key])
 	return data[key]
+}
+
+// printRefusal is how every compact verb reports an error (task RD3-16): on stderr, so a caller reading the
+// result from stdout never takes the refusal for one, with exit 1 after it. The server's message says why.
+func printRefusal(err error) {
+	fmt.Fprintln(os.Stderr, "Error:", describeError(err))
 }
 
 // printCompact prints a response as the compact lines, or whole with --json.

@@ -200,7 +200,7 @@ that opened it as well.`,
 		data, err := sendGraphQLRequest(rearm.SessionUpdateMetaProgrammatic_Operation,
 			map[string]interface{}{"updateMeta": input})
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["sessionUpdateMetaProgrammatic"])

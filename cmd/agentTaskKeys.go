@@ -144,7 +144,7 @@ func runGqlTasks(query string, variables map[string]interface{}, key string) {
 func runGqlTasksRead(query string, variables map[string]interface{}, key string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	fmt.Println(string(keyFirstJSON(data[key])))
