@@ -441,7 +441,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if seen := seenInputsFor(taskSessionUuid, args[0], taskSeen); seen != nil {
 			variables["seenInputs"] = seen
 		}
-		runGqlCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic")
+		runHopCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
 		forgetSeen(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
 		clearCurrentTask(taskSessionUuid, args[0])
@@ -463,7 +463,7 @@ var agentTaskReturnCmd = &cobra.Command{
 		if outputs := resolveOutputs(taskSessionUuid, args[0]); len(outputs) > 0 {
 			variables["outputs"] = outputs
 		}
-		runGqlCompact(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic")
+		runHopCompact(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic", taskSessionUuid, args[0])
 		clearCurrentTask(taskSessionUuid, args[0])
 	},
 }
