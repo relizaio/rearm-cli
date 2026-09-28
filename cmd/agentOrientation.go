@@ -91,10 +91,11 @@ func fetchOrientation(name string) (string, error) {
 var agentOrientationCmd = &cobra.Command{
 	Use:   "orientation",
 	Short: "Print the agent orientation's core, or one section of it (--section)",
-	Long: `Prints the core of the agent orientation: prerequisites, opening and closing a session, the usage
-hooks, the final report, and the table of which section to read for which action. --section <name>
-prints that section instead, e.g. taking-a-task, publishing, asking, waiting, commit-trailers. An
-unknown name lists the sections there are. The whole document stays at $REARM_URL/api/agents/orientation.md.`,
+	Long: `Prints the core of the agent orientation: the environment variables, opening a session, the usage
+hooks' install command, heartbeat and close, the credential and tracing rules, and the table of which
+section to read for which action. --section <name> prints that section instead, e.g. taking-a-task,
+publishing, asking, waiting, commit-trailers, install-cli, final-report. An unknown name lists the
+sections there are. The whole document stays at $REARM_URL/api/agents/orientation.md.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		name := strings.TrimSpace(orientationSection)
