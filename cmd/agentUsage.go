@@ -564,7 +564,7 @@ func runUsageExplicit(args []string) {
 	}
 	ack, err := sendUsageReport(input)
 	if err != nil {
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	emitJson(ack)

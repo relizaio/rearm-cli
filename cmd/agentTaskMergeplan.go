@@ -359,7 +359,7 @@ the merge sha.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		data, err := sendGraphQLRequest(rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0]})
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		task, _ := data["agentTaskProgrammatic"].(map[string]interface{})
@@ -367,7 +367,7 @@ the merge sha.`,
 		board, _ := task["board"].(string)
 		procedure, err := boardProcedure(board)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		merges, notYours := mayMerge(procedure, task, taskSessionUuid)
