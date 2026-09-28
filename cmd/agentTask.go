@@ -437,10 +437,9 @@ var agentTaskSignoffCmd = &cobra.Command{
 		}
 		// What the hop read of the task's documents (RD2-34): the server refuses a sign-off that does not
 		// acknowledge one published since the assignment. Kept until the sign-off is accepted, so a refusal
-		// followed by `task show --session` sends the fuller set.
-		if seen := seenInputsFor(taskSessionUuid, args[0], taskSeen); seen != nil {
-			variables["seenInputs"] = seen
-		}
+		// followed by `task show --session` sends the fuller set. Always sent, an empty list without local
+		// state (RD3-14): the CLI never asks the server to skip the check.
+		variables["seenInputs"] = seenInputsFor(taskSessionUuid, args[0], taskSeen)
 		runHopCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
 		forgetSeen(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
