@@ -198,6 +198,8 @@ type waitTrigger struct {
 	Task  string `json:"task,omitempty"`
 	Kind  string `json:"kind"`
 	Alert int64  `json:"alert,omitempty"`
+	// New marks a trigger the last poll did not see: what woke the wait (task RD3-15). An ALERT is always new.
+	New bool `json:"new,omitempty"`
 }
 
 func (t waitTrigger) id() string {
@@ -236,7 +238,8 @@ func (w *coordinatorWait) cursorOut() map[string]interface{} {
 }
 
 // poll reads the board once: the events since the cursor, the snapshot, and the seat's touch.
-// It says done when the trigger set is non-empty and differs from the one the last wake saw.
+// It says done when a task trigger appears that the last poll did not see, or on an ALERT (task RD3-15): a set
+// that only shrinks, or stays the same, is quiet.
 func (w *coordinatorWait) poll(c waitClient) (bool, interface{}, error) {
 	if err := c.touch(w.opts.session); err != nil {
 		return false, nil, err
@@ -272,12 +275,21 @@ func (w *coordinatorWait) poll(c waitClient) (bool, interface{}, error) {
 	for _, t := range triggers {
 		ids = append(ids, t.id())
 	}
-	for _, seq := range w.alerts {
-		triggers = append(triggers, waitTrigger{Kind: "ALERT", Alert: seq})
-	}
-	sort.Slice(triggers, func(i, j int) bool { return triggers[i].id() < triggers[j].id() })
 	st := readWaitState(w.opts.statePath)
-	last := st.Triggers
+	fresh := newSince(ids, st.Triggers)
+	for i := range triggers {
+		triggers[i].New = fresh[triggers[i].id()]
+	}
+	for _, seq := range w.alerts {
+		triggers = append(triggers, waitTrigger{Kind: "ALERT", Alert: seq, New: true})
+	}
+	// What woke it first, then what still waits.
+	sort.Slice(triggers, func(i, j int) bool {
+		if triggers[i].New != triggers[j].New {
+			return triggers[i].New
+		}
+		return triggers[i].id() < triggers[j].id()
+	})
 	// The cursor is kept every poll, so a run that ends -- woken, timed out or killed -- hands the
 	// next one the place it stopped reading.
 	st.After, st.Since = w.after, ""
@@ -290,12 +302,13 @@ func (w *coordinatorWait) poll(c waitClient) (bool, interface{}, error) {
 		writeWaitState(w.opts.statePath, st)
 		return false, nil, nil
 	}
-	if len(w.alerts) == 0 && sameIds(ids, last) {
-		writeWaitState(w.opts.statePath, st)
-		return false, nil, nil
-	}
+	// The set kept is the current one, every poll, woken or not: a trigger that leaves and comes back is
+	// new again when it returns, and one already reported stays reported while it waits.
 	st.Triggers = ids
 	writeWaitState(w.opts.statePath, st)
+	if len(w.alerts) == 0 && len(fresh) == 0 {
+		return false, nil, nil
+	}
 	result := w.cursorOut()
 	result["triggers"] = triggers
 	return true, result, nil
@@ -397,19 +410,22 @@ func taskName(t map[string]interface{}) string {
 	return u
 }
 
-func sameIds(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+// newSince is the ids in the current set that the last poll's set did not hold.
+func newSince(ids, last []string) map[string]bool {
+	seen := map[string]bool{}
+	for _, id := range last {
+		seen[id] = true
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	out := map[string]bool{}
+	for _, id := range ids {
+		if !seen[id] {
+			out[id] = true
 		}
 	}
-	return true
+	return out
 }
 
-// waitKept is what a coordinator's wait keeps between runs: the trigger set the last wake saw, and
+// waitKept is what a coordinator's wait keeps between runs: the trigger set the last poll saw, and
 // the event cursor -- a seq once one is known, else the instant to read from.
 type waitKept struct {
 	Triggers []string `json:"triggers,omitempty"`
@@ -534,9 +550,11 @@ A coordinator (--coordinator, with the seat's session and --board) reads the boa
 snapshot, and touches the seat, every interval. It exits 0 when something waits on it: a task in
 PENDING_INTAKE or AWAITING_COORDINATOR, a hold at the coordinator's level, a DELIVERING task with a
 PR not merged when the board's merge is the coordinator's, or an ALERT. It prints the triggers, the
-INFO and ALERT events it read, and nextAfter. The set it woke on is kept in --state, and the same
-set does not wake it twice; a set that empties and comes back does. A task waiting on a person (an
-operator-level hold, a human gate) does not wake it.
+INFO and ALERT events it read, and nextAfter. It wakes when a trigger appears that it has not
+reported (a new task, or a task in a new state), or on an ALERT; a set that only shrinks stays
+quiet. The set each poll saw is kept in --state, so a trigger that leaves and comes back wakes it
+again. The triggers print with the new ones first, marked "new": true. A task waiting on a person
+(an operator-level hold, a human gate) does not wake it.
 
 The event cursor is kept in --state too: a wait started without --after reads on from where the
 last one stopped, so what was posted while you worked your turn is read. Pass --after <nextAfter>
@@ -577,6 +595,6 @@ func init() {
 	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator: the event seq to read on from (default: where the last wait stopped, else now)")
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
-	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator: where the last wake's triggers are kept (default ~/.rearm/wait-<board>.json)")
+	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json)")
 	agentCmd.AddCommand(agentWaitCmd)
 }
