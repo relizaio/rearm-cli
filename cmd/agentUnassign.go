@@ -73,7 +73,7 @@ func runHopCompact(query string, variables map[string]interface{}, key, sessionU
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		forgetReleasedHop(err, sessionUuid, taskUuid)
-		printGqlError(err)
+		printRefusal(err)
 		os.Exit(1)
 	}
 	printCompact(data[key])
