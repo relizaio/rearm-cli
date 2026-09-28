@@ -53,7 +53,7 @@ func rearmClient() *rearm.Client {
 	)
 	switch resolvedAuthMode() {
 	case authSession:
-		if sessionRefreshToken == "" {
+		if !sessionOnFile() {
 			fmt.Println("Error: no browser-login session on file; run `rearm login`")
 			os.Exit(1)
 		}
@@ -61,6 +61,7 @@ func rearmClient() *rearm.Client {
 			AccessToken:       sessionAccessToken,
 			AccessTokenExpiry: sessionAccessTokenExp,
 			SessionExpiry:     sessionExpiresAt,
+			SessionHardExpiry: sessionHardExpiry,
 		}, persistSessionTokens, opts...)
 	case authGitHubOIDC:
 		// the identity token GitHub issues to the job, exchanged through an organization's trust rule: no secret
@@ -212,6 +213,10 @@ func describeError(err error) string {
 		desc := se.Description
 		if desc == "" {
 			desc = se.Code
+		}
+		if strings.HasPrefix(desc, "session ended at ") {
+			// the key's bound ended the session; the words already say what to do
+			return desc
 		}
 		return fmt.Sprintf("session refresh failed (%s): run `rearm login` again", desc)
 	}
