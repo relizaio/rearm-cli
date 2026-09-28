@@ -206,7 +206,12 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	if releaseUuid != "" && docTask != "" && remembersAsOutput() {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
-	emitJson(release)
+	// Compact by default (task RD3-9): what was published and its release; --json for the whole response.
+	if compactJson {
+		emitJson(release)
+	} else {
+		fmt.Println(compactDocument(release, strings.ToUpper(strings.ReplaceAll(docType, "-", "_")), docAdvisory))
+	}
 	// The board checked the elements as it took the document (elements.md §7): say what it found
 	// now, while the author can still fix it, rather than at the sign-off it would refuse.
 	if _, withElements := input["elements"]; withElements && releaseUuid != "" && input["taskUuid"] != nil {
