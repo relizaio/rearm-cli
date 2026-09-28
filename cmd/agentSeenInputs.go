@@ -74,12 +74,12 @@ func rememberSeen(st *agentSessionState, taskUuid string, releases []string) {
 // rememberSeenFromRead records a task read's documents as read by the named session, into that session's state
 // only. A read that names no session records nothing: the state directory is per host and user, so a
 // coordinator's, another role's or a person's read there must not acknowledge for the holder (RD2-34 run 1 T-1,
-// architecture-3 §1).
+// architecture-3 §1). A session with no state on this host gets one (RD3-14), so the read counts wherever it was made.
 func rememberSeenFromRead(sessionRef string, read interface{}) {
 	if sessionRef == "" {
 		return
 	}
-	st := lookupAgentState(sessionRef)
+	st := ensureAgentState(sessionRef)
 	if st == nil {
 		fmt.Fprintf(os.Stderr, "rearm: no local state for session %s, so nothing is recorded as read; pass --seen at sign-off\n", sessionRef)
 		return
@@ -90,13 +90,11 @@ func rememberSeenFromRead(sessionRef string, read interface{}) {
 }
 
 // seenInputsFor is what the sign-off sends as seenInputs: what the session recorded for the task, and the
-// releases passed with --seen. Nil when the session has no local state and nothing was passed -- a caller that
-// does not track what it read sends none, and the server skips its check.
+// releases passed with --seen. Never nil (RD3-14, withdrawing RD2-34's departure): a session with no local state
+// sends an empty list, so the server refuses it when a document was published since the assignment, and the
+// refusal's remedy, `task show --session`, creates the state and records the read.
 func seenInputsFor(sessionRef, taskUuid string, extra []string) []string {
 	st := lookupAgentState(sessionRef)
-	if st == nil && len(extra) == 0 {
-		return nil
-	}
 	out := []string{}
 	if st != nil && st.SeenInputs != nil {
 		out = append(out, st.SeenInputs[taskUuid]...)

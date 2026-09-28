@@ -171,11 +171,7 @@ func writeAgentState(st *agentSessionState) error {
 	if err != nil {
 		return err
 	}
-	ids := []string{st.ClientSessionId}
-	if st.ExternalSessionId != "" && st.ExternalSessionId != st.ClientSessionId {
-		ids = append(ids, st.ExternalSessionId)
-	}
-	for _, id := range ids {
+	for _, id := range stateKeys(st) {
 		if id == "" {
 			continue
 		}
@@ -194,6 +190,39 @@ func writeAgentState(st *agentSessionState) error {
 		}
 	}
 	return nil
+}
+
+// stateKeys are the names a session's state is filed under: its client session id and, when known and
+// different, the agent tool's own id. A state that a task read created on a host where the session was not
+// opened knows neither, so it is filed under the session uuid (task RD3-14).
+func stateKeys(st *agentSessionState) []string {
+	ids := []string{st.ClientSessionId}
+	if st.ClientSessionId == "" && st.ExternalSessionId == "" {
+		ids = []string{st.SessionUuid}
+	}
+	if st.ExternalSessionId != "" && st.ExternalSessionId != st.ClientSessionId {
+		ids = append(ids, st.ExternalSessionId)
+	}
+	return ids
+}
+
+// ensureAgentState finds the session's local state or, when this host has none, creates it filed under the
+// session uuid (task RD3-14): `task show --session` and `task assign` record what the hop read even when the
+// session was opened on another host, so the sign-off's acknowledgement works anywhere. Called only after the
+// server answered for the session. A reference that is not a uuid creates nothing.
+func ensureAgentState(sessionRef string) *agentSessionState {
+	if st := lookupAgentState(sessionRef); st != nil {
+		return st
+	}
+	if !isUUID(strings.ToLower(sessionRef)) {
+		return nil
+	}
+	st := &agentSessionState{SessionUuid: sessionRef}
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not create local state for session %s: %v\n", sessionRef, err)
+		return nil
+	}
+	return st
 }
 
 // updateAgentState applies a mutation to the state for a session id, if that state exists.
@@ -221,7 +250,7 @@ func removeAgentState(st *agentSessionState) {
 	if st == nil {
 		return
 	}
-	for _, id := range []string{st.ClientSessionId, st.ExternalSessionId} {
+	for _, id := range stateKeys(st) {
 		if id == "" {
 			continue
 		}
