@@ -93,7 +93,7 @@ task key in a heading reads as an element of an unknown family.`,
 		var reserved map[string]bool
 		if docBoard != "" {
 			data, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation,
-				map[string]interface{}{"boardUuid": docBoard})
+				map[string]interface{}{"boardUuid": boardArg(docBoard)})
 			if err != nil {
 				return fmt.Errorf("could not read board %s: %w", docBoard, err)
 			}
