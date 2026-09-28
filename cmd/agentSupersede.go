@@ -47,7 +47,7 @@ func supersedeVars(task, session, old, by, note string) (map[string]interface{},
 }
 
 var agentTaskSupersedeCmd = &cobra.Command{
-	Use:   "supersedepr <task-uuid>",
+	Use:   "supersedepr <task-key-or-uuid>",
 	Short: "Coder: declare a linked PR superseded by the linked PR that replaces it",
 	Long: `Declares a linked PR superseded by its replacement (task RD3-13), so the task's delivery counts the
 replacement and no longer waits on, or is blocked by, the old one. For a PR replaced rather than
@@ -55,8 +55,9 @@ force-pushed -- for example to drop commits without their ReARM trailers.
 
 The old PR must be closed without merging, as its CI reported it; the replacement must be linked to the
 task first (task linkpr) and be on the same repository. A merged PR is never superseded. The session
-holding the task, in a role with CODE_PUSH; a person with BOARD_WRITE can declare it too, through the
-agentTaskSupersedePullRequest mutation.`,
+holding the task in a role with CODE_PUSH, the board's coordinator seat, or a session whose key holds
+BOARD_WRITE on the board (task RD3-18) -- so a task a replaced PR sent to the coordinator is settled by
+the seat. A person declares it on the task page. The task is a key (RD-42) or a uuid.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := supersedeVars(args[0], supersedeSession, supersedeOld, supersedeBy, supersedeNote)

@@ -117,7 +117,7 @@ func init() {
 		agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd, agentTaskHoldCmd, agentTaskReleaseholdCmd,
 		agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd, agentTaskSplitCmd, agentTaskCompleteCmd,
 		agentTaskCancelCmd, agentTaskReopenCmd, agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskMergeplanCmd,
-		agentTaskDeliveredCmd, boardsDeliveredCmd, boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd,
+		agentTaskDeliveredCmd, agentTaskSupersedeCmd, boardsDeliveredCmd, boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd,
 		boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd, boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd,
 		boardsRequireReviewCmd, boardsBudgetCmd, boardsStrengthCmd,
 	} {
