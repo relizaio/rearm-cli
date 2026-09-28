@@ -156,11 +156,11 @@ var boardsListCmd = &cobra.Command{
 }
 
 var boardsTasksCmd = &cobra.Command{
-	Use:   "tasks <board-uuid>",
+	Use:   "tasks <board>",
 	Short: "A board's tasks, optionally by status",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars := map[string]interface{}{"boardUuid": args[0]}
+		vars := map[string]interface{}{"boardUuid": personBoardArg(args[0])}
 		if boardsStatus != "" {
 			vars["status"] = strings.ToUpper(boardsStatus)
 		}
@@ -198,11 +198,11 @@ func registerVariables(board, title, description, externalRef, sourceUrl, parent
 }
 
 var boardsRegisterCmd = &cobra.Command{
-	Use:   "register <board-uuid>",
+	Use:   "register <board>",
 	Short: "Register a task by hand (PENDING_INTAKE); on a board with sources --external-ref is required",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars := registerVariables(args[0], boardsTitle, boardsDescription, boardsExternalRef,
+		vars := registerVariables(personBoardArg(args[0]), boardsTitle, boardsDescription, boardsExternalRef,
 			boardsSourceUrl, boardsParent, levelFlag(cmd, boardsLevel))
 		withGroupAndTags(vars["input"].(map[string]interface{}), taskGroupKey, taskTagKeys)
 		runGql(rearm.AgentTaskRegister_Operation, vars, "agentTaskRegister")
@@ -637,22 +637,22 @@ var boardsStrengthCmd = &cobra.Command{
 }
 
 var boardsLockCmd = &cobra.Command{
-	Use:   "lock <board-uuid>",
+	Use:   "lock <board>",
 	Short: "Operator lock: no new assignments until you unlock; the coordinator cannot lift it",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardOperatorLock_Operation,
-			map[string]interface{}{"boardUuid": args[0], "lock": true, "reason": boardsReason}, "agentBoardOperatorLock")
+			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "lock": true, "reason": boardsReason}, "agentBoardOperatorLock")
 	},
 }
 
 var boardsUnlockCmd = &cobra.Command{
-	Use:   "unlock <board-uuid>",
+	Use:   "unlock <board>",
 	Short: "Lift your operator lock",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardOperatorLock_Operation,
-			map[string]interface{}{"boardUuid": args[0], "lock": false}, "agentBoardOperatorLock")
+			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "lock": false}, "agentBoardOperatorLock")
 	},
 }
 

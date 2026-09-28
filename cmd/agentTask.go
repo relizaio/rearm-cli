@@ -35,11 +35,11 @@ import (
 // authoritative design doc is served by the backend team; the runtime
 // contract for agents is $REARM_URL/api/agents/orientation.md.
 //
-//   rearm agent board list | show <board-uuid>
-//   rearm agent board coordinate <board-uuid> --session <uuid>
-//   rearm agent board lock|unlock <board-uuid> --session <uuid> [--reason r]
-//   rearm agent board roleconfig set <board-uuid> --session <uuid> --name <r> [...]
-//   rearm agent board roleconfig list <board-uuid>
+//   rearm agent board list | show <board>
+//   rearm agent board coordinate <board> --session <uuid>
+//   rearm agent board lock|unlock <board> --session <uuid> [--reason r]
+//   rearm agent board roleconfig set <board> --session <uuid> --name <r> [...]
+//   rearm agent board roleconfig list <board>
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
 //   rearm agent task next --session <uuid> [--board <uuid>]
 //   rearm agent task assign <task-uuid> --session <uuid>
@@ -124,16 +124,16 @@ var agentBoardListCmd = &cobra.Command{
 }
 
 var agentBoardShowCmd = &cobra.Command{
-	Use:   "show <board-uuid>",
+	Use:   "show <board>",
 	Short: "Show one board incl. sources, lock state, seat, coordinator prompt, document components and documents root",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0]}, "agentBoardProgrammatic")
+		runGql(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentBoardProgrammatic")
 	},
 }
 
 var agentBoardSnapshotCmd = &cobra.Command{
-	Use:   "snapshot <board-uuid>",
+	Use:   "snapshot <board>",
 	Short: "Every task on the board: who holds it, what it waits on, its documents and questions",
 	Long: `Returns the whole board in one call: each task with its holder, its
 dependencies WITH their statuses, the newest release of each document type,
@@ -145,12 +145,12 @@ see is what has actually been published.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardSnapshotProgrammatic_Operation,
-			map[string]interface{}{"boardUuid": args[0]}, "agentBoardSnapshotProgrammatic")
+			map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentBoardSnapshotProgrammatic")
 	},
 }
 
 var agentBoardCoordinateCmd = &cobra.Command{
-	Use:   "coordinate <board-uuid>",
+	Use:   "coordinate <board>",
 	Short: "Claim the board's singleton coordinator seat for the calling session",
 	Long: `Claims the coordinator seat. The seat is held until the session closes
 and the seat session can take no task assignments. Returns the board
@@ -158,16 +158,17 @@ including servedCoordinatorPrompt - assume it: the board's coordinatorPrompt,
 then who merges on this board and how (delivery.merge).`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardCoordinateProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid}, "agentBoardCoordinateProgrammatic")
+		board := boardArg(args[0])
+		runGql(rearm.AgentBoardCoordinateProgrammatic_Operation, map[string]interface{}{"boardUuid": board, "sessionUuid": taskSessionUuid}, "agentBoardCoordinateProgrammatic")
 		// Recorded so a component-scoped `doc publish`, which names no task, can still tell which
 		// board it belongs to. Only the seat gives a session a board without a task.
-		rememberBoard(taskSessionUuid, args[0])
+		rememberBoard(taskSessionUuid, board)
 	},
 }
 
 func boardLockRun(lock bool) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
-		variables := map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid, "lock": lock}
+		variables := map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "lock": lock}
 		if taskLockReason != "" {
 			variables["reason"] = taskLockReason
 		}
@@ -176,25 +177,25 @@ func boardLockRun(lock bool) func(cmd *cobra.Command, args []string) {
 }
 
 var agentBoardLockCmd = &cobra.Command{
-	Use:   "lock <board-uuid>",
+	Use:   "lock <board>",
 	Short: "Coordinator lock: stop new assignments (cannot touch an OPERATOR lock)",
 	Args:  cobra.ExactArgs(1),
 	Run:   boardLockRun(true),
 }
 
 var agentBoardUnlockCmd = &cobra.Command{
-	Use:   "unlock <board-uuid>",
+	Use:   "unlock <board>",
 	Short: "Lift a coordinator lock",
 	Args:  cobra.ExactArgs(1),
 	Run:   boardLockRun(false),
 }
 
 var agentBoardPosteventCmd = &cobra.Command{
-	Use:   "postevent <board-uuid>",
+	Use:   "postevent <board>",
 	Short: "Coordinator: post an ALERT or INFO notice to the board's event feed",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardPostEventProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid, "kind": taskEventKind, "message": taskNote}, "agentBoardPostEventProgrammatic")
+		runGql(rearm.AgentBoardPostEventProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "kind": taskEventKind, "message": taskNote}, "agentBoardPostEventProgrammatic")
 	},
 }
 
@@ -204,7 +205,7 @@ var agentBoardRoleconfigCmd = &cobra.Command{
 }
 
 var agentBoardRoleconfigSetCmd = &cobra.Command{
-	Use:   "set <board-uuid>",
+	Use:   "set <board>",
 	Short: "Upsert a role config (coordinator seat required); --prompt-file wins over --prompt",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -229,16 +230,16 @@ var agentBoardRoleconfigSetCmd = &cobra.Command{
 		if roleWipLimit > 0 {
 			input["wipLimit"] = roleWipLimit
 		}
-		runGql(rearm.AgentTaskRoleConfigSetProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0], "sessionUuid": taskSessionUuid, "input": input}, "agentTaskRoleConfigSetProgrammatic")
+		runGql(rearm.AgentTaskRoleConfigSetProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "input": input}, "agentTaskRoleConfigSetProgrammatic")
 	},
 }
 
 var agentBoardRoleconfigListCmd = &cobra.Command{
-	Use:   "list <board-uuid>",
+	Use:   "list <board>",
 	Short: "List a board's role configs in order",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskRoleConfigsProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0]}, "agentTaskRoleConfigsProgrammatic")
+		runGql(rearm.AgentTaskRoleConfigsProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentTaskRoleConfigsProgrammatic")
 	},
 }
 
@@ -266,6 +267,9 @@ server refuses a longer one or one with a line break. Everything else goes in
 --description (at most 4000 characters, kept whole).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		taskLevelSet = cmd.Flags().Changed("level")
+		if taskBoardUuid != "" {
+			taskBoardUuid = boardArg(taskBoardUuid)
+		}
 		runGqlCompact(rearm.AgentTaskRegisterProgrammatic_Operation, map[string]interface{}{"input": agentRegisterInput()},
 			"agentTaskRegisterProgrammatic")
 	},
@@ -306,7 +310,7 @@ for this session, so a following 'task assign' passes the same roles.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"sessionUuid": taskSessionUuid}
 		if taskBoardUuid != "" {
-			variables["boardUuid"] = taskBoardUuid
+			variables["boardUuid"] = boardArg(taskBoardUuid)
 		}
 		roles := requireRolesIfGiven(cmd)
 		if len(roles) > 0 {
@@ -753,6 +757,9 @@ keep the last one's updatedAt as the next --changed-since. The board's events ca
 person; forward hand-overs, authorizes and assignments post no event, so this is how a follower
 sees them. A poll is 'board events --after <seq>' plus 'task list --changed-since <updatedAt>'.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if taskBoardUuid != "" {
+			taskBoardUuid = boardArg(taskBoardUuid)
+		}
 		variables, err := taskListVariables(taskBoardUuid, taskStatusFilter, taskChangedSince)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -784,7 +791,7 @@ func init() {
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("name")
 
 	// task flags
-	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Board uuid — required")
+	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "The board's uuid or name — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref, e.g. github:owner/repo#123")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title, one line of at most 120 characters — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskDescription, "description", "", "What the task is, beyond its title (at most 4000 characters)")
@@ -795,7 +802,7 @@ func init() {
 	_ = agentTaskRegisterCmd.MarkPersistentFlagRequired("title")
 
 	agentTaskNextCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
-	agentTaskNextCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Restrict the poll to one board")
+	agentTaskNextCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Restrict the poll to one board (its uuid or name)")
 	agentTaskNextCmd.PersistentFlags().StringSliceVar(&taskRoles, "role", nil,
 		"Role this agent can take (name or uuid); repeatable. Only tasks for these roles are offered")
 	agentTaskAssignCmd.PersistentFlags().StringSliceVar(&taskRoles, "role", nil,
@@ -865,7 +872,7 @@ func init() {
 	_ = agentTaskBindrefCmd.MarkPersistentFlagRequired("external-ref")
 	agentTaskLinkprCmd.PersistentFlags().StringVar(&taskPrUrl, "pr-url", "", "Pull request URL — required")
 	_ = agentTaskLinkprCmd.MarkPersistentFlagRequired("pr-url")
-	agentTaskListCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "Board uuid — required")
+	agentTaskListCmd.PersistentFlags().StringVar(&taskBoardUuid, "board", "", "The board's uuid or name — required")
 	agentTaskListCmd.PersistentFlags().StringVar(&taskStatusFilter, "status", "", taskStatusHelp)
 	agentTaskListCmd.PersistentFlags().StringVar(&taskChangedSince, "changed-since", "",
 		"Only tasks changed at or after this RFC 3339 instant, oldest change first (a task's updatedAt)")

@@ -35,9 +35,9 @@ var (
 	notesLines   int
 )
 
-// notesBoard is the board the notes verbs name. A uuid for now; it becomes the name-or-uuid resolver of
-// task RD3-3 (boardArg) once that is on this branch.
-var notesBoard = func(arg string) string { return strings.TrimSpace(arg) }
+// notesBoard is the board the notes verbs name: its uuid or its name (task RD3-3), resolved through the
+// calling key's boards. A variable so the tests can stand in for the lookup.
+var notesBoard = boardArg
 
 // notesPushAttempts bounds the merge-and-push-again loop when another writer got there first.
 const notesPushAttempts = 3

@@ -557,6 +557,9 @@ the environment.`,
 			fmt.Fprintln(os.Stderr, "rearm: --role was given but is empty; name a role, or leave --role out to consider every role")
 			os.Exit(waitExitError)
 		}
+		if strings.TrimSpace(waitBoard) != "" {
+			waitBoard = boardArg(waitBoard)
+		}
 		o, err := waitOptsOf(waitSession, waitBoard, roles, waitCoordinator, waitAfter, waitInterval, waitTimeout, waitState)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)

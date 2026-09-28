@@ -149,7 +149,7 @@ func followEvents(vars map[string]interface{}, read func(map[string]interface{})
 }
 
 var agentBoardEventsCmd = &cobra.Command{
-	Use:   "events <board-uuid>",
+	Use:   "events <board>",
 	Short: "A board's events since a point, oldest first, with the seq to read on from",
 	Long: `Reads the board's event log (task 1c5442d2). board show carries only the newest 50 events;
 this is all of them. Start after a seq you already read (--after) or from a time (--since), and
@@ -161,7 +161,7 @@ for are gone, a "gap:" line on stderr says so and the read goes on from the olde
 re-read the tasks rather than trusting the feed for the time between.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := boardEventsVars(args[0], boardEventsAfter, boardEventsSince, boardEventsLimit)
+		vars, err := boardEventsVars(boardArg(args[0]), boardEventsAfter, boardEventsSince, boardEventsLimit)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)

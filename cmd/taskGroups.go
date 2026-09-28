@@ -233,7 +233,7 @@ var agentBoardGroupCmd = &cobra.Command{
 }
 
 var agentBoardGroupSetCmd = &cobra.Command{
-	Use:   "set <board-uuid>",
+	Use:   "set <board>",
 	Short: "Coordinator: create a group, or edit the one --key names (only what is given changes)",
 	Long: `Creates a group of the board, or edits the one --key names. On an edit only the flags given
 change. --depends-on names the groups it waits on, by key (repeat or comma-separate): a task in the
@@ -246,16 +246,16 @@ read when they set none. --status CLOSED stops new tasks joining it; OPEN reopen
 			fail(err.Error())
 		}
 		runGql(rearm.AgentBoardGroupSetProgrammatic_Operation, map[string]interface{}{
-			"boardUuid": args[0], "sessionUuid": taskSessionUuid, "group": in}, "agentBoardGroupSetProgrammatic")
+			"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "group": in}, "agentBoardGroupSetProgrammatic")
 	},
 }
 
 var agentBoardGroupListCmd = &cobra.Command{
-	Use:   "list <board-uuid>",
+	Use:   "list <board>",
 	Short: "The board's groups in order, with progress and what their tasks spent",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		data, err := sendGraphQLRequest(rearm.AgentBoardGroupsProgrammatic_Operation, map[string]interface{}{"boardUuid": args[0]})
+		data, err := sendGraphQLRequest(rearm.AgentBoardGroupsProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])})
 		if err != nil {
 			printGqlError(err)
 			os.Exit(1)
@@ -267,12 +267,12 @@ var agentBoardGroupListCmd = &cobra.Command{
 
 func agentGroupStatusCmd(use, status, short string) *cobra.Command {
 	return &cobra.Command{
-		Use:   use + " <board-uuid> <group-key>",
+		Use:   use + " <board> <group-key>",
 		Short: short,
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			runGql(rearm.AgentBoardGroupSetProgrammatic_Operation, map[string]interface{}{
-				"boardUuid": args[0], "sessionUuid": taskSessionUuid, "group": statusGroupInput(args[1], status)},
+				"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "group": statusGroupInput(args[1], status)},
 				"agentBoardGroupSetProgrammatic")
 		},
 	}
@@ -318,7 +318,7 @@ var boardsGroupCmd = &cobra.Command{
 }
 
 var boardsGroupSetCmd = &cobra.Command{
-	Use:   "set <board-uuid>",
+	Use:   "set <board>",
 	Short: "Create a group, or edit the one --key names (board configuration)",
 	Long:  agentBoardGroupSetCmd.Long,
 	Args:  cobra.ExactArgs(1),
@@ -327,18 +327,18 @@ var boardsGroupSetCmd = &cobra.Command{
 		if err != nil {
 			fail(err.Error())
 		}
-		runGql(rearm.AgentBoardGroupSet_Operation, map[string]interface{}{"boardUuid": args[0], "group": in}, "agentBoardGroupSet")
+		runGql(rearm.AgentBoardGroupSet_Operation, map[string]interface{}{"boardUuid": personBoardArg(args[0]), "group": in}, "agentBoardGroupSet")
 	},
 }
 
 func boardsGroupStatusCmd(use, status, short string) *cobra.Command {
 	return &cobra.Command{
-		Use:   use + " <board-uuid> <group-key>",
+		Use:   use + " <board> <group-key>",
 		Short: short,
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			runGql(rearm.AgentBoardGroupSet_Operation, map[string]interface{}{
-				"boardUuid": args[0], "group": statusGroupInput(args[1], status)}, "agentBoardGroupSet")
+				"boardUuid": personBoardArg(args[0]), "group": statusGroupInput(args[1], status)}, "agentBoardGroupSet")
 		},
 	}
 }
@@ -347,11 +347,11 @@ var boardsGroupCloseCmd = boardsGroupStatusCmd("close", "CLOSED", "Close a group
 var boardsGroupReopenCmd = boardsGroupStatusCmd("reopen", "OPEN", "Reopen a closed group")
 
 var boardsGroupDeleteCmd = &cobra.Command{
-	Use:   "delete <board-uuid> <group-key>",
+	Use:   "delete <board> <group-key>",
 	Short: "Delete an empty group; refused while a task is in it",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardGroupDelete_Operation, map[string]interface{}{"boardUuid": args[0], "key": args[1]},
+		runGql(rearm.AgentBoardGroupDelete_Operation, map[string]interface{}{"boardUuid": personBoardArg(args[0]), "key": args[1]},
 			"agentBoardGroupDelete")
 	},
 }

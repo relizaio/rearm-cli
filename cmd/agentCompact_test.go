@@ -49,7 +49,7 @@ func compactWorld(t *testing.T) {
 	}
 	apiClient = c
 	taskSessionUuid, taskOutcome, taskReturnReason, taskPrUrl, taskTitle, taskBoardUuid, taskNote = "s-1", "PASSED", "OTHER",
-		"https://github.com/acme/x/pull/1", "build it", "b-1", "why"
+		"https://github.com/acme/x/pull/1", "build it", "5a8d6b0e-0000-4000-8000-000000000001", "why"
 	t.Cleanup(func() {
 		apiClient, compactJson = nil, false
 		taskSessionUuid, taskOutcome, taskReturnReason, taskPrUrl, taskTitle, taskBoardUuid, taskNote = "", "", "", "", "", "", ""
