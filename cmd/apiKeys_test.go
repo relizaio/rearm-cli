@@ -30,6 +30,9 @@ func TestApiKeyCommandsAreThere(t *testing.T) {
 	if apiKeyApplyCmd.Flag("file") == nil || apiKeyApplyCmd.Flag("dry-run") == nil {
 		t.Error("apply takes -f and --dry-run")
 	}
+	if !strings.Contains(apiKeyApplyCmd.Long, "FREEFORM keys only") {
+		t.Errorf("the apply says which keys a file declares: %s", apiKeyApplyCmd.Long)
+	}
 	if !strings.Contains(apiKeyMintCmd.Long, "prints it once") {
 		t.Errorf("the mint says its value is shown once: %s", apiKeyMintCmd.Long)
 	}

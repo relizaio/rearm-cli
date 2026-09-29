@@ -48,13 +48,14 @@ var (
 
 var apiKeyCmd = &cobra.Command{
 	Use:   "apikey",
-	Short: "API keys as declarative configuration: apply, export, list, and mint a secret",
+	Short: "FREEFORM API keys as declarative configuration: apply, export, list, and mint a secret",
 }
 
 var apiKeyApplyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Apply an API keys file (kind: API_KEYS): identity and settings by name, never a secret",
-	Long: `Applies an API_KEYS file, keyed by each key's declared name. A key it creates has no
+	Long: `Applies an API_KEYS file, keyed by each key's declared name. It declares FREEFORM keys only:
+ORGANIZATION and ORGANIZATION_RW keys are deprecated. A key it creates has no
 secret; mint one with ` + "`rearm apikey mint`" + `. A setting left out is untouched; one set to
 null is cleared. A key that fails is one error line and the others land; with authoritative:
 true, declared keys the file leaves out are deactivated when the organization's declarative
@@ -108,7 +109,7 @@ func apiKeyListVariables(names []string) map[string]interface{} {
 var apiKeyMintCmd = &cobra.Command{
 	Use:   "mint <key>",
 	Short: "Mint a secret for an API key and print it once",
-	Long: `Mints a secret in slot 1 or 2 of a key, named by its declared name, key id or uuid, and
+	Long: `Mints a secret in slot 1 or 2 of a FREEFORM key, named by its declared name, key id or uuid, and
 prints it once: ReARM keeps only a hash, so it cannot be shown again. A slot that already holds
 a secret is left alone unless --rotate, which replaces it -- the old value stops working at
 once. The secret's expiry follows the key's secretExpiresDays. Refused for a key stronger
