@@ -612,7 +612,7 @@ func levelVariables(task string, level int, levelSet, clear bool) (map[string]in
 
 var boardsTaskLevelCmd = &cobra.Command{
 	Use:   "level <task-uuid>",
-	Short: "Set a task's level, 0 to 9 (0 requirements, 1 solution blocks, 2 objects, 3 components, 4 modules), or --clear to read the board's default",
+	Short: "Set a task's level, a rung of the board's ladder (refused on a board without one), or --clear to read the default",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := levelVariables(args[0], boardsLevel, cmd.Flags().Changed("level"), boardsClear)
@@ -725,7 +725,7 @@ func init() {
 
 	boardsBudgetCmd.Flags().StringVar(&boardsBudget, "usd", "", "what the task may spend, in dollars, e.g. 2.50")
 	boardsBudgetCmd.Flags().BoolVar(&boardsClear, "clear", false, "remove the task's budget")
-	boardsTaskLevelCmd.Flags().IntVar(&boardsLevel, "level", 0, "the task's level, 0 to 9")
+	boardsTaskLevelCmd.Flags().IntVar(&boardsLevel, "level", 0, "the task's level, a rung of the board's ladder")
 	boardsTaskLevelCmd.Flags().BoolVar(&boardsClear, "clear", false, "clear it: the task reads the board's default level")
 
 	boardsLockCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
