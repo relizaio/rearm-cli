@@ -483,10 +483,16 @@ or clear one, ask the operator. Left out, the requirement is unchanged.
 
 --budget seeds what the task may spend, in dollars (for example 2.50). Seed
 only: the server refuses it when the task already has a budget -- changing
-one is the operator's decision. Left out, the budget is unchanged.`,
+one is the operator's decision. Left out, the budget is unchanged.
+
+--level sets the task's level, a rung of the board's ladder (0 is a level):
+on a board with a ladder, set it here rather than leave the task to the
+default. The server refuses a level off the ladder, naming it, and any
+level on a board without one. Left out, the level is unchanged.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
+		agentAuthorizeLevel(variables, taskLevel, cmd.Flags().Changed("level"))
 		if taskOrder != 0 {
 			variables["orderIndex"] = taskOrder
 		}
@@ -511,6 +517,14 @@ one is the operator's decision. Left out, the budget is unchanged.`,
 		}
 		runGqlCompact(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
 	},
+}
+
+// agentAuthorizeLevel adds the level to authorize's variables when --level was given, 0 included
+// (task RD3-6): the coordinator sets a task's level on a ladder board when it authorizes it.
+func agentAuthorizeLevel(variables map[string]interface{}, level int, set bool) {
+	if set {
+		variables["level"] = level
+	}
 }
 
 var agentTaskHoldCmd = &cobra.Command{
@@ -606,7 +620,7 @@ var agentTaskOrderCmd = &cobra.Command{
 
 var agentTaskLevelCmd = &cobra.Command{
 	Use:   "level <task-uuid>",
-	Short: "Coordinator: set a task's level, 0 to 9, or --clear so it reads the board's default",
+	Short: "Coordinator: set a task's level, a rung of the board's ladder, or --clear so it reads the default",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := levelVariables(args[0], taskLevel, cmd.Flags().Changed("level"), taskLevelClear)
@@ -794,7 +808,7 @@ func init() {
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref, e.g. github:owner/repo#123")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title, one line of at most 120 characters — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskDescription, "description", "", "What the task is, beyond its title (at most 4000 characters)")
-	agentTaskRegisterCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, 0 to 9; left out, it reads the board's default")
+	agentTaskRegisterCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, a rung of the board's ladder (refused on a board without one); left out, it reads the default")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSourceUrl, "source-url", "", "Human-clickable tracker URL")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Registering session (intake provenance)")
 	_ = agentTaskRegisterCmd.MarkPersistentFlagRequired("board")
@@ -835,6 +849,8 @@ func init() {
 		"Raise the model strength this task needs above its role's floor (raise only)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskBudget, "budget", "",
 		"Seed what the task may spend, in dollars (only when it has no budget yet)")
+	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskLevel, "level", 0,
+		"Set the task's level, a rung of the board's ladder (refused on a board without one); left out, unchanged")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
@@ -855,7 +871,7 @@ func init() {
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("session")
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("message")
 	agentTaskOrderCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order — required")
-	agentTaskLevelCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, 0 to 9")
+	agentTaskLevelCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, a rung of the board's ladder")
 	agentTaskLevelCmd.PersistentFlags().BoolVar(&taskLevelClear, "clear", false, "Clear it: the task reads the board's default level")
 	_ = agentTaskOrderCmd.MarkPersistentFlagRequired("order")
 	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]' — required`)
