@@ -25,9 +25,16 @@ import (
 // the next thing to do, in one to three lines, instead of the whole task after every call. --json prints
 // the full response as before. task next, task show, task list, board show and board snapshot keep their
 // shapes: they are the reads scripts parse, and wait prints what next prints.
+//
+// One rule for --json (task RD4-9): a read's payload is its output whatever the flag, and a mutation's
+// payload is compact unless the flag is set. So every read takes --json too, and prints the same JSON with
+// it as without it, rather than refusing the flag: a script can pass --json to every verb.
 
 // compactJson is the mutations' --json: the full response instead of the compact lines.
 var compactJson bool
+
+// readJson is the reads' --json: accepted and ignored, since a read prints its JSON payload either way.
+var readJson bool
 
 // runGqlCompact is runGql for a mutation: compact lines by default, the full response with --json.
 func runGqlCompact(query string, variables map[string]interface{}, key string) {
@@ -146,11 +153,24 @@ func compactCommands() []*cobra.Command {
 		agentTaskHoldCmd, agentTaskReleaseholdCmd, agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd,
 		agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd, agentTaskReopenCmd,
 		agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskSetGroupCmd, agentTaskTagCmd, agentDocPublishCmd,
+		agentTaskSupersedeCmd,
+	}
+}
+
+// jsonReadCommands are the reads whose output is already JSON; each takes --json and prints the same.
+func jsonReadCommands() []*cobra.Command {
+	return []*cobra.Command{
+		agentTaskShowCmd, agentTaskListCmd, agentTaskNextCmd, agentWaitCmd,
+		agentBoardListCmd, agentBoardShowCmd, agentBoardSnapshotCmd, agentBoardRoleconfigListCmd, agentBoardGroupListCmd,
+		agentSessionShowCmd, agentSessionInboxCmd, agentReleaseShowCmd, agentDocElementsCmd,
 	}
 }
 
 func init() {
 	for _, c := range compactCommands() {
 		c.Flags().BoolVar(&compactJson, "json", false, "print the full response as JSON instead of the compact lines")
+	}
+	for _, c := range jsonReadCommands() {
+		c.Flags().BoolVar(&readJson, "json", false, "accepted for scripts that pass --json to every verb: this read prints JSON with or without it")
 	}
 }
