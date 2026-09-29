@@ -106,15 +106,37 @@ func agentLine(row map[string]interface{}) string {
 		parts = append(parts, fmt.Sprintf("cache %d%%", int(s*100+0.5)))
 	}
 	if stale, ok := row["stale"].([]interface{}); ok && len(stale) > 0 {
-		rules := make([]string, 0, len(stale))
-		for _, m := range stale {
-			if mm, ok := m.(map[string]interface{}); ok {
-				rules = append(rules, agentField(mm, "rule"))
-			}
-		}
-		parts = append(parts, "STALE "+strings.Join(rules, ","))
+		parts = append(parts, "STALE "+staleRules(stale))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// staleRules names each staleness rule once, in the order they first appear, with a count when a rule
+// marks the session more than once (RD3-5 T-2): the seat waiting on sixteen tasks reads seatSilent×16,
+// not the name sixteen times. --json keeps every mark with its message.
+func staleRules(stale []interface{}) string {
+	var order []string
+	count := map[string]int{}
+	for _, m := range stale {
+		mm, ok := m.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		rule := agentField(mm, "rule")
+		if count[rule] == 0 {
+			order = append(order, rule)
+		}
+		count[rule]++
+	}
+	names := make([]string, 0, len(order))
+	for _, rule := range order {
+		if count[rule] > 1 {
+			names = append(names, fmt.Sprintf("%s×%d", rule, count[rule]))
+		} else {
+			names = append(names, rule)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
 var agentBoardAgentsCmd = &cobra.Command{
