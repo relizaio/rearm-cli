@@ -263,10 +263,9 @@ func TestHeadFactsComeFromTheDocumentsCheckout(t *testing.T) {
 
 // ---------- pending outputs ----------
 
-func TestPendingOutputsAreKeyedByTaskAndTakenOnce(t *testing.T) {
-	// Keyed by task because a session works several tasks in its life, and taken because the hop is
-	// closing: leaving them would offer the same documents at the next hop, where the server
-	// refuses them for falling outside the assignment window.
+func TestPendingOutputsAreKeyedByTaskAndReadUntilTheHopCloses(t *testing.T) {
+	// Keyed by task because a session works several tasks in its life. Read rather than taken since task
+	// RD4-7: a refused sign-off keeps them for the retry, and the accepted one forgets them.
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	st := &agentSessionState{SessionUuid: "u-1", ClientSessionId: "c-1"}
 	if err := writeAgentState(st); err != nil {
@@ -280,23 +279,24 @@ func TestPendingOutputsAreKeyedByTaskAndTakenOnce(t *testing.T) {
 	// documents. State files are named by client id, so a uuid lookup that did not scan found
 	// nothing and silently behaved as though the session had no state: publish recorded no output
 	// and the sign-off sent none. The original test passed because it used the client id.
-	if len(takePendingOutputsProbe("u-1", "task-b")) != 1 {
+	if len(hopOutputsFor("u-1", "task-b")) != 1 {
 		t.Fatal("state must be findable by session uuid, not only by client session id")
 	}
 
-	got := takePendingOutputs("c-1", "task-a")
+	got := hopOutputsFor("c-1", "task-a")
 	if len(got) != 1 || got[0] != "rel-1" {
 		t.Fatalf("expected one release for task-a, got %v", got)
 	}
-	if again := takePendingOutputs("c-1", "task-a"); len(again) != 0 {
-		t.Errorf("outputs should be taken once, got %v", again)
+	if again := hopOutputsFor("c-1", "task-a"); len(again) != 1 {
+		t.Errorf("a read must not consume them, got %v", again)
 	}
-}
-
-// takePendingOutputsProbe is takePendingOutputs, named so the uuid assertion above reads as what it
-// is: the same call the sign-off path makes, with the id an agent actually holds.
-func takePendingOutputsProbe(sessionRef, taskUuid string) []string {
-	return takePendingOutputs(sessionRef, taskUuid)
+	forgetHopOutputs("c-1", "task-a")
+	if gone := hopOutputsFor("c-1", "task-a"); len(gone) != 0 {
+		t.Errorf("a closed hop's outputs are forgotten, got %v", gone)
+	}
+	if kept := hopOutputsFor("c-1", "task-b"); len(kept) != 1 {
+		t.Errorf("another task's hop is untouched, got %v", kept)
+	}
 }
 
 func TestPublishWithoutAFileAsksTheBoard(t *testing.T) {
