@@ -43,7 +43,7 @@ import (
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
 //   rearm agent task next --session <uuid> [--board <uuid>]
 //   rearm agent task assign <task-uuid> --session <uuid>
-//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n]
+//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change]
 //   rearm agent task return <task-uuid> --session <uuid> --reason <enum> [--description d]
 //   rearm agent task authorize <task-uuid> --session <uuid> --role <r> [--order N]
 //   rearm agent task order <task-uuid> --session <uuid> --order N
@@ -74,7 +74,10 @@ var (
 	taskPrUrl        string
 	taskOutputs      []string
 	// Task documents read by other means, added to what show and assign recorded (RD2-34).
-	taskSeen         []string
+	taskSeen []string
+	// The pass's round changes nothing to build (RD4-13): after a finding about the signing role's own
+	// document, the task goes back to the filer instead of to the role that builds from the round.
+	taskNoChange     bool
 	taskShowSession  string
 	taskRoles        []string
 	taskStrength     string
@@ -443,6 +446,10 @@ var agentTaskSignoffCmd = &cobra.Command{
 		// followed by `task show --session` sends the fuller set. Always sent, an empty list without local
 		// state (RD3-14): the CLI never asks the server to skip the check.
 		variables["seenInputs"] = seenInputsFor(taskSessionUuid, args[0], taskSeen)
+		// Sent only when said (RD4-13); left out, it goes as null and the sign-off records nothing.
+		if taskNoChange {
+			variables["noChange"] = true
+		}
 		runHopCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
 		forgetSeen(taskSessionUuid, args[0])
 		forgetHopOutputs(taskSessionUuid, args[0])
@@ -837,6 +844,9 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Sign-off note")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskSeen, "seen", nil,
 		"Task documents read by other means than task show or assign; added to what they recorded")
+	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoChange, "no-change", false,
+		"On a PASSED that answers a finding about your own document: the new round changes nothing to build,"+
+			" so the task goes back to whoever filed the finding instead of to the role that builds from the round")
 	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
 		"Session reading the task: its sign-off acknowledges the shown documents. Without it, nothing is recorded")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
