@@ -34,6 +34,9 @@ import (
 //   (c) an ALERT, LOCKED or UNLOCKED event since the cursor.
 // It wakes only on what it has not reported (as the coordinator's wait, task RD3-15): the changes
 // and the questions each poll saw, and the event cursor, are kept in --state.
+// Whatever ends the wait -- an offer, a change, a question, an event or the timeout -- the watch has read
+// the board and kept what it saw before the process exits, and it prints one shape, the watch object,
+// with the offer inside it or null (task RD4-16).
 
 // What a watch reads beyond the worker's next, and only what it uses: the session's tasks and the
 // board's role names once a run, and a task's hops and documents only when the snapshot shows the
@@ -170,6 +173,11 @@ type workerWatch struct {
 	names   map[string]string
 	answers map[string][]string
 	scoped  bool
+	// changes and questions are what the last poll that read the whole board saw, new ones first; polled
+	// says one has, so the state holds the sets this run printed (task RD4-16).
+	changes   []watchChange
+	questions []watchQuestion
+	polled    bool
 }
 
 func newWorkerWatch(o waitOpts, clk waitClock) *workerWatch {
@@ -206,17 +214,56 @@ func watchedEventKind(kind string) bool {
 	return kind == "ALERT" || kind == "LOCKED" || kind == "UNLOCKED"
 }
 
-// poll reads the board once after a quiet next and says done when something it has not reported
-// appeared: a change on a task the session signed off on, a question to its role, or a watched event.
-func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
+// object is what a watch prints on every exit (task RD4-16): the offer or null, the changes and the
+// questions the last poll saw (new ones first, marked new), the watched events read in this run, and
+// the cursor. A caller parses one shape whatever ended the wait.
+func (w *workerWatch) object(offer interface{}) map[string]interface{} {
+	out := w.cursorOut()
+	out["offer"] = offer
+	changes, questions, events := w.changes, w.questions, w.events
+	if changes == nil {
+		changes = []watchChange{}
+	}
+	if questions == nil {
+		questions = []watchQuestion{}
+	}
+	if events == nil {
+		events = []map[string]interface{}{}
+	}
+	out["changes"] = changes
+	out["questions"] = questions
+	out["events"] = events
+	return out
+}
+
+// persist writes the event cursor to the state before the process exits (task RD4-16). The sets are
+// written by every poll that reads the whole board; this keeps the cursor of the events printed on an
+// exit whose last read stopped short. With no state file and no whole poll in this run it writes
+// nothing, so the next run keeps the first-run baseline (task RD4-14).
+func (w *workerWatch) persist() {
+	if !w.polled && !watchStateExists(w.opts.statePath) {
+		return
+	}
+	st := readWatchState(w.opts.statePath)
+	st.After, st.Since = w.after, ""
+	if w.after == nil {
+		st.Since = w.since
+	}
+	writeWatchState(w.opts.statePath, st)
+}
+
+// poll reads the board once and says woke when something it has not reported appeared: a change on a
+// task the session signed off on, a question to its role, or a watched event. It runs after every next
+// that did not fail, an offer included, so the state holds what the exit prints (task RD4-16).
+func (w *workerWatch) poll(c waitClient) (bool, error) {
 	r, ok := c.(watchReader)
 	if !ok {
-		return false, nil, fmt.Errorf("--watch: this client cannot read the session's tasks")
+		return false, fmt.Errorf("--watch: this client cannot read the session's tasks")
 	}
 	if !w.scoped {
 		worked, roles, err := r.scope(w.opts.session, w.opts.board)
 		if err != nil {
-			return false, nil, err
+			return false, err
 		}
 		w.worked, w.roles = watchScope(w.opts, worked, roles)
 		w.names, w.answers = roleFacts(roles)
@@ -225,11 +272,11 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 	events, err := readBoardEvents(c, w.opts.board, &w.after, &w.since, watchedEventKind)
 	w.events = append(w.events, events...)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	snap, err := c.snapshot(w.opts.board)
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
 	byUuid := map[string]map[string]interface{}{}
 	for _, e := range snap {
@@ -267,7 +314,7 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 			}
 			details, err := r.tasks(moved[i:end])
 			if err != nil {
-				return false, nil, err
+				return false, err
 			}
 			for _, d := range details {
 				u, _ := d["uuid"].(string)
@@ -325,19 +372,8 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 		st.Since = w.since
 	}
 	writeWatchState(w.opts.statePath, st)
-	if !woke {
-		return false, nil, nil
-	}
-	events = w.events
-	if events == nil {
-		events = []map[string]interface{}{}
-	}
-	result := w.cursorOut()
-	result["offer"] = nil
-	result["changes"] = changes
-	result["questions"] = questions
-	result["events"] = events
-	return true, result, nil
+	w.changes, w.questions, w.polled = changes, questions, true
+	return woke, nil
 }
 
 // watchScope is the session's tasks on the board, and the uuids of the roles it waits as: --role
