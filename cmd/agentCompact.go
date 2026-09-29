@@ -153,7 +153,7 @@ func compactCommands() []*cobra.Command {
 		agentTaskHoldCmd, agentTaskReleaseholdCmd, agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd,
 		agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd, agentTaskReopenCmd,
 		agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskSetGroupCmd, agentTaskTagCmd, agentDocPublishCmd,
-		agentTaskSupersedeCmd,
+		agentTaskSupersedeCmd, agentTaskWithdrawCmd,
 	}
 }
 
