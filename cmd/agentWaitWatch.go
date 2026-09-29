@@ -28,7 +28,9 @@ import (
 // its events, and wakes on:
 //   (a) a task the session signed off on that a later hop rejected, returned, or that was reopened,
 //       or that a later hop passed after the session's own rejection (the producer's next round);
-//   (b) an open question on the board addressed to the session's role;
+//   (b) an open question on the board addressed to the session's role, while it is still the
+//       session's to answer (task RD4-14): its task is open and the session published no round of
+//       the answering role's specification on it since it was asked;
 //   (c) an ALERT, LOCKED or UNLOCKED event since the cursor.
 // It wakes only on what it has not reported (as the coordinator's wait, task RD3-15): the changes
 // and the questions each poll saw, and the event cursor, are kept in --state.
@@ -39,7 +41,7 @@ import (
 const (
 	watchScopeOp = `query AgentWaitWatchScope($sessionUuid: ID!, $boardUuid: ID!) {
 	sessionProgrammatic(sessionUuid: $sessionUuid) { tasksWorked { uuid key role board } }
-	agentTaskRoleConfigsProgrammatic(boardUuid: $boardUuid) { uuid name }
+	agentTaskRoleConfigsProgrammatic(boardUuid: $boardUuid) { uuid name producesOutputs { specification } }
 }`
 	watchTasksOp = `query AgentWaitWatchTasks($taskUuids: [ID!]!) { agentTasksByUuidProgrammatic(taskUuids: $taskUuids) {
 	key uuid status role
@@ -47,7 +49,7 @@ const (
 	returns { role session reason returnedAt }
 	reopens { role at reason by { kind name } }
 	statusHistory { from to at trigger }
-	documents { uuid createdDate document { specification path round advisory publishedByRole findings { verdict } } }
+	documents { uuid createdDate document { specification path round advisory publishedByRole session findings { verdict } } }
 } }`
 	// watchTasksPage is the most tasks one AgentTasksByUuid read takes.
 	watchTasksPage = 100
@@ -55,7 +57,8 @@ const (
 
 // watchReader is what a watch reads besides the board a worker's and a coordinator's wait read.
 type watchReader interface {
-	// scope is the tasks the session worked (Session.tasksWorked) and the board's roles, uuid and name.
+	// scope is the tasks the session worked (Session.tasksWorked) and the board's roles: uuid, name and
+	// the specifications each produces.
 	scope(session, board string) (worked, roles []map[string]interface{}, err error)
 	// tasks is the named tasks with their hops, status history and documents.
 	tasks(uuids []string) ([]map[string]interface{}, error)
@@ -111,14 +114,18 @@ type watchDocument struct {
 	PublishedAt   string      `json:"publishedAt,omitempty"`
 }
 
-// watchQuestion is an open question on the board addressed to the session's role.
+// watchQuestion is an open question on the board addressed to the session's role. The roles print by
+// name, with the role config uuids beside them for scripts (task RD4-14).
 type watchQuestion struct {
-	Task             string `json:"task"`
-	AskingRole       string `json:"askingRole,omitempty"`
-	AnsweringRole    string `json:"answeringRole"`
-	QuestionsRelease string `json:"questionsRelease"`
-	AskedAt          string `json:"askedAt,omitempty"`
-	New              bool   `json:"new,omitempty"`
+	Task              string `json:"task"`
+	AskingRole        string `json:"askingRole,omitempty"`
+	AskingRoleUuid    string `json:"askingRoleUuid,omitempty"`
+	AnsweringRole     string `json:"answeringRole"`
+	AnsweringRoleUuid string `json:"answeringRoleUuid"`
+	QuestionsRelease  string `json:"questionsRelease"`
+	AskedAt           string `json:"askedAt,omitempty"`
+	New               bool   `json:"new,omitempty"`
+	taskUuid          string
 }
 
 func (q watchQuestion) id() string { return q.Task + " " + q.QuestionsRelease }
@@ -137,6 +144,16 @@ type watchTaskKept struct {
 	// task that did not move is not read again.
 	Seen   string       `json:"seen"`
 	Change *watchChange `json:"change,omitempty"`
+	// Mine is what the session itself did on the task, read with the change. A state written before it
+	// existed has none, so the task is read again once.
+	Mine *watchMine `json:"mine,omitempty"`
+}
+
+// watchMine is the session's own record on a task: its last sign-off, and per specification the newest
+// round it published. A question is the session's while neither answers it (task RD4-14).
+type watchMine struct {
+	SignedOff string            `json:"signedOff,omitempty"`
+	Rounds    map[string]string `json:"rounds,omitempty"`
 }
 
 // workerWatch is a watch's loop state: the event cursor, the watched events read in this run, and the
@@ -149,7 +166,10 @@ type workerWatch struct {
 	events []map[string]interface{}
 	worked []map[string]interface{}
 	roles  map[string]bool
-	scoped bool
+	// names and answers are the board's roles by uuid: the name, and the specifications it produces.
+	names   map[string]string
+	answers map[string][]string
+	scoped  bool
 }
 
 func newWorkerWatch(o waitOpts, clk waitClock) *workerWatch {
@@ -199,6 +219,7 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 			return false, nil, err
 		}
 		w.worked, w.roles = watchScope(w.opts, worked, roles)
+		w.names, w.answers = roleFacts(roles)
 		w.scoped = true
 	}
 	events, err := readBoardEvents(c, w.opts.board, &w.after, &w.since, watchedEventKind)
@@ -218,6 +239,8 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 		}
 	}
 
+	// A first run has no state file: its baseline is the session's own sign-offs (task RD4-14).
+	first := !watchStateExists(w.opts.statePath)
 	st := readWatchState(w.opts.statePath)
 	kept := map[string]watchTaskKept{}
 	var moved []string
@@ -225,12 +248,18 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 		u, _ := t["uuid"].(string)
 		seen := seenOf(byUuid[u])
 		last, had := st.Tasks[u]
-		if !had || last.Seen != seen {
+		if !had || last.Seen != seen || last.Mine == nil {
 			moved = append(moved, u)
 		}
-		kept[u] = watchTaskKept{Seen: seen, Change: last.Change}
+		kept[u] = watchTaskKept{Seen: seen, Change: last.Change, Mine: last.Mine}
 	}
 	if len(moved) > 0 {
+		for _, u := range moved {
+			if k := kept[u]; k.Mine == nil {
+				k.Mine = &watchMine{}
+				kept[u] = k
+			}
+		}
 		for i := 0; i < len(moved); i += watchTasksPage {
 			end := i + watchTasksPage
 			if end > len(moved) {
@@ -244,6 +273,7 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 				u, _ := d["uuid"].(string)
 				k := kept[u]
 				k.Change = changeOf(d, w.opts.session)
+				k.Mine = mineOf(d, w.opts.session)
 				kept[u] = k
 			}
 		}
@@ -263,15 +293,23 @@ func (w *workerWatch) poll(c waitClient) (bool, interface{}, error) {
 		woke = woke || ch.New
 		changes = append(changes, ch)
 	}
-	questions := questionsTo(snap, w.roles)
+	questions := questionsTo(snap, w.roles, w.names, w.answers, kept)
 	qids := make([]string, 0, len(questions))
 	for _, q := range questions {
 		qids = append(qids, q.id())
 	}
 	fresh := newSince(qids, st.Questions)
 	for i := range questions {
-		questions[i].New = fresh[questions[i].id()]
-		woke = woke || questions[i].New
+		q := &questions[i]
+		q.New = fresh[q.id()]
+		// With no state, a question asked before the session's last sign-off on its task is one the
+		// session has already acted on: listed, not new.
+		if first && q.New {
+			if m := kept[q.taskUuid].Mine; m != nil && m.SignedOff != "" && timeOf(q.AskedAt).Before(timeOf(m.SignedOff)) {
+				q.New = false
+			}
+		}
+		woke = woke || q.New
 	}
 	sort.SliceStable(changes, func(i, j int) bool { return changes[i].New && !changes[j].New })
 	sort.SliceStable(questions, func(i, j int) bool { return questions[i].New && !questions[j].New })
@@ -488,8 +526,12 @@ func documentsSince(t map[string]interface{}, since time.Time) []watchDocument {
 	return out
 }
 
-// questionsTo is the snapshot's open questions whose answering role is one of roles.
-func questionsTo(snap []map[string]interface{}, roles map[string]bool) []watchQuestion {
+// questionsTo is the snapshot's open questions that are still the session's to answer (task RD4-14):
+// the answering role is one of roles, the task is not COMPLETED or CANCELLED, and the session has
+// published no round of a specification the answering role produces on the task since askedAt. A
+// question that fails any of them is not listed. The roles print by name, the uuids beside them.
+func questionsTo(snap []map[string]interface{}, roles map[string]bool, names map[string]string,
+	answers map[string][]string, kept map[string]watchTaskKept) []watchQuestion {
 	out := []watchQuestion{}
 	for _, e := range snap {
 		q, _ := e["waitingOn"].(map[string]interface{})
@@ -501,11 +543,88 @@ func questionsTo(snap []map[string]interface{}, roles map[string]bool) []watchQu
 			continue
 		}
 		t, _ := e["task"].(map[string]interface{})
-		out = append(out, watchQuestion{Task: taskName(t), AskingRole: str(q["askingRole"]), AnsweringRole: answering,
-			QuestionsRelease: str(q["questionsRelease"]), AskedAt: str(q["askedAt"])})
+		if s := str(t["status"]); s == "COMPLETED" || s == "CANCELLED" {
+			continue
+		}
+		u := str(t["uuid"])
+		if answeredBy(kept[u].Mine, answers[answering], timeOf(q["askedAt"])) {
+			continue
+		}
+		asking := str(q["askingRole"])
+		out = append(out, watchQuestion{Task: taskName(t), AskingRole: watchRoleName(names, asking), AskingRoleUuid: asking,
+			AnsweringRole: watchRoleName(names, answering), AnsweringRoleUuid: answering,
+			QuestionsRelease: str(q["questionsRelease"]), AskedAt: str(q["askedAt"]), taskUuid: u})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].id() < out[j].id() })
 	return out
+}
+
+// answeredBy says whether the session published, after the instant, a round of one of the answering
+// specifications; of any specification but QUESTIONS when the answering role declares none.
+func answeredBy(m *watchMine, specs []string, asked time.Time) bool {
+	if m == nil {
+		return false
+	}
+	for spec, at := range m.Rounds {
+		if len(specs) == 0 && spec == "QUESTIONS" {
+			continue
+		}
+		if len(specs) > 0 && !contains(specs, spec) {
+			continue
+		}
+		if timeOf(at).After(asked) {
+			return true
+		}
+	}
+	return false
+}
+
+// watchRoleName is a role config's name, or its uuid when the board's role list does not have it.
+func watchRoleName(names map[string]string, uuid string) string {
+	if n := names[uuid]; n != "" {
+		return n
+	}
+	return uuid
+}
+
+// roleFacts is the board's roles by uuid: each one's name and the specifications it produces.
+func roleFacts(roles []map[string]interface{}) (map[string]string, map[string][]string) {
+	names, answers := map[string]string{}, map[string][]string{}
+	for _, r := range roles {
+		u := str(r["uuid"])
+		names[u] = str(r["name"])
+		for _, o := range mapsOf(r["producesOutputs"]) {
+			if s := str(o["specification"]); s != "" {
+				answers[u] = append(answers[u], s)
+			}
+		}
+	}
+	return names, answers
+}
+
+// mineOf is the session's own record on a task as the watch reads it: its last sign-off, and the newest
+// round of each specification it published.
+func mineOf(t map[string]interface{}, session string) *watchMine {
+	m := &watchMine{Rounds: map[string]string{}}
+	for _, s := range mapsOf(t["signOffs"]) {
+		if str(s["session"]) != session {
+			continue
+		}
+		if at := str(s["signedOffAt"]); m.SignedOff == "" || timeOf(at).After(timeOf(m.SignedOff)) {
+			m.SignedOff = at
+		}
+	}
+	for _, d := range mapsOf(t["documents"]) {
+		ref, _ := d["document"].(map[string]interface{})
+		if ref == nil || str(ref["session"]) != session {
+			continue
+		}
+		spec, at := str(ref["specification"]), str(d["createdDate"])
+		if cur, ok := m.Rounds[spec]; !ok || timeOf(at).After(timeOf(cur)) {
+			m.Rounds[spec] = at
+		}
+	}
+	return m
 }
 
 // timeOf reads a server instant; the zero time when absent or unreadable.
@@ -516,6 +635,15 @@ func timeOf(v interface{}) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+// watchStateExists says whether a watch's state file is there to read: a first run has none.
+func watchStateExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func readWatchState(path string) watchKept {
