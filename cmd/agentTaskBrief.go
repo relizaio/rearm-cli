@@ -60,6 +60,8 @@ type briefDocument struct {
 	Path          string `json:"path,omitempty"`
 	Verdict       string `json:"verdict,omitempty"`
 	Counts        string `json:"counts,omitempty"`
+	// The version of the same round that replaced this one (task RD4-7); empty for the newest.
+	ReplacedBy string `json:"replacedBy,omitempty"`
 }
 
 type briefDependency struct {
@@ -344,10 +346,12 @@ func briefDependencies(t map[string]interface{}) []briefDependency {
 }
 
 // briefDocuments is the task's documents, grouped by type in the order the types first appear, newest round
-// first within a type.
+// first within a type. Two releases of one type and round are versions of that round (task RD4-7): the
+// server lists the newest first, and each older one is marked as replaced by it.
 func briefDocuments(t map[string]interface{}) []briefDocument {
 	var docs []briefDocument
 	order := map[string]int{}
+	newest := map[string]string{}
 	for _, r := range asList(t["documents"]) {
 		d, _ := r["document"].(map[string]interface{})
 		spec := str(d["specification"])
@@ -357,6 +361,13 @@ func briefDocuments(t map[string]interface{}) []briefDocument {
 		bd := briefDocument{Release: str(r["uuid"]), Specification: spec, Round: intOf(d["round"]), Version: str(r["version"]),
 			Lifecycle: str(r["lifecycle"]), Path: str(d["path"])}
 		bd.Advisory, _ = d["advisory"].(bool)
+		if key := fmt.Sprintf("%s/%d", spec, bd.Round); bd.Round > 0 {
+			if v, seen := newest[key]; seen {
+				bd.ReplacedBy = v
+			} else {
+				newest[key] = bd.Version
+			}
+		}
 		if f, _ := d["findings"].(map[string]interface{}); f != nil {
 			bd.Verdict = str(f["verdict"])
 			if c, _ := f["counts"].(map[string]interface{}); c != nil {
@@ -382,7 +393,7 @@ func briefInlineInputs(docs []briefDocument, inputs []string, local string) []br
 	var out []briefInlined
 	for _, spec := range inputs {
 		for _, d := range docs {
-			if d.Specification != spec {
+			if d.Specification != spec || d.ReplacedBy != "" {
 				continue
 			}
 			in := briefInlined{Specification: spec, Round: d.Round, Path: d.Path}
@@ -491,6 +502,9 @@ func renderTaskBrief(b *taskBrief) string {
 		fmt.Fprintf(&sb, "- %s round %d v%s, %s", d.Specification, d.Round, d.Version, strings.ToLower(strings.ReplaceAll(d.Lifecycle, "_", " ")))
 		if d.Advisory {
 			sb.WriteString(", advisory")
+		}
+		if d.ReplacedBy != "" {
+			fmt.Fprintf(&sb, ", replaced by v%s", d.ReplacedBy)
 		}
 		if d.Verdict != "" {
 			fmt.Fprintf(&sb, ", %s", strings.ToLower(d.Verdict))

@@ -418,6 +418,9 @@ var agentTaskAssignCmd = &cobra.Command{
 		// without the agent having to pass --task on every turn. Runs only after the server
 		// accepted the assignment, so the local file never claims a task the session does not hold.
 		setCurrentTask(taskSessionUuid, args[0])
+		// A new hop starts with no outputs (task RD4-7): nothing an earlier hop published on this task
+		// may ride along on this hop's sign-off.
+		startHopOutputs(taskSessionUuid, args[0], assignedAtOf(assigned))
 	},
 }
 
@@ -442,6 +445,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 		variables["seenInputs"] = seenInputsFor(taskSessionUuid, args[0], taskSeen)
 		runHopCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
 		forgetSeen(taskSessionUuid, args[0])
+		forgetHopOutputs(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
 		clearCurrentTask(taskSessionUuid, args[0])
 	},
@@ -463,6 +467,7 @@ var agentTaskReturnCmd = &cobra.Command{
 			variables["outputs"] = outputs
 		}
 		runHopCompact(rearm.AgentTaskReturnProgrammatic_Operation, variables, "agentTaskReturnProgrammatic", taskSessionUuid, args[0])
+		forgetHopOutputs(taskSessionUuid, args[0])
 		clearCurrentTask(taskSessionUuid, args[0])
 	},
 }
@@ -931,13 +936,21 @@ func init() {
 
 // resolveOutputs picks the document releases to send with a sign-off or return.
 //
-// An explicit --outputs wins; otherwise the ones `doc publish` recorded for this task are taken and
-// forgotten. Taking rather than reading matters: the hop is closing, and leaving them would offer
-// the same documents at the next hop on the same task, where the server refuses them for falling
-// outside the assignment window.
+// An explicit --outputs wins; otherwise the ones `doc publish` recorded in this hop on this task (task
+// RD4-7). The hop's entry is started empty at `task assign` and dropped once the sign-off or return is
+// accepted, so a sign-off never carries what an earlier hop of the same session published, and a refused
+// one keeps them for the retry.
 func resolveOutputs(sessionUuid, taskUuid string) []string {
 	if len(taskOutputs) > 0 {
 		return taskOutputs
 	}
-	return takePendingOutputs(sessionUuid, taskUuid)
+	return hopOutputsFor(sessionUuid, taskUuid)
+}
+
+// assignedAtOf is the assignment's assignedAt in an assign response, or empty.
+func assignedAtOf(assigned interface{}) string {
+	m, _ := assigned.(map[string]interface{})
+	task, _ := m["task"].(map[string]interface{})
+	a, _ := task["assignment"].(map[string]interface{})
+	return str(a["assignedAt"])
 }

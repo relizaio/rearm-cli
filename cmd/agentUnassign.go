@@ -87,6 +87,7 @@ func forgetReleasedHop(err error, sessionUuid, taskUuid string) bool {
 	}
 	clearCurrentTask(sessionUuid, taskUuid)
 	forgetSeen(sessionUuid, taskUuid)
+	forgetHopOutputs(sessionUuid, taskUuid)
 	return true
 }
 

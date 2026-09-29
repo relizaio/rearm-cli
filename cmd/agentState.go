@@ -64,12 +64,15 @@ type agentSessionState struct {
 	// Where this session last found the board's documents repository, so an agent that passed
 	// --repo once does not have to keep passing it.
 	DocumentsRepoPath string `json:"documentsRepoPath,omitempty"`
-	// Document releases published during the current hop, keyed by TASK uuid, so `task signoff`
-	// can send them without the agent copying uuids by hand.
-	//
-	// Keyed by task and not a flat list: a session may work several tasks in its life, and
-	// offering one hop's document as another hop's output is exactly what the server refuses.
+	// The pre-RD4-7 record of published documents: one list per TASK, kept across hops, so a sign-off
+	// could send a release an earlier hop of the same session published. Read once, into HopOutputs, and
+	// never written again.
 	PendingOutputs map[string][]string `json:"pendingOutputs,omitempty"`
+	// Document releases published during the current hop on each task, so `task signoff` can send them
+	// without the agent copying uuids by hand (task RD4-7). Keyed by TASK uuid, and each entry names the
+	// hop it belongs to by the assignment's assignedAt: `task assign` starts a fresh entry, so a sign-off
+	// carries what this hop published and nothing older.
+	HopOutputs map[string]*hopOutputs `json:"hopOutputs,omitempty"`
 	// The roles the last 'task next' declared, so 'task assign' can pass the same ones. Empty
 	// when the last poll declared none.
 	DeclaredRoles []string `json:"declaredRoles,omitempty"`
@@ -79,6 +82,14 @@ type agentSessionState struct {
 	// The orientation sections a brief has already printed for this session (task RD3-10), so the
 	// once-a-session ones are not printed again.
 	OrientationShown []string `json:"orientationShown,omitempty"`
+}
+
+// hopOutputs is one hop's published documents on a task (task RD4-7).
+type hopOutputs struct {
+	// The assignment's assignedAt as the server printed it at `task assign`; empty when the hop was
+	// assigned on another host, or the entry was migrated from the per-task list.
+	AssignedAt string   `json:"assignedAt,omitempty"`
+	Outputs    []string `json:"outputs,omitempty"`
 }
 
 // agentStateDir is the directory holding the per-session files. Honours XDG_STATE_HOME, falling
@@ -151,7 +162,47 @@ func readAgentState(id string) (*agentSessionState, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return nil, fmt.Errorf("state file %s is not readable JSON: %w", path, err)
 	}
+	if migratePendingOutputs(&st) {
+		// Once: the old list is gone from the file after this write.
+		if err := writeAgentState(&st); err != nil {
+			fmt.Fprintf(os.Stderr, "rearm: could not migrate the recorded outputs: %v\n", err)
+		}
+	}
 	return &st, nil
+}
+
+// migratePendingOutputs moves a pre-RD4-7 state's per-task lists into each task's hop entry, and drops
+// them. The old list was the only record of what the current hop published, so it becomes that hop's
+// entry; one left over from an earlier hop is cleared by the next `task assign` on its task, as any hop's
+// entry is. Reports whether anything moved.
+func migratePendingOutputs(st *agentSessionState) bool {
+	if st == nil || st.PendingOutputs == nil {
+		return false
+	}
+	for task, releases := range st.PendingOutputs {
+		for _, r := range releases {
+			addHopOutput(st, task, r)
+		}
+	}
+	st.PendingOutputs = nil
+	return true
+}
+
+// addHopOutput appends a release to the task's current hop entry, once; reports whether it was new.
+func addHopOutput(st *agentSessionState, taskUuid, releaseUuid string) bool {
+	if st.HopOutputs == nil {
+		st.HopOutputs = map[string]*hopOutputs{}
+	}
+	h := st.HopOutputs[taskUuid]
+	if h == nil {
+		h = &hopOutputs{}
+		st.HopOutputs[taskUuid] = h
+	}
+	if stringListHas(h.Outputs, releaseUuid) {
+		return false
+	}
+	h.Outputs = append(h.Outputs, releaseUuid)
+	return true
 }
 
 // writeAgentState persists state under BOTH the client session id and, when known and different,
@@ -395,42 +446,53 @@ func rememberPendingOutput(st *agentSessionState, taskUuid, releaseUuid string) 
 	if st == nil || taskUuid == "" || releaseUuid == "" {
 		return
 	}
-	if st.PendingOutputs == nil {
-		st.PendingOutputs = map[string][]string{}
+	// A re-publish returns the SAME release, by design. Recording it twice would send a duplicate
+	// uuid at sign-off.
+	if !addHopOutput(st, taskUuid, releaseUuid) {
+		return
 	}
-	for _, existing := range st.PendingOutputs[taskUuid] {
-		if existing == releaseUuid {
-			// A re-publish returns the SAME release, by design. Recording it twice would send a
-			// duplicate uuid at sign-off.
-			return
-		}
-	}
-	st.PendingOutputs[taskUuid] = append(st.PendingOutputs[taskUuid], releaseUuid)
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: could not record the published document locally; "+
 			"pass --outputs %s at sign-off: %v\n", releaseUuid, err)
 	}
 }
 
-// takePendingOutputs returns what this session published for a task, and forgets them.
-//
-// Taken rather than read: the hop is closing. Leaving them behind would offer the same documents
-// again at the next hop on the same task, where the server refuses them for falling outside the
-// assignment window -- a confusing failure a long way from its cause.
-func takePendingOutputs(sessionRef, taskUuid string) []string {
+// startHopOutputs begins a task's hop entry at `task assign` (task RD4-7): whatever an earlier hop of this
+// session on the task recorded is dropped, so the sign-off that ends this hop cannot carry it.
+func startHopOutputs(sessionRef, taskUuid, assignedAt string) {
 	st := lookupAgentState(sessionRef)
-	if st == nil || st.PendingOutputs == nil {
+	if st == nil || taskUuid == "" {
+		return
+	}
+	if st.HopOutputs == nil {
+		st.HopOutputs = map[string]*hopOutputs{}
+	}
+	st.HopOutputs[taskUuid] = &hopOutputs{AssignedAt: assignedAt}
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: could not start this hop's record of outputs: %v\n", err)
+	}
+}
+
+// hopOutputsFor is what this session published on the task in its current hop. Read, not taken: a
+// refused sign-off keeps them for the next attempt, and forgetHopOutputs drops them once one is accepted.
+func hopOutputsFor(sessionRef, taskUuid string) []string {
+	st := lookupAgentState(sessionRef)
+	if st == nil || st.HopOutputs == nil || st.HopOutputs[taskUuid] == nil {
 		return nil
 	}
-	out := st.PendingOutputs[taskUuid]
-	if len(out) == 0 {
-		return nil
+	return append([]string(nil), st.HopOutputs[taskUuid].Outputs...)
+}
+
+// forgetHopOutputs drops the task's hop entry once the hop has closed: an accepted sign-off or return.
+func forgetHopOutputs(sessionRef, taskUuid string) {
+	st := lookupAgentState(sessionRef)
+	if st == nil || st.HopOutputs == nil || st.HopOutputs[taskUuid] == nil {
+		return
 	}
-	delete(st.PendingOutputs, taskUuid)
+	delete(st.HopOutputs, taskUuid)
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: could not clear the recorded outputs: %v\n", err)
 	}
-	return out
 }
 
 // sessionUuidOf prefers the uuid recorded in local state, falling back to what the caller passed.
