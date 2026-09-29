@@ -363,7 +363,7 @@ func addGroupSetFlags(c *cobra.Command) {
 	c.Flags().IntVar(&groupSetOrder, "order", 0, "display order among the board's groups (new groups append)")
 	c.Flags().StringSliceVar(&groupSetDeps, "depends-on", nil, "keys of the groups this one waits on (repeat or comma-separate)")
 	c.Flags().BoolVar(&groupSetNoDeps, "no-depends-on", false, "clear the groups it waits on")
-	c.Flags().IntVar(&groupSetLevel, "default-level", 0, "the level its tasks read when they set none, 0 to 9")
+	c.Flags().IntVar(&groupSetLevel, "default-level", 0, "the level its tasks read when they set none, a rung of the board's ladder")
 	c.Flags().BoolVar(&groupSetNoLvl, "no-default-level", false, "clear the default level")
 	c.Flags().StringVar(&groupSetStatus, "status", "", "OPEN or CLOSED")
 }
