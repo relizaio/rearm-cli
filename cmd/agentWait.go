@@ -597,7 +597,8 @@ the environment.
 
 A worker with --watch (and --board) also wakes, when no offer is there, on what happens to its
 work (task RD4-3): a task the session signed off on that a later hop REJECTED, returned, or that
-was reopened; an open question on the board addressed to the session's role (--role, else the
+was reopened, or that a later hop passed after the session's own rejection (the producer's next
+round landed); an open question on the board addressed to the session's role (--role, else the
 roles it worked); an ALERT, LOCKED or UNLOCKED event. It prints {"offer": null, "changes": [...],
 "questions": [...], "events": [...], "nextAfter": N}: each change names the task, the transition
 (from, to, trigger, by, at) and the document rounds published since the session's last sign-off
@@ -639,6 +640,6 @@ func init() {
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
 	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator or --watch: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json; with --watch wait-<board>-watch-<session>.json)")
-	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, an open question to its role, or an ALERT/LOCKED/UNLOCKED event; needs --board")
+	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/LOCKED/UNLOCKED event; needs --board")
 	agentCmd.AddCommand(agentWaitCmd)
 }

@@ -414,3 +414,35 @@ func TestTheWatchFlagIsCheckedAndKeepsItsOwnState(t *testing.T) {
 		t.Error("no --watch flag, or the help does not describe it")
 	}
 }
+
+// A reviewer that rejected learns when the producer's next round lands: a pass after the session's own
+// rejection wakes it, a pass after its own pass does not.
+func TestWatchWakesARejectingReviewerOnTheProducersNextRound(t *testing.T) {
+	resubmitted := taskDetail("RD-7", "QUEUED", "tester", []map[string]interface{}{
+		signOff("coder-s", "coder", "PASSED", "2026-09-27T09:00:00Z"),
+		signOff(me, "reviewer", "REJECTED", "2026-09-27T10:00:00Z"),
+		signOff("coder-s", "coder", "PASSED", "2026-09-27T11:30:00Z")},
+		[]map[string]interface{}{doc("rel-notes2", "DETAILED_DESIGN", 2, "2026-09-27T11:29:00Z", ""),
+			doc("rel-review", "REVIEW_FINDINGS", 1, "2026-09-27T09:59:00Z", "REJECTED")}, nil)
+	o := watcher(t, filepath.Join(t.TempDir(), "w.json"))
+	f := &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{snapEntry("RD-7", "QUEUED", "tester", "rel-notes2")}}},
+		worked: worked("RD-7"), roles: boardRoles, details: []map[string]map[string]interface{}{{"u-RD-7": resubmitted}}}
+	code, printed := runWatch(t, o, f)
+	ch := changesOf(printed)
+	if code != waitExitWork || len(ch) != 1 || ch[0]["trigger"] != "PASSED" || ch[0]["by"] != "coder" || ch[0]["from"] != "ASSIGNED" {
+		t.Fatalf("exit %d, changes %v", code, printed["changes"])
+	}
+	if docs := mapsOf(ch[0]["documents"]); len(docs) != 1 || docs[0]["release"] != "rel-notes2" {
+		t.Errorf("documents %v: the producer's new round only", ch[0]["documents"])
+	}
+	// The same pass after the session's own pass is a forward hand-over: quiet.
+	forward := taskDetail("RD-7", "QUEUED", "tester", []map[string]interface{}{
+		signOff(me, "reviewer", "PASSED", "2026-09-27T10:00:00Z"),
+		signOff("coder-s", "coder", "PASSED", "2026-09-27T11:30:00Z")}, nil, nil)
+	o = watcher(t, filepath.Join(t.TempDir(), "w.json"))
+	f = &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{snapEntry("RD-7", "QUEUED", "tester")}}},
+		worked: worked("RD-7"), roles: boardRoles, details: []map[string]map[string]interface{}{{"u-RD-7": forward}}}
+	if code, printed := runWatch(t, o, f); code != waitExitTimeout {
+		t.Errorf("a pass after a pass woke it: exit %d, %v", code, printed)
+	}
+}

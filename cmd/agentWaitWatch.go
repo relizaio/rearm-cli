@@ -26,7 +26,8 @@ import (
 // architect answering tester rejections, or a reviewer following its findings, ran a polling loop of
 // its own beside the wait. With it, a poll that finds no offer also reads the board's snapshot and
 // its events, and wakes on:
-//   (a) a task the session signed off on that a later hop rejected, returned, or that was reopened;
+//   (a) a task the session signed off on that a later hop rejected, returned, or that was reopened,
+//       or that a later hop passed after the session's own rejection (the producer's next round);
 //   (b) an open question on the board addressed to the session's role;
 //   (c) an ALERT, LOCKED or UNLOCKED event since the cursor.
 // It wakes only on what it has not reported (as the coordinator's wait, task RD3-15): the changes
@@ -87,7 +88,7 @@ type watchChange struct {
 	To      string `json:"to"`
 	Role    string `json:"role,omitempty"`
 	Trigger string `json:"trigger"`
-	// By is the role whose hop rejected or returned it, or who reopened it.
+	// By is the role whose hop rejected, returned or passed it, or who reopened it.
 	By     string `json:"by,omitempty"`
 	At     string `json:"at"`
 	Reason string `json:"reason,omitempty"`
@@ -349,15 +350,19 @@ func seenOf(e map[string]interface{}) string {
 }
 
 // changeOf is where a task stands for the session: the newest hop end or reopen after the session's
-// own last hop end on it, when that is a rejection, a return or a reopen; nil when it is a pass, when
-// nothing happened since, or when the session never signed off on the task.
+// own last hop end on it, when that is a rejection, a return or a reopen, or a pass after the session's
+// own rejection (the producer's next round landed); nil when it is any other pass, when nothing happened
+// since, or when the session never signed off on the task.
 func changeOf(t map[string]interface{}, session string) *watchChange {
 	var mine time.Time
-	signed := false
+	signed, rejected := false, false
 	for _, s := range mapsOf(t["signOffs"]) {
 		if who, _ := s["session"].(string); who == session {
+			if at := timeOf(s["signedOffAt"]); !signed || !at.Before(mine) {
+				mine = at
+				rejected = str(s["outcome"]) == "REJECTED"
+			}
 			signed = true
-			mine = later(mine, timeOf(s["signedOffAt"]))
 		}
 	}
 	if !signed {
@@ -365,7 +370,9 @@ func changeOf(t map[string]interface{}, session string) *watchChange {
 	}
 	for _, r := range mapsOf(t["returns"]) {
 		if who, _ := r["session"].(string); who == session {
-			mine = later(mine, timeOf(r["returnedAt"]))
+			if at := timeOf(r["returnedAt"]); at.After(mine) {
+				mine, rejected = at, false
+			}
 		}
 	}
 	type hopEnd struct {
@@ -409,7 +416,7 @@ func changeOf(t map[string]interface{}, session string) *watchChange {
 		reason, _ := r["reason"].(string)
 		consider(hopEnd{at: timeOf(raw), raw: raw, trigger: "REOPENED", by: by, reason: reason})
 	}
-	if newest == nil || newest.trigger == "PASSED" {
+	if newest == nil || (newest.trigger == "PASSED" && !rejected) {
 		return nil
 	}
 	status, _ := t["status"].(string)
@@ -424,6 +431,7 @@ func changeOf(t map[string]interface{}, session string) *watchChange {
 func fromOf(t map[string]interface{}, trigger string, at time.Time) string {
 	kinds := map[string][]string{
 		"REJECTED": {"SIGNOFF", "HUMAN_REJECT", "HUMAN_SIGNOFF"},
+		"PASSED":   {"SIGNOFF", "HUMAN_APPROVE", "HUMAN_SIGNOFF"},
 		"RETURNED": {"RETURN"},
 		"REOPENED": {"REOPEN"},
 	}[trigger]
@@ -508,13 +516,6 @@ func timeOf(v interface{}) time.Time {
 		return time.Time{}
 	}
 	return t
-}
-
-func later(a, b time.Time) time.Time {
-	if b.After(a) {
-		return b
-	}
-	return a
 }
 
 func readWatchState(path string) watchKept {
