@@ -130,6 +130,10 @@ func runSpecApply(kind string) {
 		if kind != "ROLE_PRESETS" {
 			fail(specFile + " is a presets file; apply it with `rearm agent presets apply`")
 		}
+	case *catalog.ApiKeysFile:
+		if kind != "API_KEYS" {
+			fail(specFile + " is an API keys file; apply it with `rearm apikey apply`")
+		}
 	default:
 		fail(fmt.Sprintf("%s is not a %s file", specFile, kind))
 	}
