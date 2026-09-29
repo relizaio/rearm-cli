@@ -599,12 +599,17 @@ A worker with --watch (and --board) also wakes, when no offer is there, on what 
 work (task RD4-3): a task the session signed off on that a later hop REJECTED, returned, or that
 was reopened, or that a later hop passed after the session's own rejection (the producer's next
 round landed); an open question on the board addressed to the session's role (--role, else the
-roles it worked); an ALERT, LOCKED or UNLOCKED event. It prints {"offer": null, "changes": [...],
+roles it worked) while it is still the session's to answer: its task is not COMPLETED or CANCELLED,
+and the session has published no round of the answering role's specification on it since the
+question was asked (task RD4-14); an ALERT, LOCKED or UNLOCKED event. It prints {"offer": null, "changes": [...],
 "questions": [...], "events": [...], "nextAfter": N}: each change names the task, the transition
 (from, to, trigger, by, at) and the document rounds published since the session's last sign-off
 on it, so the rejection can be read without a 'task show'. It wakes only on what it has not
 reported: the changes and questions each poll saw, and the event cursor, are kept in --state
-(default ~/.rearm/wait-<board>-watch-<session>.json). An offer still wins and prints as before.
+(default ~/.rearm/wait-<board>-watch-<session>.json); a first run, with no state file, lists a
+question asked before the session's last sign-off on its task without waking on it. A question
+names its roles (askingRole, answeringRole), with the role config uuids beside them
+(askingRoleUuid, answeringRoleUuid). An offer still wins and prints as before.
 A watch makes two more reads a poll (the snapshot and the events).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if traced(os.Getenv("SHELLOPTS")) {
