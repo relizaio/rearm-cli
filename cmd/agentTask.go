@@ -541,10 +541,17 @@ func agentAuthorizeLevel(variables map[string]interface{}, level int, set bool) 
 
 var agentTaskHoldCmd = &cobra.Command{
 	Use:   "hold <task-uuid>",
-	Short: "Coordinator: put the task ON_HOLD pending human input (excluded from polls)",
-	Args:  cobra.ExactArgs(1),
+	Short: "Coordinator: put the task ON_HOLD pending human input (--reason); the hop's holder: park it for the operator (--operator --question)",
+	Long: `The coordinator seat puts a task nobody is working ON_HOLD at COORDINATOR level, with --reason;
+it is excluded from polls until released.
+
+The session holding the task parks its own hop for a person with --operator --question (task RD4-5):
+the task shows "awaiting the operator: <question>", the people who write the board are notified,
+and the hop stays yours. A person releases it with the answer as the note, which is recorded on the
+task, and the hop resumes with you.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGqlCompact(rearm.AgentTaskHoldProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskNote}, "agentTaskHoldProgrammatic")
+		runHold(args[0])
 	},
 }
 
@@ -867,11 +874,11 @@ func init() {
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskLevel, "level", 0,
 		"Set the task's level, a rung of the board's ladder (refused on a board without one); left out, unchanged")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
-	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "",
+		"Calling session uuid: the coordinator seat, or with --operator the session holding the task — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
-	agentTaskHoldCmd.PersistentFlags().StringVar(&taskNote, "reason", "", "Why the task waits for a human — required")
+	agentTaskHoldCmd.PersistentFlags().StringVar(&taskNote, "reason", "", "Why the task waits for a human (the seat's hold) — required without --operator")
 	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("session")
-	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("reason")
 	agentTaskReleaseholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	_ = agentTaskReleaseholdCmd.MarkPersistentFlagRequired("session")
 	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseRole, "role", "", "Route the released task to this role instead of the one routing would pick")

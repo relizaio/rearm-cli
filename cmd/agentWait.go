@@ -36,7 +36,8 @@ const (
 	waitExitError   = 1
 	waitExitTimeout = 2
 	// waitIntervalFloor keeps the loops of several agents on one host inside the ingress limit of
-	// about 50 commands per 30 s: a worker makes one request a poll, a coordinator three or four.
+	// about 50 commands per 30 s: a worker makes one request a poll (three with --watch), a coordinator
+	// three or four.
 	waitIntervalFloor = 30
 )
 
@@ -49,6 +50,7 @@ var (
 	waitInterval    int
 	waitTimeout     time.Duration
 	waitState       string
+	waitWatch       bool
 )
 
 // waitOpts is what one run of the loop was asked for.
@@ -61,6 +63,8 @@ type waitOpts struct {
 	interval    time.Duration
 	timeout     time.Duration
 	statePath   string
+	// watch widens a worker's wake (task RD4-3): see agentWaitWatch.go.
+	watch bool
 }
 
 // waitClient is the board as the loop reads it; the real one sends the CLI's operations, a test
@@ -148,6 +152,10 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 			coord.since = clk.now().UTC().Format(time.RFC3339)
 		}
 	}
+	var watch *workerWatch
+	if o.watch {
+		watch = newWorkerWatch(o, clk)
+	}
 	failures := 0
 	for {
 		var done bool
@@ -158,6 +166,10 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 		} else {
 			result, err = c.next(o.session, o.board, o.roles)
 			done = err == nil && result != nil
+			// An offer wins and prints as without --watch; only a quiet next reads what else wakes a watch.
+			if watch != nil && err == nil && result == nil {
+				done, result, err = watch.poll(c)
+			}
 		}
 		if err != nil {
 			failures++
@@ -177,6 +189,11 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 			if coord != nil {
 				// What was read before the timeout, and where the next run reads on from.
 				for k, v := range coord.cursorOut() {
+					timeout[k] = v
+				}
+			}
+			if watch != nil {
+				for k, v := range watch.cursorOut() {
 					timeout[k] = v
 				}
 			}
@@ -317,34 +334,46 @@ func (w *coordinatorWait) poll(c waitClient) (bool, interface{}, error) {
 // readEvents reads on from the cursor to the end, keeping INFO and ALERT events for the output and
 // the ALERTs as triggers.
 func (w *coordinatorWait) readEvents(c waitClient) error {
-	for {
-		since := ""
-		if w.after == nil {
-			since = w.since
+	kept, err := readBoardEvents(c, w.opts.board, &w.after, &w.since, func(kind string) bool {
+		return kind == "INFO" || kind == "ALERT"
+	})
+	for _, e := range kept {
+		w.events = append(w.events, e)
+		if kind, _ := e["kind"].(string); kind == "ALERT" {
+			if s, ok := e["seq"].(float64); ok {
+				w.alerts = append(w.alerts, int64(s))
+			}
 		}
-		p, err := c.events(w.opts.board, w.after, since)
+	}
+	return err
+}
+
+// readBoardEvents reads a board's events on from the cursor (a seq once one is known, the instant
+// before) to the end, moves the cursor, and returns the events of the kinds keep takes.
+func readBoardEvents(c waitClient, board string, after **int64, since *string,
+	keep func(kind string) bool) ([]map[string]interface{}, error) {
+	var kept []map[string]interface{}
+	for {
+		from := ""
+		if *after == nil {
+			from = *since
+		}
+		p, err := c.events(board, *after, from)
 		if err != nil {
-			return err
+			return kept, err
 		}
 		for _, e := range p.Events {
-			kind, _ := e["kind"].(string)
-			if kind != "INFO" && kind != "ALERT" {
-				continue
-			}
-			w.events = append(w.events, e)
-			if kind == "ALERT" {
-				if s, ok := e["seq"].(float64); ok {
-					w.alerts = append(w.alerts, int64(s))
-				}
+			if kind, _ := e["kind"].(string); keep(kind) {
+				kept = append(kept, e)
 			}
 		}
 		if p.NextAfter != nil {
 			a := *p.NextAfter
-			w.after = &a
-			w.since = ""
+			*after = &a
+			*since = ""
 		}
 		if !p.HasMore {
-			return nil
+			return kept, nil
 		}
 	}
 }
@@ -564,7 +593,19 @@ it read and the cursor as well.
 --interval is 30 s or more (default 60): every agent on a host shares a limit of about 50 commands
 per 30 s. --timeout (default 4h) exits 2 with {"timeout": true}: re-arm. One failed poll is
 retried; two in a row exit 1 with the error. Never run it with shell tracing: credentials are in
-the environment.`,
+the environment.
+
+A worker with --watch (and --board) also wakes, when no offer is there, on what happens to its
+work (task RD4-3): a task the session signed off on that a later hop REJECTED, returned, or that
+was reopened, or that a later hop passed after the session's own rejection (the producer's next
+round landed); an open question on the board addressed to the session's role (--role, else the
+roles it worked); an ALERT, LOCKED or UNLOCKED event. It prints {"offer": null, "changes": [...],
+"questions": [...], "events": [...], "nextAfter": N}: each change names the task, the transition
+(from, to, trigger, by, at) and the document rounds published since the session's last sign-off
+on it, so the rejection can be read without a 'task show'. It wakes only on what it has not
+reported: the changes and questions each poll saw, and the event cursor, are kept in --state
+(default ~/.rearm/wait-<board>-watch-<session>.json). An offer still wins and prints as before.
+A watch makes two more reads a poll (the snapshot and the events).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if traced(os.Getenv("SHELLOPTS")) {
 			fmt.Fprintln(os.Stderr, "do not trace this command: credentials are in the environment")
@@ -579,6 +620,9 @@ the environment.`,
 			waitBoard = boardArg(waitBoard)
 		}
 		o, err := waitOptsOf(waitSession, waitBoard, roles, waitCoordinator, waitAfter, waitInterval, waitTimeout, waitState)
+		if err == nil && waitWatch {
+			o, err = o.watching()
+		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(waitExitError)
@@ -592,9 +636,10 @@ func init() {
 	agentWaitCmd.Flags().StringVar(&waitBoard, "board", "", "the board; required with --coordinator")
 	agentWaitCmd.Flags().StringSliceVar(&waitRoles, "role", nil, "a worker's roles, as for 'task next' (repeat or comma-separate)")
 	agentWaitCmd.Flags().BoolVar(&waitCoordinator, "coordinator", false, "wait as the board's coordinator")
-	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator: the event seq to read on from (default: where the last wait stopped, else now)")
+	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator or --watch: the event seq to read on from (default: where the last wait stopped, else now)")
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
-	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json)")
+	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator or --watch: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json; with --watch wait-<board>-watch-<session>.json)")
+	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/LOCKED/UNLOCKED event; needs --board")
 	agentCmd.AddCommand(agentWaitCmd)
 }
