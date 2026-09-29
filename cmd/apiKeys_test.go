@@ -33,6 +33,12 @@ func TestApiKeyCommandsAreThere(t *testing.T) {
 	if !strings.Contains(apiKeyApplyCmd.Long, "FREEFORM keys only") {
 		t.Errorf("the apply says which keys a file declares: %s", apiKeyApplyCmd.Long)
 	}
+	if !strings.Contains(apiKeyExportCmd.Long, "authoritative: true") || !strings.Contains(apiKeyExportCmd.Long, "deactivated") {
+		t.Errorf("the export says what authoritative means: %s", apiKeyExportCmd.Long)
+	}
+	if !strings.Contains(apiKeyMintCmd.Long, "no file\ndeclares") {
+		t.Errorf("the mint says it reaches declared keys only: %s", apiKeyMintCmd.Long)
+	}
 	if !strings.Contains(apiKeyMintCmd.Long, "prints it once") {
 		t.Errorf("the mint says its value is shown once: %s", apiKeyMintCmd.Long)
 	}

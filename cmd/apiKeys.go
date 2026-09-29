@@ -71,6 +71,10 @@ on the keys, unless --no-source.`,
 var apiKeyExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export the organization's declared API keys as an API_KEYS file (no secrets)",
+	Long: `Writes the organization's declared keys as an API_KEYS file, with no secret in it. Without
+--key the file says authoritative: true: applied again, it claims every declared key, and when the
+organization's declarative prune setting is ARCHIVE a declared key the file no longer lists is
+deactivated. With --key it lists only those keys and is not authoritative.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		f, err := catalog.ExportApiKeys(context.Background(), rearmClient(), apiKeyNames)
 		if err != nil {
@@ -109,11 +113,12 @@ func apiKeyListVariables(names []string) map[string]interface{} {
 var apiKeyMintCmd = &cobra.Command{
 	Use:   "mint <key>",
 	Short: "Mint a secret for an API key and print it once",
-	Long: `Mints a secret in slot 1 or 2 of a FREEFORM key, named by its declared name, key id or uuid, and
+	Long: `Mints a secret in slot 1 or 2 of a declared FREEFORM key, named by its declared name, key id or uuid, and
 prints it once: ReARM keeps only a hash, so it cannot be shown again. A slot that already holds
 a secret is left alone unless --rotate, which replaces it -- the old value stops working at
-once. The secret's expiry follows the key's secretExpiresDays. Refused for a key stronger
-than the caller, and for a key a person holds (its holder mints it on the keys page).`,
+once. The secret's expiry follows the key's secretExpiresDays. Refused for a key no file
+declares (an organization admin can declare a key made by hand first), for a key stronger than
+the caller, and for a key a person holds (its holder mints it on the keys page).`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := apiKeyMintVariables(args[0], apiKeySlot, apiKeyRotate)
