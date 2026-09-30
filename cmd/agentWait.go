@@ -166,9 +166,25 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 		} else {
 			result, err = c.next(o.session, o.board, o.roles)
 			done = err == nil && result != nil
-			// An offer wins and prints as without --watch; only a quiet next reads what else wakes a watch.
-			if watch != nil && err == nil && result == nil {
-				done, result, err = watch.poll(c)
+			if watch != nil && err == nil {
+				// A watch reads the board after an offer too (task RD4-16), so the state keeps the changes and
+				// questions this exit prints, and it prints the watch object with the offer inside it. An offer
+				// still wins: it ends the wait even when that read fails.
+				woke, werr := watch.poll(c)
+				switch {
+				case result != nil:
+					if werr != nil {
+						fmt.Fprintf(os.Stderr, "rearm agent wait: --watch could not read the board with the offer: %v\n", werr)
+					}
+					result = watch.object(result)
+				case werr != nil:
+					err = werr
+				default:
+					done = woke
+					if woke {
+						result = watch.object(nil)
+					}
+				}
 			}
 		}
 		if err != nil {
@@ -180,6 +196,9 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 		} else {
 			failures = 0
 			if done {
+				if watch != nil {
+					watch.persist()
+				}
 				emitTo(out, result)
 				return waitExitWork
 			}
@@ -193,9 +212,10 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 				}
 			}
 			if watch != nil {
-				for k, v := range watch.cursorOut() {
-					timeout[k] = v
-				}
+				// The timeout keeps the state and prints the watch object too (task RD4-16).
+				watch.persist()
+				timeout = watch.object(nil)
+				timeout["timeout"] = true
 			}
 			emitTo(out, timeout)
 			return waitExitTimeout
@@ -609,8 +629,12 @@ reported: the changes and questions each poll saw, and the event cursor, are kep
 (default ~/.rearm/wait-<board>-watch-<session>.json); a first run, with no state file, lists a
 question asked before the session's last sign-off on its task without waking on it. A question
 names its roles (askingRole, answeringRole), with the role config uuids beside them
-(askingRoleUuid, answeringRoleUuid). An offer still wins and prints as before.
-A watch makes two more reads a poll (the snapshot and the events).`,
+(askingRoleUuid, answeringRoleUuid). An offer still wins, and with --watch it prints inside the
+same object, as "offer", with the changes and questions read with it (task RD4-16): whatever ends
+the wait (an offer, a change, a question, an event or the timeout), the output is that object, and
+what it reported is kept in --state first, so the next run does not report it again. The timeout
+prints the object with "timeout": true. A watch makes two more reads a poll (the snapshot and the
+events), an offer's poll included.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if traced(os.Getenv("SHELLOPTS")) {
 			fmt.Fprintln(os.Stderr, "do not trace this command: credentials are in the environment")
