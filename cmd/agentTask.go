@@ -541,14 +541,22 @@ func agentAuthorizeLevel(variables map[string]interface{}, level int, set bool) 
 
 var agentTaskHoldCmd = &cobra.Command{
 	Use:   "hold <task-uuid>",
-	Short: "Coordinator: put the task ON_HOLD pending human input (--reason); the hop's holder: park it for the operator (--operator --question)",
+	Short: "Coordinator: put the task ON_HOLD (--reason), or park it for an operator decision (--operator --question); the hop's holder: park its hop (--operator --question)",
 	Long: `The coordinator seat puts a task nobody is working ON_HOLD at COORDINATOR level, with --reason;
 it is excluded from polls until released.
 
 The session holding the task parks its own hop for a person with --operator --question (task RD4-5):
 the task shows "awaiting the operator: <question>", the people who write the board are notified,
 and the hop stays yours. A person releases it with the answer as the note, which is recorded on the
-task, and the hop resumes with you.`,
+task, and the hop resumes with you.
+
+The coordinator seat parks a task nobody is working for a person's decision the same way, with
+--operator --question (task RD4-17): in PENDING_INTAKE, QUEUED, AWAITING_COORDINATOR or DELIVERING.
+Put the question, the options you see and your recommendation in it. A person answers by releasing
+the hold with a note, or by acting on the task (an attestation, a supersede, a complete, a reopen);
+either is recorded as the answer, and the task returns to the state it was parked from, so a
+DELIVERING task goes on delivering. Until then delivered, --abandoned, supersedepr, complete and
+reopen are refused for every session. A DELIVERING task is parked only this way.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runHold(args[0])
