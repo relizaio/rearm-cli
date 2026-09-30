@@ -56,6 +56,7 @@ var (
 	docDryRun        bool
 	docBoard         string
 	docAdvisory      bool
+	docCheck         bool
 )
 
 // taskScopedTypes need a task and carry a findings index; everything else is a document series
@@ -288,6 +289,11 @@ func runDocPublish() error {
 		return fmt.Errorf("the board cuts CHECK_REPORT rounds when a document with elements is published;" +
 			" run `rearm agent doc check` to re-run the checks")
 	}
+	if docCheck && (docIndexOnly() || docTask == "") {
+		return fmt.Errorf("--check previews the element checks of a task's document with a file: give --task," +
+			" and not --index-only")
+	}
+
 	if taskScopedTypes[spec] && docTask == "" {
 		return fmt.Errorf("--task is required for %s, which is a per-task document", spec)
 	}
@@ -340,6 +346,9 @@ func runDocPublish() error {
 	}
 	if err := assertCommitted(repoPath, paths); err != nil {
 		return err
+	}
+	if docCheck {
+		return runPublishCheck(st, repoPath, file, spec, board)
 	}
 	if err := assertPushed(repoPath); err != nil {
 		return err
@@ -478,6 +487,9 @@ func init() {
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
 	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
 	f.BoolVar(&docDryRun, "dry-run", false, "print what would be sent and exit")
+	f.BoolVar(&docCheck, "check", false,
+		"build the element index from the committed file and print the checks the board would run on it,"+
+			" in the task's current scope, without publishing; exits 1 on a failure the board blocks on")
 	f.BoolVar(&docAdvisory, "advisory", false,
 		"publish on a task another session holds, as an advisory round: a prose type a role you have"+
 			" held on this board produces. Assembled at once, announced on the board, and never an output"+
