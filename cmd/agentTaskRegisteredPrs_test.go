@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -50,17 +52,62 @@ func TestSignoffHasTheNoCodeFlag(t *testing.T) {
 	}
 }
 
-func TestTheSignOffDeclaresNoCodeAndReadsBaseMovedBy(t *testing.T) {
-	op := squash(signOffOperation())
-	for _, want := range []string{"$noChange: Boolean, $noCode: Boolean)", "noChange: $noChange, noCode: $noCode)",
-		"pullRequests { baseMovedBy url"} {
-		if !strings.Contains(op, want) {
-			t.Errorf("the sign-off lacks %q", want)
+// prSelections returns the body of every `pullRequests { ... }` selection in a GraphQL operation, braces matched.
+func prSelections(op string) []string {
+	var out []string
+	for _, loc := range regexp.MustCompile(`pullRequests\s*\{`).FindAllStringIndex(op, -1) {
+		depth, start := 1, loc[1]
+		for i := start; i < len(op); i++ {
+			switch op[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+			if depth == 0 {
+				out = append(out, op[start:i])
+				break
+			}
 		}
 	}
-	// Once the pinned client-go carries them, the operation is used as it is: nothing is declared twice.
-	again := completeSignOff(signOffOperation())
-	if again != signOffOperation() || strings.Count(again, "$noCode") != 2 || strings.Count(again, "baseMovedBy") != 1 {
+	return out
+}
+
+var (
+	baseMovedField = regexp.MustCompile(`\bbaseMovedBy\b`)
+	noCodeDeclared = regexp.MustCompile(`\$noCode\s*:\s*Boolean\b`)
+	noCodePassed   = regexp.MustCompile(`\bnoCode\s*:\s*\$noCode\b`)
+)
+
+// readsBaseMovedOnce checks what a task read must carry, wherever the field sits: every PR selection reads
+// baseMovedBy exactly once, and nothing outside them reads it.
+func readsBaseMovedOnce(t *testing.T, what, op string) {
+	t.Helper()
+	sels := prSelections(op)
+	if len(sels) == 0 {
+		t.Errorf("%s selects no pullRequests", what)
+	}
+	for i, sel := range sels {
+		if n := len(baseMovedField.FindAllString(sel, -1)); n != 1 {
+			t.Errorf("%s: pullRequests selection %d reads baseMovedBy %d times, want 1: %s", what, i, n, squash(sel))
+		}
+	}
+	if n := len(baseMovedField.FindAllString(op, -1)); n != len(sels) {
+		t.Errorf("%s reads baseMovedBy %d times over %d PR selections", what, n, len(sels))
+	}
+}
+
+func TestTheSignOffDeclaresNoCodeAndReadsBaseMovedBy(t *testing.T) {
+	op := signOffOperation()
+	if n := len(noCodeDeclared.FindAllString(op, -1)); n != 1 {
+		t.Errorf("the sign-off declares $noCode %d times, want 1:\n%s", n, squash(op))
+	}
+	if n := len(noCodePassed.FindAllString(op, -1)); n != 1 {
+		t.Errorf("the sign-off passes noCode %d times, want 1:\n%s", n, squash(op))
+	}
+	readsBaseMovedOnce(t, "the sign-off", op)
+	// Completing is idempotent: the CLI's own operation, completed again, is unchanged.
+	if again := completeSignOff(op); again != op {
 		t.Errorf("completing a complete sign-off changed it:\n%s", squash(again))
 	}
 	// Everything else is the pinned operation's: noChange, seenInputs and the task's fields.
@@ -69,12 +116,37 @@ func TestTheSignOffDeclaresNoCodeAndReadsBaseMovedBy(t *testing.T) {
 	}
 }
 
+// A client-go that already carries noCode and baseMovedBy, as rearm-client-go#78 selects them (baseMovedBy after
+// mergedDate): the CLI sends its operations as they are.
+const completeSignOffOp = `mutation agentTaskSignOffProgrammatic ($taskUuid: ID!, $sessionUuid: ID!, $outcome: AgentSignOffOutcome!, $note: String, $outputs: [ID!], $seenInputs: [ID!], $noChange: Boolean, $noCode: Boolean) {
+	agentTaskSignOffProgrammatic(taskUuid: $taskUuid, sessionUuid: $sessionUuid, outcome: $outcome, note: $note, outputs: $outputs, seenInputs: $seenInputs, noChange: $noChange, noCode: $noCode) {
+		uuid
+		pullRequests {
+			url
+			state
+			targetBranch
+			mergedDate
+			baseMovedBy
+			registered
+			head
+		}
+	}
+}`
+
+func TestAnOperationThatCarriesTheFieldsIsSentAsItIs(t *testing.T) {
+	if got := completeSignOff(completeSignOffOp); got != completeSignOffOp {
+		t.Errorf("completing a sign-off that carries noCode and baseMovedBy changed it:\n%s", squash(got))
+	}
+	if got := withBaseMovedBy(completeSignOffOp); got != completeSignOffOp {
+		t.Errorf("a read that selects baseMovedBy was changed:\n%s", squash(got))
+	}
+	readsBaseMovedOnce(t, "the complete sign-off", completeSignOffOp)
+}
+
 func TestTaskShowReadsBaseMovedBy(t *testing.T) {
 	for _, uuids := range [][]string{{"t-1"}, {"t-1", "t-2"}} {
 		op, _, _ := taskShowRequest(uuids)
-		if !strings.Contains(squash(op), "pullRequests { baseMovedBy url") {
-			t.Errorf("task show of %d task(s) does not read baseMovedBy", len(uuids))
-		}
+		readsBaseMovedOnce(t, fmt.Sprintf("task show of %d task(s)", len(uuids)), op)
 	}
 }
 
