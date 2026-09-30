@@ -1,10 +1,15 @@
 // Package elements parses a markdown document's element index (gaps §2.A, task e200cb32).
 //
-// The grammar's authority is rearm-saas ai-plans/agentic/elements.md, grammar version 1. An element
+// The grammar's authority is rearm-saas ai-plans/agentic/elements.md, grammar version 1.2. An element
 // is an ATX heading, or a table row, that starts with an id token (FAMILY-LOCAL). Attribute lines
 // under it (parent, traces, assumes, level, speculative) give its parent and typed links, and
 // everything up to the next element heading is its content, which is digested so a later diff can
 // be per element.
+//
+// Grammar 1.2 (task RD4-6) reads a heading by the document's type: it defines its id only when the
+// id's family lists the type in its definedIn (a prefix the board does not know: when the type defines
+// anything), and is otherwise a reference, recorded under references and defining nothing. A bold
+// span that leads a line and ends with a period or colon is emphasis, not a glossary term.
 //
 // Parsing never fails: unknown families, duplicate ids and malformed attribute lines are warnings
 // on the index. The same bytes always give the same index; CRLF and LF input agree.
@@ -22,8 +27,9 @@ import (
 )
 
 // GrammarVersion is the grammar this parser implements. 1.1 adds terms: the glossary terms an
-// element's content marks as **term** (elements.md §3).
-const GrammarVersion = "1.1"
+// element's content marks as **term** (elements.md §3). 1.2 defines ids only in the document types
+// their family lists, and reads a lead-in bold span as emphasis.
+const GrammarVersion = "1.2"
 
 // Warning codes, as the server uses them.
 const (
@@ -36,7 +42,110 @@ const (
 var DefaultFamilies = map[string]string{
 	"REQ": "requirement", "FN": "function", "PBS": "product", "IBS": "interface", "IF": "interface",
 	"DS": "data", "TEST": "test", "T": "test", "GLOSS": "glossary", "ADR": "decision", "UC": "use-case",
-	"CONOPS": "concept",
+	"CONOPS": "concept", "Q": "question", "F": "finding",
+}
+
+// ProseTypes are the specification types that are not an index type, in the server's enum order:
+// where a board's own family defines unless it says otherwise.
+var ProseTypes = []string{"CONOPS", "USE_CASES", "REQUIREMENTS", "FUNCTIONS", "PRODUCT_BREAKDOWN", "INTERFACES",
+	"DATA_MODEL", "ARCHITECTURE", "DETAILED_DESIGN", "UX_CONCEPT", "TEST_PLAN", "GLOSSARY", "DECISION_RECORD"}
+
+// DefaultDefinedIn mirrors the server's ElementFamilies.DEFAULT_DEFINED_IN: family name to the types
+// that define its ids, in order of precedence.
+var DefaultDefinedIn = func() map[string][]string {
+	design := []string{"ARCHITECTURE", "DETAILED_DESIGN"}
+	own := func(t string) []string { return append([]string{t}, design...) }
+	glossary := []string{"GLOSSARY"}
+	for _, t := range ProseTypes {
+		if t != "GLOSSARY" {
+			glossary = append(glossary, t)
+		}
+	}
+	return map[string][]string{
+		"test":        {"TEST_PLAN", "TEST_REPORT"},
+		"requirement": own("REQUIREMENTS"),
+		"decision":    {"DECISION_RECORD", "ARCHITECTURE"},
+		"function":    own("FUNCTIONS"),
+		"interface":   own("INTERFACES"),
+		"data":        own("DATA_MODEL"),
+		"product":     own("PRODUCT_BREAKDOWN"),
+		"concept":     own("CONOPS"),
+		"use-case":    own("USE_CASES"),
+		"glossary":    glossary,
+		"question":    {"QUESTIONS"},
+		"finding":     {"REVIEW_FINDINGS"},
+	}
+}()
+
+// Family is one prefix's family and the types that define its ids, in order; empty DefinedIn means
+// the ids are only ever referenced.
+type Family struct {
+	Name      string
+	DefinedIn []string
+}
+
+// Families is prefix to family, as a board's effective element families read.
+type Families map[string]Family
+
+// FamiliesFrom builds the families from prefix-to-name and the board's own lists by prefix; a prefix
+// without a list takes its family's default, and a family without a default every prose type.
+func FamiliesFrom(names map[string]string, definedIn map[string][]string) Families {
+	out := Families{}
+	for prefix, name := range names {
+		list, ok := definedIn[prefix]
+		if !ok {
+			if d, known := DefaultDefinedIn[name]; known {
+				list = d
+			} else {
+				list = ProseTypes
+			}
+		}
+		out[prefix] = Family{Name: name, DefinedIn: append([]string{}, list...)}
+	}
+	return out
+}
+
+// Defaults are the default families with their default lists.
+func Defaults() Families { return FamiliesFrom(DefaultFamilies, nil) }
+
+// DefinesAnything is whether a document of this type defines any family's ids.
+func (f Families) DefinesAnything(spec string) bool {
+	for _, fam := range f {
+		for _, t := range fam.DefinedIn {
+			if t == spec {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Defines is whether an id of this prefix, in a document of type spec, is in a defining position: its
+// family lists the type, or, for a prefix the board does not know, the type defines anything. With no
+// type every id defines, as grammar 1.1 read them.
+func (f Families) Defines(prefix, spec string) bool {
+	if spec == "" {
+		return true
+	}
+	fam, ok := f[prefix]
+	if !ok {
+		return f.DefinesAnything(spec)
+	}
+	for _, t := range fam.DefinedIn {
+		if t == spec {
+			return true
+		}
+	}
+	return false
+}
+
+// Names is prefix to family name.
+func (f Families) Names() map[string]string {
+	out := map[string]string{}
+	for p, fam := range f {
+		out[p] = fam.Name
+	}
+	return out
 }
 
 // Link is a typed trace: traces: derives_from REQ-1.
@@ -67,11 +176,21 @@ type Warning struct {
 	Message   string `json:"message"`
 }
 
+// Reference is a heading or table row naming an id the document does not define (grammar 1.2): its
+// family is defined in other document types. Field order is the wire order.
+type Reference struct {
+	ID     string `json:"id"`
+	Family string `json:"family,omitempty"`
+	Title  string `json:"title"`
+	Line   int    `json:"line"`
+}
+
 // Index is what the CLI sends with a publish.
 type Index struct {
-	GrammarVersion string    `json:"grammarVersion"`
-	Elements       []Element `json:"elements"`
-	Warnings       []Warning `json:"warnings"`
+	GrammarVersion string      `json:"grammarVersion"`
+	Elements       []Element   `json:"elements"`
+	References     []Reference `json:"references"`
+	Warnings       []Warning   `json:"warnings"`
 }
 
 var (
@@ -82,11 +201,31 @@ var (
 	// A bold span as markdown reads one: no whitespace just inside either pair of asterisks, so a
 	// stray ** left by a span that ran across lines does not pair up with the next one.
 	boldSpan = regexp.MustCompile(`\*\*([^*\s](?:[^*\n]*?[^*\s])?)\*\*`)
+	// A bold span leading a line, after any blockquote and list markers: "**Fix.** ...", "- **Why:** ...".
+	leadIn = regexp.MustCompile(`^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|[0-9]+[.)])[ \t]+)?\*\*([^*\n]+?)\*\*`)
 )
 
+// leadInEnd is where a lead-in bold span ends on the line, or 0 when the line has none: a bold span at
+// the start of the line (after blockquote and list markers) that ends with a period or colon, inside
+// the asterisks or just after them, is emphasis and not a term (grammar 1.2).
+func leadInEnd(line string) int {
+	m := leadIn.FindStringSubmatchIndex(line)
+	if m == nil {
+		return 0
+	}
+	inner := strings.TrimSpace(line[m[2]:m[3]])
+	if strings.HasSuffix(inner, ".") || strings.HasSuffix(inner, ":") {
+		return m[1]
+	}
+	if m[1] < len(line) && (line[m[1]] == '.' || line[m[1]] == ':') {
+		return m[1]
+	}
+	return 0
+}
+
 // termsOf reads the glossary terms a piece of content uses: every bold span on one line, trimmed,
-// trailing punctuation dropped, unique in first-seen order, case kept. Fenced code is not content
-// that uses terms, so spans inside it are skipped.
+// trailing punctuation dropped, unique in first-seen order, case kept, except a lead-in span (see
+// leadInEnd). Fenced code is not content that uses terms, so spans inside it are skipped.
 func termsOf(lines []string) []string {
 	out := []string{}
 	seen := map[string]bool{}
@@ -99,7 +238,7 @@ func termsOf(lines []string) []string {
 		if inFence {
 			continue
 		}
-		for _, m := range boldSpan.FindAllStringSubmatch(line, -1) {
+		for _, m := range boldSpan.FindAllStringSubmatch(line[leadInEnd(line):], -1) {
 			term := strings.TrimRight(strings.TrimSpace(m[1]), ".,;:!?")
 			term = strings.TrimSpace(term)
 			if term == "" || seen[term] {
@@ -254,14 +393,19 @@ type heading struct {
 	id    string // "" for a heading that is not an element
 }
 
-// Parse reads src under the families (prefix to family name). A token whose family part is in
-// reserved -- the board's task prefix, current or held before -- is a task key, not an id (task
-// RD2-28): a heading starting with one is prose and a table row starting with one is content, so
-// "# RD2-1 — Title" yields no element. Nil reserves nothing.
-func Parse(src []byte, families map[string]string, reserved map[string]bool) Index {
+// Parse reads src as a document of type spec under the families. A heading or table row whose id is
+// not in a defining position for spec (Families.Defines) is a reference: it closes the open
+// element's content, lends no parent, and defines nothing. With spec "" every id defines, as grammar
+// 1.1 read them. A token whose family part is in reserved -- the board's task prefix, current or held
+// before -- is a task key, not an id (task RD2-28): a heading starting with one is prose and a table
+// row starting with one is content, so "# RD2-1 — Title" yields no element. Nil reserves nothing.
+func Parse(src []byte, spec string, families Families, reserved map[string]bool) Index {
 	text := strings.ReplaceAll(strings.ReplaceAll(string(src), "\r\n", "\n"), "\r", "\n")
 	lines := strings.Split(text, "\n")
-	ix := Index{GrammarVersion: GrammarVersion, Elements: []Element{}, Warnings: []Warning{}}
+	ix := Index{GrammarVersion: GrammarVersion, Elements: []Element{}, References: []Reference{}, Warnings: []Warning{}}
+	reference := func(id, title string, line int) {
+		ix.References = append(ix.References, Reference{ID: id, Family: families[familyOf(id)].Name, Title: title, Line: line})
+	}
 
 	// open is the element whose content is being collected: its index in ix.Elements and where its
 	// content starts. A table row's content is its own cells, so it closes nothing and opens nothing.
@@ -305,6 +449,11 @@ func Parse(src []byte, families map[string]string, reserved map[string]bool) Ind
 				continue
 			}
 			closeOpen(i)
+			if !families.Defines(familyOf(id), spec) {
+				reference(id, title, i+1)
+				stack = append(stack, heading{depth: depth})
+				continue
+			}
 			e := Element{ID: id, Title: title, Line: i + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}, Terms: []string{}}
 			var a attrs
 			j := i + 1
@@ -354,6 +503,7 @@ func Parse(src []byte, families map[string]string, reserved map[string]bool) Ind
 				}
 				e := Element{ID: id, Line: j + 1, Traces: []Link{}, Assumes: []string{}, Speculative: []string{}, Terms: []string{}}
 				var a attrs
+				var rowWarnings []Warning
 				titled := false
 				var content []string
 				for c := 1; c < len(cells); c++ {
@@ -364,7 +514,7 @@ func Parse(src []byte, families map[string]string, reserved map[string]bool) Ind
 					if attributeNames[name] {
 						if cells[c] != "" {
 							if msg := a.apply(name, cells[c]); msg != "" {
-								ix.Warnings = append(ix.Warnings, Warning{Code: MalformedAttribute, ElementID: id,
+								rowWarnings = append(rowWarnings, Warning{Code: MalformedAttribute, ElementID: id,
 									Message: fmt.Sprintf("line %d: %s", j+1, msg)})
 							}
 						}
@@ -376,6 +526,11 @@ func Parse(src []byte, families map[string]string, reserved map[string]bool) Ind
 					}
 					content = append(content, cells[c])
 				}
+				if !families.Defines(familyOf(id), spec) {
+					reference(id, e.Title, j+1)
+					continue
+				}
+				ix.Warnings = append(ix.Warnings, rowWarnings...)
 				e.Parent = a.parent
 				if e.Parent == "" {
 					e.Parent = nearestElement(7)
@@ -397,8 +552,8 @@ func Parse(src []byte, families map[string]string, reserved map[string]bool) Ind
 	for i := range ix.Elements {
 		e := &ix.Elements[i]
 		prefix := familyOf(e.ID)
-		if name, ok := families[prefix]; ok {
-			e.Family = name
+		if fam, ok := families[prefix]; ok {
+			e.Family = fam.Name
 		} else {
 			ix.Warnings = append(ix.Warnings, Warning{Code: UnknownFamily, ElementID: e.ID,
 				Message: fmt.Sprintf("no element family %s on this board", prefix)})
