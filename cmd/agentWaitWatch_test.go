@@ -11,7 +11,7 @@ import (
 
 // A worker's wait with --watch (task RD4-3), against a scripted board: each wake reason, the documents
 // since the session's last sign-off, the dedupe across polls and runs, the event cursor, an offer
-// winning, and a wait without --watch waking on offers alone.
+// winning (inside the watch object since task RD4-16), and a wait without --watch waking on offers alone.
 
 // fakeWatch is the worker's fake board plus what a watch reads: the session's tasks and the board's
 // roles, and each task's hops and documents, scripted per read (the last read's repeats).
@@ -367,16 +367,18 @@ func TestAnOfferWinsOverAWatchChange(t *testing.T) {
 	f := &fakeWatch{fakeBoard: &fakeBoard{offers: []interface{}{offer}, snapshots: snaps{{snapEntry("RD-1", "QUEUED", "coder", "rel-test")}}},
 		worked: worked("RD-1"), roles: boardRoles, details: []map[string]map[string]interface{}{{"u-RD-1": rejected()}}}
 	code, printed := runWatch(t, o, f)
-	if code != waitExitWork || printed["role"] != "architect" || printed["changes"] != nil {
-		t.Errorf("exit %d, printed %v: the offer, as without --watch", code, printed)
+	// Task RD4-16: the offer ends the wait, inside the watch object, with the change read beside it.
+	offered, _ := printed["offer"].(map[string]interface{})
+	if code != waitExitWork || offered == nil || offered["role"] != "architect" {
+		t.Errorf("exit %d, printed %v: the offer, inside the watch object", code, printed)
 	}
-	if f.polls != 0 || f.scopeReads != 0 || len(f.eventCalls) != 0 {
-		t.Errorf("an offer read the snapshot %d, the scope %d, the events %v times", f.polls, f.scopeReads, f.eventCalls)
+	if ch := changesOf(printed); len(ch) != 1 || ch[0]["new"] != true {
+		t.Errorf("changes %v: the change read with the offer, marked new", printed["changes"])
 	}
-	// The change was not reported, so the next run reports it.
+	// The change was reported with the offer, so the next run does not report it again.
 	f.offers = []interface{}{nil}
 	f.nextCalls = nil
-	if code, printed := runWatch(t, o, f); code != waitExitWork || len(changesOf(printed)) != 1 {
+	if code, printed := runWatch(t, o, f); code != waitExitTimeout {
 		t.Errorf("after the offer: exit %d, %v", code, printed)
 	}
 }
