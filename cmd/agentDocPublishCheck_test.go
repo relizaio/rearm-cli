@@ -72,7 +72,9 @@ func TestTheCheckSendsThePublishIndexAndOnlyThat(t *testing.T) {
 
 func TestTheCheckNeedsATaskAndAFile(t *testing.T) {
 	docSession, docType, docCheck = "session-1", "DETAILED_DESIGN", true
-	t.Cleanup(func() { docSession, docType, docCheck, docTask, docIndexOnlyFlag, docIndexFile = "", "", false, "", false, "" })
+	t.Cleanup(func() {
+		docSession, docType, docCheck, docTask, docIndexOnlyFlag, docIndexFile = "", "", false, "", false, ""
+	})
 	if err := runDocPublish(); err == nil || !strings.Contains(err.Error(), "--check previews") {
 		t.Errorf("no --task: %v", err)
 	}
