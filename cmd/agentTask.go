@@ -450,7 +450,11 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if taskNoChange {
 			variables["noChange"] = true
 		}
-		runHopCompact(rearm.AgentTaskSignOffProgrammatic_Operation, variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
+		// Sent only when said (RD4-2): a round that changed no code passes the head check for registered PRs.
+		if taskNoCode {
+			variables["noCode"] = true
+		}
+		runHopCompact(signOffOperation(), variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
 		forgetSeen(taskSessionUuid, args[0])
 		forgetHopOutputs(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
@@ -752,10 +756,11 @@ var agentTaskLinkprCmd = &cobra.Command{
 // taskShowRequest is the read task show sends: one task as before, or several in one request (task
 // cc14f4cb), in the order given, printed as an array.
 func taskShowRequest(uuids []string) (string, map[string]interface{}, string) {
+	// Each PR's baseMovedBy is read too (task RD4-2); printBaseMoved turns it into a line.
 	if len(uuids) == 1 {
-		return rearm.AgentTaskProgrammatic_Operation, map[string]interface{}{"taskUuid": uuids[0]}, "agentTaskProgrammatic"
+		return withBaseMovedBy(rearm.AgentTaskProgrammatic_Operation), map[string]interface{}{"taskUuid": uuids[0]}, "agentTaskProgrammatic"
 	}
-	return rearm.AgentTasksByUuidProgrammatic_Operation, map[string]interface{}{"taskUuids": uuids}, "agentTasksByUuidProgrammatic"
+	return withBaseMovedBy(rearm.AgentTasksByUuidProgrammatic_Operation), map[string]interface{}{"taskUuids": uuids}, "agentTasksByUuidProgrammatic"
 }
 
 var agentTaskShowCmd = &cobra.Command{
@@ -769,7 +774,9 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 		op, vars, key := taskShowRequest(args)
 		// With --session, what it prints is recorded as read by that session (RD2-34): the acknowledgement its
 		// sign-off sends. Without it, nothing is recorded.
-		rememberSeenFromRead(taskShowSession, runGqlTasksRead(op, vars, key))
+		read := runGqlTasksRead(op, vars, key)
+		rememberSeenFromRead(taskShowSession, read)
+		printBaseMoved(read)
 	},
 }
 
@@ -864,6 +871,9 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoChange, "no-change", false,
 		"On a PASSED that answers a finding about your own document: the new round changes nothing to build,"+
 			" so the task goes back to whoever filed the finding instead of to the role that builds from the round")
+	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoCode, "no-code", false,
+		"On a PASSED: this round changed no code (a note-only round). Where CI registers the task's PRs, a pass by a"+
+			" role that pushes code is refused while no linked PR moved since the assignment; this says why none did")
 	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
 		"Session reading the task: its sign-off acknowledges the shown documents. Without it, nothing is recorded")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
