@@ -42,7 +42,7 @@ func holdVariables(task, session, reason, question string, operator bool) (map[s
 	v := map[string]interface{}{"taskUuid": task, "sessionUuid": session}
 	if !operator {
 		if question != "" {
-			return nil, errors.New("--question goes with --operator: it is what the session holding the task asks the operator")
+			return nil, errors.New("--question goes with --operator: it is what the session holding the task, or the coordinator seat, asks the operator")
 		}
 		if reason == "" {
 			return nil, errors.New("give --reason: why the task waits for a human")
@@ -107,9 +107,10 @@ the withdrawal is refused: return it or ask the seat.`,
 
 func init() {
 	agentTaskHoldCmd.Flags().BoolVar(&holdOperator, "operator", false,
-		"Park the hop you hold for the operator: an OPERATOR hold with --question; a person's release answers it")
+		"Park for the operator: the hop you hold, or, from the coordinator seat, a task nobody is working"+
+			" (PENDING_INTAKE, QUEUED, AWAITING_COORDINATOR, DELIVERING); an OPERATOR hold with --question that a person answers")
 	agentTaskHoldCmd.Flags().StringVar(&holdQuestion, "question", "",
-		"With --operator: what the operator is to decide, shown on the task as awaiting the operator")
+		"With --operator: what the operator is to decide (the seat: with the options and a recommendation), shown on the task as awaiting the operator")
 	agentTaskWithdrawCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "The session that registered the task — required")
 	_ = agentTaskWithdrawCmd.MarkPersistentFlagRequired("session")
 	agentTaskWithdrawCmd.Flags().StringVar(&withdrawReason, "reason", "", "Why the registration is withdrawn — required")
