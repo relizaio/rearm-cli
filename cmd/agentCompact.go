@@ -118,6 +118,7 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 	case "DELIVERING":
 		lines = append(lines, "delivering: it completes when its PRs merge")
 	}
+	lines = append(lines, baseMovedLines(t)...)
 	return strings.Join(lines, "\n")
 }
 
