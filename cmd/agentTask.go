@@ -553,10 +553,12 @@ task, and the hop resumes with you.
 The coordinator seat parks a task nobody is working for a person's decision the same way, with
 --operator --question (task RD4-17): in PENDING_INTAKE, QUEUED, AWAITING_COORDINATOR or DELIVERING.
 Put the question, the options you see and your recommendation in it. A person answers by releasing
-the hold with a note, or by acting on the task (an attestation, a supersede, a complete, a reopen);
-either is recorded as the answer, and the task returns to the state it was parked from, so a
-DELIVERING task goes on delivering. Until then delivered, --abandoned, supersedepr, complete and
-reopen are refused for every session. A DELIVERING task is parked only this way.`,
+the hold with a note, or by anything else they do on the task (answering its questions, an
+attestation, a supersede, a complete, a reopen, a cancel, a new order or level); either is recorded
+as the answer, reading "<action> by <person>: <note>", and the task returns to the state it was
+parked from, so a DELIVERING task goes on delivering, before the action moves it on if it does.
+Until then every task verb a session runs on it is refused (delivered, --abandoned, supersedepr,
+complete, reopen, cancel, order, level and the rest). A DELIVERING task is parked only this way.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runHold(args[0])

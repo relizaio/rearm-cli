@@ -86,6 +86,10 @@ func TestTheHoldHelpNamesTheSeatsOperatorHold(t *testing.T) {
 		"in PENDING_INTAKE, QUEUED, AWAITING_COORDINATOR or DELIVERING",
 		"the task returns to the state it was parked from",
 		"A DELIVERING task is parked only this way.",
+		// RD4-17 architecture round 2: any person's action is the answer, and every session verb is refused
+		"or by anything else they do on the task (answering its questions,",
+		`reading "<action> by <person>: <note>"`,
+		"Until then every task verb a session runs on it is refused",
 	} {
 		if !strings.Contains(long, want) {
 			t.Errorf("task hold --help lacks %q", want)
