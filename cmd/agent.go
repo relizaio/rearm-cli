@@ -42,7 +42,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "AI Agent commands (coding agents — Claude Code, Cursor, Codex, …)",
-	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection.`,
+	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection. Its core, and each section by the action it covers, print with 'rearm agent orientation [--section <name>]'.`,
 }
 
 var agentSessionCmd = &cobra.Command{
@@ -60,6 +60,7 @@ var (
 	agentIconKind     string
 	agentColor        string
 	clientSessionId   string
+	claudeSessionId   string
 	sessionTitle      string
 )
 
@@ -72,10 +73,31 @@ calls with the same --agent-name resolve to the same agent row.
 
 The session's clientSessionId is what the commit trailer
 (ReARM-Agentic-Session:) references later; if --client-session-id is
-omitted, the server defaults it to the new row's uuid. Calling init
-twice with the same --client-session-id on an OPEN session is
-idempotent — the existing session is returned.`,
+omitted, the server defaults it to the new row's uuid. A
+--client-session-id is unique forever within the agent: init refuses
+one already used by any session, OPEN, CLOSED or BLOCKED, and names
+that session. To retry after a crash, keep using the session you have;
+after a BLOCKED or CLOSED one, pick a fresh id.
+
+Under Claude Code the session also records Claude Code's own session id
+($CLAUDE_CODE_SESSION_ID), so it can be traced back to the conversation.
+Pass --provider-remote-session-id for a hosted (bridge) session id,
+--no-provider-session to opt out, or --require-provider-session to fail
+when no id can be found.
+
+The session also records how it was opened: the credential and, for a
+CLI login, who approved it; the address the server saw; and what this
+CLI reports about the machine -- hostname, OS, time zone and version.
+Hostname and address are shown only to org admins and the session's
+owner. --no-device-info stops the CLI reporting the machine.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Resolved before anything is sent, so --require-provider-session refuses without
+		// opening a session it would then have to explain.
+		ps, err := resolveProviderSession(currentProviderSessionOpts())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "rearm:", err)
+			os.Exit(1)
+		}
 		query := rearm.SessionInitializeProgrammatic_Operation
 		input := map[string]interface{}{
 			"agentName": agentName,
@@ -101,14 +123,66 @@ idempotent — the existing session is returned.`,
 		if sessionTitle != "" {
 			input["title"] = sessionTitle
 		}
+		if ps != nil {
+			input["providerSession"] = ps
+		}
+		if device := sessionDeviceInput(noDeviceInfo); device != nil {
+			input["device"] = device
+		}
 		variables := map[string]interface{}{"sessionInit": input}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
-		emitJson(data["sessionInitializeProgrammatic"])
+		session := data["sessionInitializeProgrammatic"]
+		recordInitState(session)
+		emitJson(session)
 	},
+}
+
+// recordInitState writes the local state file the usage hooks read.
+//
+// Best-effort and never fatal: init's job is to open the session on the server, and that has
+// already succeeded by the time we get here. Failing the command because a state file could not be
+// written would turn a degraded feature into a broken one.
+func recordInitState(session interface{}) {
+	m, ok := session.(map[string]interface{})
+	if !ok {
+		return
+	}
+	uuid, _ := m["uuid"].(string)
+	if uuid == "" {
+		return
+	}
+	clientId, _ := m["clientSessionId"].(string)
+	if clientId == "" {
+		clientId = clientSessionId
+	}
+	if clientId == "" {
+		// The server defaulted it to the row uuid.
+		clientId = uuid
+	}
+	claudeId := claudeSessionId
+	if claudeId == "" && providerSessionId != "" && (providerName == "" || providerName == claudeCodeProvider) {
+		claudeId = providerSessionId
+	}
+	if claudeId == "" {
+		// Claude Code exports its session id to what it runs, so an agent that did not pass the
+		// flag still gets the mapping for free. The name was checked against a running instance
+		// rather than assumed -- it is CLAUDE_CODE_SESSION_ID, and its value is exactly the
+		// sessionId the transcript carries. An earlier guess of CLAUDE_SESSION_ID is unset in
+		// practice, which would have left every hook unable to find its session.
+		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
+	}
+	st := &agentSessionState{
+		SessionUuid:       uuid,
+		ClientSessionId:   clientId,
+		ExternalSessionId: claudeId,
+	}
+	if err := writeAgentState(st); err != nil {
+		fmt.Fprintf(os.Stderr, "rearm: session opened, but local usage state could not be written: %v\n", err)
+	}
 }
 
 var agentSessionTouchCmd = &cobra.Command{
@@ -120,7 +194,7 @@ var agentSessionTouchCmd = &cobra.Command{
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["sessionTouchProgrammatic"])
@@ -136,8 +210,13 @@ var agentSessionCloseCmd = &cobra.Command{
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
+		}
+		// The session is over; its local state is now just a stale mapping that a later Claude
+		// session reusing the id would pick up. Removed after the close succeeds, never before.
+		if st := findStateBySessionUuid(args[0]); st != nil {
+			removeAgentState(st)
 		}
 		emitJson(data["sessionCloseProgrammatic"])
 	},
@@ -159,7 +238,7 @@ the current full state.`,
 		variables := map[string]interface{}{"sessionUuid": args[0]}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["sessionProgrammatic"])
@@ -228,7 +307,7 @@ permission on its component/product.`,
 		}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["agenticReleaseProgrammatic"])
@@ -274,7 +353,7 @@ recommended cadence. See $REARM_URL/api/agents/orientation.md.`,
 		variables := map[string]interface{}{"inboxRequest": inboxRequest}
 		data, err := sendGraphQLRequest(query, variables)
 		if err != nil {
-			printGqlError(err)
+			printRefusal(err)
 			os.Exit(1)
 		}
 		emitJson(data["agentSessionInboxProgrammatic"])
@@ -309,11 +388,23 @@ The canonical AGENTIC_REPORT case:
     --tag agenticPhase=ORIENTATION
 
 --tag is repeatable. Tags are stored verbatim and surface to the
-CEL session.* policy surface.`,
+CEL session.* policy surface.
+
+--digest is optional and repeatable: <algo>:<hex>[:<scope>], e.g.
+--digest sha256:<64 hex chars>. The scope defaults to ORIGINAL_FILE (the file as
+you had it); OCI_STORAGE and REARM may also be declared. ReARM computes the
+digest of what it stores itself, so leave --digest out unless you have one to
+declare.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if addArtifactFile == "" {
 			fmt.Fprintln(os.Stderr, "--file is required")
+			os.Exit(1)
+		}
+		// Parsed before the file is read: a bad digest should fail before anything is uploaded.
+		digestRecords, err := parseDigestFlags(addArtifactDigests)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		if addArtifactType == "" {
@@ -356,8 +447,9 @@ CEL session.* policy surface.`,
 		if len(tags) > 0 {
 			art["tags"] = tags
 		}
-		if len(addArtifactDigests) > 0 {
-			art["digestRecords"] = addArtifactDigests
+		if len(digestRecords) > 0 {
+			// DigestRecordInput objects: the server refuses a bare string here.
+			art["digestRecords"] = digestRecords
 		}
 
 		mutation := rearm.SessionAddArtifact_Operation
@@ -383,6 +475,7 @@ func init() {
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentIconKind, "agent-icon", "", "Dashboard glyph for the agent — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
 	agentSessionInitCmd.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
+	agentSessionInitCmd.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Deprecated alias for --provider-session-id with --provider claude-code (defaults to $CLAUDE_CODE_SESSION_ID)")
 	agentSessionInitCmd.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
 	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
@@ -392,7 +485,7 @@ func init() {
 	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactType, "type", "", "ArtifactType enum (e.g. AGENTIC_REPORT) — required")
 	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactDisplayId, "display-id", "", "Display identifier; defaults to the file basename")
 	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactTags, "tag", nil, "Tag in key=value form — repeatable (e.g. --tag agenticPhase=ORIENTATION)")
-	agentSessionAddArtifactCmd.PersistentFlags().StringSliceVar(&addArtifactDigests, "digest", nil, "Pre-computed digest record(s) — optional, server auto-computes when omitted")
+	agentSessionAddArtifactCmd.PersistentFlags().StringArrayVar(&addArtifactDigests, "digest", nil, "Declared digest, <algo>:<hex>[:<scope>], e.g. sha256:<hex>; scope defaults to ORIGINAL_FILE (repeatable, optional)")
 	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("file")
 	_ = agentSessionAddArtifactCmd.MarkPersistentFlagRequired("type")
 
@@ -411,6 +504,11 @@ func init() {
 	agentSessionCmd.AddCommand(agentSessionAddArtifactCmd)
 	agentSessionCmd.AddCommand(agentSessionInboxCmd)
 	agentSessionCmd.AddCommand(agentSessionShowCmd)
+	agentSessionCmd.AddCommand(agentSessionUsageCmd)
+	// Claude Code specifics live one level down, so `rearm agent claude ...` is clearly one
+	// agent's integration rather than something every agent is expected to have.
+	agentCmd.AddCommand(agentClaudeCmd)
+	agentCmd.AddCommand(agentDocCmd)
 	agentReleaseCmd.AddCommand(agentReleaseShowCmd)
 	agentCmd.AddCommand(agentSessionCmd)
 	agentCmd.AddCommand(agentReleaseCmd)

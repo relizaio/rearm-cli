@@ -43,7 +43,7 @@ var (
 	// appearing as real dependencies (pkg:npm/a@1.0 is a substring of
 	// pkg:npm/a@1.0.1), and a substring of just the NAME would skip every
 	// component whose purl merely contains it.
-	rootSkipPurls    []string
+	rootSkipPurls []string
 )
 
 const bearBatchSize = 10

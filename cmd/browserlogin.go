@@ -32,7 +32,10 @@ import (
 // library then trades the refresh token for a one-hour access token on demand (when the
 // cached one is expired or within a minute of it) and hands every new token set back through
 // persistSessionTokens, so a CLI used at least once a month never asks to log in again; the
-// server slides the session 30 days per refresh, capped at 90 days after approval.
+// server slides the session 30 days per refresh, capped at 90 days after approval. A key that
+// bounds its sessions (sessionMaxMinutes) gives the session a hard end: login and whoami print
+// it, the client does not refresh past it, and a session that ends inside its first access token
+// comes with no refresh token at all -- the access token alone is the session.
 // `rearm logout` revokes the session server side and clears the file.
 //
 // The credentials file is $HOME/.rearm.env (the file the key-based `rearm login` always
@@ -45,6 +48,7 @@ var (
 	sessionAccessToken      string
 	sessionAccessTokenExp   time.Time
 	sessionExpiresAt        time.Time
+	sessionHardExpiry       time.Time
 	sessionKeyId            string
 	sessionOrg              string
 	sessionUri              string
@@ -69,7 +73,7 @@ func writeCredentials(values map[string]string) error {
 	if err != nil {
 		return err
 	}
-	keys := []string{"URI", "APIKEYID", "APIKEY", "ORG", "REFRESHTOKEN", "ACCESSTOKEN", "ACCESSTOKENEXPIRY", "SESSIONEXPIRY"}
+	keys := []string{"URI", "APIKEYID", "APIKEY", "ORG", "REFRESHTOKEN", "ACCESSTOKEN", "ACCESSTOKENEXPIRY", "SESSIONEXPIRY", "SESSIONHARDEXPIRY"}
 	var sb strings.Builder
 	for _, k := range keys {
 		if v, ok := values[k]; ok && v != "" {
@@ -106,6 +110,15 @@ func loadSessionConfig(v *viper.Viper) {
 	if s := v.GetString("sessionexpiry"); s != "" {
 		sessionExpiresAt, _ = time.Parse(time.RFC3339, s)
 	}
+	if s := v.GetString("sessionhardexpiry"); s != "" {
+		sessionHardExpiry, _ = time.Parse(time.RFC3339, s)
+	}
+}
+
+// sessionOnFile: a browser login is stored -- its refresh token, or, for a session that ends inside
+// its first access token, that token alone.
+func sessionOnFile() bool {
+	return sessionRefreshToken != "" || sessionAccessToken != ""
 }
 
 // inSessionMode: a browser login is on file and no explicit key secret was given.
@@ -134,7 +147,7 @@ func resolvedAuthMode() string {
 	if apiKey != "" {
 		return authKey
 	}
-	if sessionRefreshToken != "" {
+	if sessionOnFile() {
 		return authSession
 	}
 	if os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN") != "" && apiKeyId == "" {
@@ -161,6 +174,9 @@ func persistSessionTokens(t rearm.SessionTokens) {
 	if !t.SessionExpiry.IsZero() {
 		sessionExpiresAt = t.SessionExpiry
 	}
+	if !t.SessionHardExpiry.IsZero() {
+		sessionHardExpiry = t.SessionHardExpiry
+	}
 	if t.RefreshToken != "" {
 		sessionRefreshToken = t.RefreshToken
 	}
@@ -175,7 +191,26 @@ func persistSession() error {
 		"REFRESHTOKEN": sessionRefreshToken, "ACCESSTOKEN": sessionAccessToken,
 		"ACCESSTOKENEXPIRY": sessionAccessTokenExp.UTC().Format(time.RFC3339),
 		"SESSIONEXPIRY":     sessionExpiresAt.UTC().Format(time.RFC3339),
+		"SESSIONHARDEXPIRY": rfc3339OrEmpty(sessionHardExpiry),
 	})
+}
+
+func rfc3339OrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+// loginMessage is what a delivered login prints: the key, and when the session ends -- its hard
+// end when the key bounds its sessions, the sliding expiry otherwise.
+func loginMessage(keyID, org string, sessionExpiry, hardExpiry time.Time, path string) string {
+	if !hardExpiry.IsZero() {
+		return fmt.Sprintf("Signed in as key %s (org %s). The key bounds its sessions: this one ends at %s, with no refresh after that; run `rearm login` again then. Credentials written to %s",
+			keyID, org, hardExpiry.Local().Format(time.RFC1123), path)
+	}
+	return fmt.Sprintf("Signed in as key %s (org %s). Session valid until %s. Credentials written to %s",
+		keyID, org, sessionExpiry.Local().Format(time.RFC1123), path)
 }
 
 // openBrowser is best effort; the link is always printed too.
@@ -272,6 +307,7 @@ func browserLogin() error {
 			sessionAccessToken = login.Tokens.AccessToken
 			sessionAccessTokenExp = login.Tokens.AccessTokenExpiry
 			sessionExpiresAt = login.Tokens.SessionExpiry
+			sessionHardExpiry = login.Tokens.SessionHardExpiry
 			sessionKeyId = login.APIKeyID
 			sessionOrg = login.Org
 			sessionUri = rearmUri
@@ -279,8 +315,7 @@ func browserLogin() error {
 				return err
 			}
 			path, _ := credentialsPath()
-			fmt.Printf("Signed in as key %s (org %s). Session valid until %s. Credentials written to %s\n",
-				sessionKeyId, sessionOrg, sessionExpiresAt.Local().Format(time.RFC1123), path)
+			fmt.Println(loginMessage(sessionKeyId, sessionOrg, sessionExpiresAt, sessionHardExpiry, path))
 			return nil
 		default:
 			desc := login.Description
@@ -326,6 +361,9 @@ var whoamiCmd = &cobra.Command{
 			out["org"] = sessionOrg
 			if !sessionExpiresAt.IsZero() {
 				out["sessionExpiresAt"] = sessionExpiresAt.UTC().Format(time.RFC3339)
+			}
+			if !sessionHardExpiry.IsZero() {
+				out["sessionHardExpiry"] = sessionHardExpiry.UTC().Format(time.RFC3339)
 			}
 		} else if resolvedAuthMode() == authGitHubOIDC {
 			out["mode"] = "github-oidc"
