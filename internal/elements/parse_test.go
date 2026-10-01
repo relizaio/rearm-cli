@@ -147,7 +147,7 @@ func TestTermsAreTheBoldSpansOfTheContent(t *testing.T) {
 	src := "## REQ-1 Refuse a cycle\n" +
 		"parent: REQ-0\n" +
 		"\n" +
-		"The **rework point** is where a **finding** lands. A **finding**, again, and **scope**.\n" +
+		"The **rework point** is where a **review item** lands. A **review item**, again, and **scope**.\n" +
 		"Bold that **runs across\n" +
 		"two lines** is not a term, and neither is ** ** or ****.\n" +
 		"```\n" +
@@ -160,7 +160,7 @@ func TestTermsAreTheBoldSpansOfTheContent(t *testing.T) {
 	if ix.GrammarVersion != "1.2" {
 		t.Errorf("grammar %q", ix.GrammarVersion)
 	}
-	want := []string{"rework point", "finding", "scope", "Element at release"}
+	want := []string{"rework point", "review item", "scope", "Element at release"}
 	if got := ix.Elements[0].Terms; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("REQ-1 terms %q, want %q", got, want)
 	}

@@ -78,7 +78,7 @@ func TestTheCheckNeedsATaskAndAFile(t *testing.T) {
 	if err := runDocPublish(); err == nil || !strings.Contains(err.Error(), "--check previews") {
 		t.Errorf("no --task: %v", err)
 	}
-	docTask, docType, docIndexOnlyFlag, docIndexFile = "task-1", "QUESTIONS", true, "q.json"
+	docTask, docType, docIndexOnlyFlag, docIndexFile = "task-1", "BOARD_QUESTIONS", true, "q.json"
 	if err := runDocPublish(); err == nil || !strings.Contains(err.Error(), "--check previews") {
 		t.Errorf("--index-only: %v", err)
 	}

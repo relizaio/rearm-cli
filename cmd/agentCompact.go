@@ -154,8 +154,8 @@ func jsonLine(v interface{}) string {
 func compactCommands() []*cobra.Command {
 	return []*cobra.Command{
 		agentTaskRegisterCmd, agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd, agentTaskAuthorizeCmd,
-		agentTaskHoldCmd, agentTaskReleaseholdCmd, agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd,
-		agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd, agentTaskReopenCmd,
+		agentTaskHoldCmd, agentTaskLiftholdCmd, agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd,
+		agentTaskWorkLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd, agentTaskReopenCmd,
 		agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskSetGroupCmd, agentTaskTagCmd, agentDocPublishCmd,
 		agentTaskSupersedeCmd, agentTaskWithdrawCmd, agentTaskCommissionCmd,
 	}

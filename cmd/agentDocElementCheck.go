@@ -26,9 +26,9 @@ import (
 )
 
 // The element checks (elements.md §7). The board runs them when an element-bearing document is
-// published and cuts the result as a CHECK_REPORT round on the task; a failure on a check the board
+// published and cuts the result as a BOARD_ELEMENT_CHECK_REPORT round on the task; a failure on a check the board
 // blocks on refuses the sign-off that would hand the document over. `doc publish` prints the report
-// it produced, and `doc check` re-runs the checks once the inputs have moved.
+// it produced, and `doc element-check` re-runs the checks once the inputs have moved.
 
 var (
 	checkSession string
@@ -37,14 +37,14 @@ var (
 	checkJson    bool
 )
 
-// checkSummary renders a report for a terminal: one line of counts, then each failing check with
+// elementCheckSummary renders a report for a terminal: one line of counts, then each failing check with
 // its offences, and what a blocking failure means for the sign-off. An empty result -- no report --
 // says so rather than printing nothing.
-func checkSummary(release map[string]interface{}) []string {
+func elementCheckSummary(release map[string]interface{}) []string {
 	doc, _ := release["document"].(map[string]interface{})
-	report, _ := doc["checks"].(map[string]interface{})
+	report, _ := doc["elementChecks"].(map[string]interface{})
 	if report == nil {
-		return []string{"checks: no report for this document (component-scoped documents are not checked yet)"}
+		return []string{"element checks: no report for this document (component-scoped documents are not checked yet)"}
 	}
 	results, _ := report["results"].([]interface{})
 	pass, fail, skip := 0, 0, 0
@@ -75,7 +75,7 @@ func checkSummary(release map[string]interface{}) []string {
 		}
 	}
 	version, _ := report["catalogueVersion"].(string)
-	head := fmt.Sprintf("checks (%s): %d pass, %d fail, %d skip", version, pass, fail, skip)
+	head := fmt.Sprintf("element checks (%s): %d pass, %d fail, %d skip", version, pass, fail, skip)
 	if round, ok := doc["round"].(float64); ok {
 		head += fmt.Sprintf(" (report round %d)", int(round))
 	}
@@ -84,29 +84,29 @@ func checkSummary(release map[string]interface{}) []string {
 	}
 	out := append([]string{head}, detail...)
 	if len(blocking) > 0 {
-		out = append(out, "sign-off will be refused until this passes: fix and republish, or run `rearm agent doc check` once the inputs change")
+		out = append(out, "sign-off will be refused until this passes: fix and republish, or run `rearm agent doc element-check` once the inputs change")
 	}
 	return out
 }
 
-// printCheckReport reads the report the board cut for a document just published, and prints it on
+// printElementCheckReport reads the report the board cut for a document just published, and prints it on
 // stderr so the publish's JSON on stdout stays what scripts parse.
-func printCheckReport(releaseUuid string) {
-	data, err := sendGraphQLRequest(rearm.AgentCheckReportProgrammatic_Operation,
+func printElementCheckReport(releaseUuid string) {
+	data, err := sendGraphQLRequest(rearm.AgentElementCheckReportProgrammatic_Operation,
 		map[string]interface{}{"releaseUuid": releaseUuid})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "checks: could not read the report: "+describeError(err))
+		fmt.Fprintln(os.Stderr, "element checks: could not read the report: "+describeError(err))
 		return
 	}
-	release, _ := data["agentCheckReportProgrammatic"].(map[string]interface{})
-	for _, line := range checkSummary(release) {
+	release, _ := data["agentElementCheckReportProgrammatic"].(map[string]interface{})
+	for _, line := range elementCheckSummary(release) {
 		fmt.Fprintln(os.Stderr, line)
 	}
 }
 
-// checkTargets picks, from a task's documents (newest first), the newest release of each
+// elementCheckTargets picks, from a task's documents (newest first), the newest release of each
 // specification that carries an element index: what the checks are about.
-func checkTargets(task map[string]interface{}) []map[string]interface{} {
+func elementCheckTargets(task map[string]interface{}) []map[string]interface{} {
 	docs, _ := task["documents"].([]interface{})
 	taskUuid, _ := task["uuid"].(string)
 	seen := map[string]bool{}
@@ -127,7 +127,7 @@ func checkTargets(task map[string]interface{}) []map[string]interface{} {
 	return out
 }
 
-func runDocCheck() error {
+func runDocElementCheck() error {
 	if checkSession == "" {
 		return fmt.Errorf("--session is required")
 	}
@@ -141,13 +141,13 @@ func runDocCheck() error {
 	if checkRelease != "" {
 		targets = append(targets, target{checkRelease, checkRelease})
 	} else {
-		data, err := sendGraphQLRequest(rearm.AgentTaskCheckTargetsProgrammatic_Operation,
+		data, err := sendGraphQLRequest(rearm.AgentTaskElementCheckTargetsProgrammatic_Operation,
 			map[string]interface{}{"taskUuid": checkTask})
 		if err != nil {
 			return fmt.Errorf("could not read the task's documents: %s", describeError(err))
 		}
 		task, _ := data["agentTaskProgrammatic"].(map[string]interface{})
-		for _, rd := range checkTargets(task) {
+		for _, rd := range elementCheckTargets(task) {
 			doc, _ := rd["document"].(map[string]interface{})
 			uuid, _ := rd["uuid"].(string)
 			label := fmt.Sprintf("%v", doc["specification"])
@@ -162,12 +162,12 @@ func runDocCheck() error {
 	}
 	var results []interface{}
 	for _, t := range targets {
-		data, err := sendGraphQLRequest(rearm.AgentCheckRunProgrammatic_Operation,
+		data, err := sendGraphQLRequest(rearm.AgentElementCheckRunProgrammatic_Operation,
 			map[string]interface{}{"sessionUuid": session, "releaseUuid": t.release})
 		if err != nil {
 			return fmt.Errorf("checking %s: %s", t.label, describeError(err))
 		}
-		release, _ := data["agentCheckRunProgrammatic"].(map[string]interface{})
+		release, _ := data["agentElementCheckRunProgrammatic"].(map[string]interface{})
 		if checkJson {
 			results = append(results, release)
 			continue
@@ -175,7 +175,7 @@ func runDocCheck() error {
 		if len(targets) > 1 {
 			fmt.Println(t.label + ":")
 		}
-		for _, line := range checkSummary(release) {
+		for _, line := range elementCheckSummary(release) {
 			fmt.Println(line)
 		}
 	}
@@ -189,8 +189,8 @@ func runDocCheck() error {
 	return nil
 }
 
-var agentDocCheckCmd = &cobra.Command{
-	Use:   "check",
+var agentDocElementCheckCmd = &cobra.Command{
+	Use:   "element-check",
 	Short: "Re-run the element checks of a document (or of every document of a task) in its current scope",
 	Long: `Runs the board's element checks over a document again, against the releases it can
 see now -- its task's latest documents and the inputs bound to the current assignment -- and
@@ -198,7 +198,7 @@ prints what they found (elements.md §7).
 
 The board already ran them when the document was published. Re-run when an input has moved:
 an upstream round landed, a draft was baselined. A run whose result is the newest report's
-returns that report; otherwise the board cuts a new CHECK_REPORT round.
+returns that report; otherwise the board cuts a new BOARD_ELEMENT_CHECK_REPORT round.
 
 A failure on a check the board blocks on refuses the sign-off that hands the document over.
 
@@ -206,7 +206,7 @@ A failure on a check the board blocks on refuses the sign-off that hands the doc
   --task <uuid>      the newest release of each of the task's documents that has elements
   --json             the report releases as the server returned them`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := runDocCheck(); err != nil {
+		if err := runDocElementCheck(); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
 			os.Exit(1)
 		}
@@ -214,10 +214,10 @@ A failure on a check the board blocks on refuses the sign-off that hands the doc
 }
 
 func init() {
-	f := agentDocCheckCmd.Flags()
+	f := agentDocElementCheckCmd.Flags()
 	f.StringVar(&checkSession, "session", "", "session working the task — required")
 	f.StringVar(&checkRelease, "release", "", "the document release to check")
 	f.StringVar(&checkTask, "task", "", "check every element-bearing document of this task")
 	f.BoolVar(&checkJson, "json", false, "print the report releases as JSON")
-	agentDocCmd.AddCommand(agentDocCheckCmd)
+	agentDocCmd.AddCommand(agentDocElementCheckCmd)
 }

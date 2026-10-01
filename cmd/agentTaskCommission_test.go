@@ -37,7 +37,7 @@ func TestCommissionVariables(t *testing.T) {
 		{name: "every flag", opts: full, want: map[string]interface{}{"boardUuid": commissionBoardUuid, "role": "tester",
 			"title": "measure it", "sessionUuid": "s-1", "brief": "How slow is the board page?", "fromTask": "t-1",
 			"inputs": []string{"r-1", "r-2"}, "budgetMicros": int64(2_500_000), "deadline": "2026-10-02T12:00:00Z",
-			"review": "lead", "returnTo": "TASK", "level": 1, "group": "ui",
+			"review": "lead", "returnTo": "TASK", "workLevel": 1, "group": "ui",
 			"tags": []map[string]interface{}{{"key": "perf"}}}},
 		{name: "a person, standalone", opts: commissionOpts{board: commissionBoardUuid, role: "researcher", title: "t",
 			brief: "b", deadline: "2026-10-05T09:30:00+02:00"},
@@ -134,7 +134,7 @@ func TestTheCommissionIsSentAndPrintedCompactly(t *testing.T) {
 
 func TestTheCommissionVerbTakesItsFlagsAndATaskKey(t *testing.T) {
 	for _, flag := range []string{"session", "board", "role", "title", "brief", "brief-file", "from-task", "input",
-		"budget", "deadline", "review", "return-to", "level", "group", "tag", "json"} {
+		"budget", "deadline", "review", "return-to", "work-level", "group", "tag", "json"} {
 		if agentTaskCommissionCmd.Flags().Lookup(flag) == nil {
 			t.Errorf("task commission has no --%s", flag)
 		}
@@ -158,7 +158,7 @@ func TestTheBriefShowsAnInvestigation(t *testing.T) {
 	}
 	out := renderTaskBrief(&taskBrief{Key: "RD-13", Role: "tester", Task: fields})
 	for _, want := range []string{"investigation: a report by tester, reviewed by lead, due 2026-10-02T12:00:00Z",
-		"Deliver an INVESTIGATION_REPORT and no code", "- pinned inputs: ARCHITECTURE r-1"} {
+		"Deliver a BOARD_INVESTIGATION_REPORT and no code", "- pinned inputs: ARCHITECTURE r-1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the brief lacks %q", want)
 		}

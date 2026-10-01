@@ -111,7 +111,7 @@ func hopSignoff(t *testing.T, task string) {
 	stdoutOf(t, func() { agentTaskSignoffCmd.Run(agentTaskSignoffCmd, []string{task}) })
 }
 
-// The RD3-5 shape: an earlier hop of the same session on the same task left a QUESTIONS round behind (its
+// The RD3-5 shape: an earlier hop of the same session on the same task left a BOARD_QUESTIONS round behind (its
 // sign-off named its outputs), and the next hop's sign-off without --outputs must not carry it.
 func TestASignOffCarriesThisHopsPublishesAndNothingFromAnEarlierHop(t *testing.T) {
 	f := hopWorld(t)

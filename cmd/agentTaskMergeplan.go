@@ -40,10 +40,10 @@ type mergeStep struct {
 	By           string `json:"by,omitempty"`
 	AtTestedHead bool   `json:"atTestedHead"`
 	Command      string `json:"command,omitempty"`
-	// Attest is the command that records the merge where the board cannot see it (task 18c5c293):
-	// set on a ready PR that is unregistered here, or on a board whose delivery mode is ATTESTED.
-	Attest string `json:"attest,omitempty"`
-	Note   string `json:"note,omitempty"`
+	// Declare is the command that records the merge where the board cannot see it (task 18c5c293):
+	// set on a ready PR that is unregistered here, or on a board whose delivery mode is DECLARED.
+	Declare string `json:"declare,omitempty"`
+	Note    string `json:"note,omitempty"`
 	// at is the full head a ready PR merges at.
 	at string
 }
@@ -151,15 +151,15 @@ type mergeProcedure struct {
 	By                 string `json:"by"`
 	Method             string `json:"method"`
 	AtTestedHead       bool   `json:"atTestedHead"`
-	RequireAttestation bool   `json:"requireAttestation"`
+	RequireDeclaration bool   `json:"requireDeclaration"`
 	Order              string `json:"order"`
 }
 
 // procedureOf reads a board's effectiveDeliveryPolicy. A server from before the setting serves no
-// merge: the coordinator merges with a merge commit at the tested head, attesting on ATTESTED.
+// merge: the coordinator merges with a merge commit at the tested head, declaring on DECLARED.
 func procedureOf(policy map[string]interface{}) mergeProcedure {
 	mode, _ := policy["mode"].(string)
-	p := mergeProcedure{By: "COORDINATOR", Method: "MERGE", AtTestedHead: true, RequireAttestation: mode == "ATTESTED",
+	p := mergeProcedure{By: "COORDINATOR", Method: "MERGE", AtTestedHead: true, RequireDeclaration: mode == "DECLARED",
 		Order: "NOTE_ORDER"}
 	m, ok := policy["merge"].(map[string]interface{})
 	if !ok {
@@ -174,8 +174,8 @@ func procedureOf(policy map[string]interface{}) mergeProcedure {
 	if v, ok := m["atTestedHead"].(bool); ok {
 		p.AtTestedHead = v
 	}
-	if v, ok := m["requireAttestation"].(bool); ok {
-		p.RequireAttestation = v || mode == "ATTESTED"
+	if v, ok := m["requireDeclaration"].(bool); ok {
+		p.RequireDeclaration = v || mode == "DECLARED"
 	}
 	if v, ok := m["order"].(string); ok && v != "" {
 		p.Order = v
@@ -198,7 +198,7 @@ func boardProcedure(board string) (mergeProcedure, error) {
 // person's board is never the caller's; a role's is the caller's when its session signed the task
 // off in that role.
 func mayMerge(p mergeProcedure, task map[string]interface{}, session string) (bool, string) {
-	const after = " -- do not merge; attest after they do if the board requires it"
+	const after = " -- do not merge; declare after they do if the board requires it"
 	switch {
 	case p.By == "COORDINATOR":
 		return true, ""
@@ -275,7 +275,7 @@ func mergeCommandFor(prURL, head, target, method string, atTestedHead bool) stri
 
 // withProcedure sets each step to the board's procedure: its method, who merges and whether at the
 // tested head; for a ready PR, the command for that method when the caller merges, or the line that
-// says who does; and the attest line when the board requires one or CI does not report the PR here.
+// says who does; and the declare line when the board requires one or CI does not report the PR here.
 func withProcedure(steps []mergeStep, task string, p mergeProcedure, merges bool, notYours string) []mergeStep {
 	for i := range steps {
 		s := &steps[i]
@@ -292,8 +292,8 @@ func withProcedure(steps []mergeStep, task string, p mergeProcedure, merges bool
 				s.Note = "the GitLab project's merge method has to be rebase for this to rebase"
 			}
 		}
-		if p.RequireAttestation || !s.Registered {
-			s.Attest = "rearm agent task delivered " + task + " --session <seat-session> --unit " + s.PR +
+		if p.RequireDeclaration || !s.Registered {
+			s.Declare = "rearm agent task declare-delivery " + task + " --session <seat-session> --unit " + s.PR +
 				" --commit <merge sha>"
 		}
 	}
@@ -321,19 +321,19 @@ func printMergePlan(steps []mergeStep) {
 		}
 		fmt.Println()
 		if s.TestedHead != "" {
-			fmt.Printf("  tested: %s\n", s.TestedHead)
+			fmt.Printf("  tested:  %s\n", s.TestedHead)
 		}
 		if s.Head != "" {
-			fmt.Printf("  head:   %s\n", s.Head)
+			fmt.Printf("  head:    %s\n", s.Head)
 		}
 		if s.Command != "" {
-			fmt.Printf("  merge:  %s\n", s.Command)
+			fmt.Printf("  merge:   %s\n", s.Command)
 		}
-		if s.Attest != "" {
-			fmt.Printf("  attest: %s\n", s.Attest)
+		if s.Declare != "" {
+			fmt.Printf("  declare: %s\n", s.Declare)
 		}
 		if s.Note != "" {
-			fmt.Printf("  note:   %s\n", s.Note)
+			fmt.Printf("  note:    %s\n", s.Note)
 		}
 	}
 }
@@ -353,7 +353,7 @@ The board's delivery.merge decides the rest (task 71a3dd22): the method (--merge
 --rebase; a git fast-forward sequence for FAST_FORWARD), whether the head is held (atTestedHead),
 and who merges. On a board where a person merges, or a role and --session is not a session that
 signed the task off in that role, the plan says so instead of printing merge commands. After each
-command, an attest line records the merge where the board requires it or cannot see it: fill in
+command, a declare line records the merge where the board requires it or cannot see it: fill in
 the merge sha.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

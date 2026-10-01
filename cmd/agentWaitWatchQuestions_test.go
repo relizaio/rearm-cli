@@ -14,7 +14,7 @@ import (
 var producingRoles = []map[string]interface{}{
 	{"uuid": "r-arch", "name": "Architect", "producesOutputs": []interface{}{map[string]interface{}{"specification": "ARCHITECTURE"}}},
 	{"uuid": "r-coder", "name": "coder", "producesOutputs": []interface{}{map[string]interface{}{"specification": "DETAILED_DESIGN"}}},
-	{"uuid": "r-tester", "name": "tester", "producesOutputs": []interface{}{map[string]interface{}{"specification": "TEST_REPORT"}}},
+	{"uuid": "r-tester", "name": "tester", "producesOutputs": []interface{}{map[string]interface{}{"specification": "BOARD_TEST_REPORT"}}},
 }
 
 // askedOn is a snapshot entry for a task whose question the coder asked the architect at 11:00.

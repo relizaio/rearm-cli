@@ -10,7 +10,7 @@ import (
 // Grammar 1.2 through the command layer (task RD4-6): the board's lists decide what a document defines,
 // read from effectiveElementFamilyEntries when the server serves them.
 
-const findingNote = "# Notes\n\n## T-1: the flaky test is fixed\n\nThe retry waits for the lock.\n"
+const reviewItemNote = "# Notes\n\n## T-1: the flaky test is fixed\n\nThe retry waits for the lock.\n"
 
 // withFamilyEntries stands in for the server's effectiveElementFamilyEntries; ok false is an older server.
 func withFamilyEntries(t *testing.T, fams map[string]elements.Family, ok bool) {
@@ -22,9 +22,9 @@ func withFamilyEntries(t *testing.T, fams map[string]elements.Family, ok bool) {
 
 var typedBoard = map[string]interface{}{"uuid": "b1"}
 
-func TestANoteNamingAFindingDefinesNothingAndSendsTheReference(t *testing.T) {
+func TestANoteNamingAReviewItemDefinesNothingAndSendsTheReference(t *testing.T) {
 	withFamilyEntries(t, elements.Defaults(), true)
-	extra, ix, err := elementsInput("DETAILED_DESIGN", []byte(findingNote), typedBoard)
+	extra, ix, err := elementsInput("DETAILED_DESIGN", []byte(reviewItemNote), typedBoard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,15 +39,15 @@ func TestANoteNamingAFindingDefinesNothingAndSendsTheReference(t *testing.T) {
 
 func TestATestReportSendsItsTestsOnlyToAServerThatServesTheLists(t *testing.T) {
 	withFamilyEntries(t, elements.Defaults(), true)
-	extra, ix, _ := elementsInput("TEST_REPORT", []byte(findingNote), typedBoard)
+	extra, ix, _ := elementsInput("BOARD_TEST_REPORT", []byte(reviewItemNote), typedBoard)
 	if extra == nil || len(ix.Elements) != 1 || ix.Elements[0].ID != "T-1" {
 		t.Fatalf("a test report defines its test ids: %+v", ix)
 	}
 	withFamilyEntries(t, nil, false)
-	if extra, _, _ := elementsInput("TEST_REPORT", []byte(findingNote), typedBoard); extra != nil {
+	if extra, _, _ := elementsInput("BOARD_TEST_REPORT", []byte(reviewItemNote), typedBoard); extra != nil {
 		t.Errorf("an older server refuses elements on an index type, so none are sent: %v", extra)
 	}
-	if extra, ix, _ := elementsInput("DETAILED_DESIGN", []byte(findingNote), typedBoard); extra == nil || len(ix.Elements) != 0 {
+	if extra, ix, _ := elementsInput("DETAILED_DESIGN", []byte(reviewItemNote), typedBoard); extra == nil || len(ix.Elements) != 0 {
 		t.Errorf("a prose type still sends, sorted by the default lists: %+v", ix)
 	}
 }
@@ -56,15 +56,15 @@ func TestTheBoardsOwnListsWin(t *testing.T) {
 	fams := elements.Defaults()
 	fams["T"] = elements.Family{Name: "test", DefinedIn: []string{"DETAILED_DESIGN"}}
 	withFamilyEntries(t, fams, true)
-	_, ix, _ := elementsInput("DETAILED_DESIGN", []byte(findingNote), typedBoard)
+	_, ix, _ := elementsInput("DETAILED_DESIGN", []byte(reviewItemNote), typedBoard)
 	if len(ix.Elements) != 1 || len(ix.References) != 0 {
 		t.Errorf("a board that lists DETAILED_DESIGN for T keeps the note's T-1 a definition: %+v", ix)
 	}
-	if _, ix, _ := elementsInput("TEST_REPORT", []byte(findingNote), typedBoard); len(ix.Elements) != 0 || len(ix.References) != 1 {
+	if _, ix, _ := elementsInput("BOARD_TEST_REPORT", []byte(reviewItemNote), typedBoard); len(ix.Elements) != 0 || len(ix.References) != 1 {
 		t.Errorf("and a test report then references T-1 (TEST still defines there): %+v", ix)
 	}
 	fams["TEST"] = elements.Family{Name: "test", DefinedIn: []string{}}
-	if extra, _, _ := elementsInput("TEST_REPORT", []byte(findingNote), typedBoard); extra != nil {
+	if extra, _, _ := elementsInput("BOARD_TEST_REPORT", []byte(reviewItemNote), typedBoard); extra != nil {
 		t.Errorf("with TEST emptied too a test report defines nothing, so it sends nothing: %v", extra)
 	}
 }
@@ -85,15 +85,15 @@ func TestFamilyEntriesReadTheServersShape(t *testing.T) {
 
 func TestTheTypeIsReadOffTheBoardsPathTemplates(t *testing.T) {
 	templates := map[string]interface{}{
-		"ARCHITECTURE":    "design/{key}/architecture-{round}.md",
-		"DETAILED_DESIGN": "impl/{key}/notes-{round}.md",
-		"TEST_REPORT":     "tests/{key}/run-{round}.md",
+		"ARCHITECTURE":      "design/{key}/architecture-{round}.md",
+		"DETAILED_DESIGN":   "impl/{key}/notes-{round}.md",
+		"BOARD_TEST_REPORT": "tests/{key}/run-{round}.md",
 	}
 	root := "boards/rearm-dogfood-4/"
 	if got := typeOfPath("/tmp/docs/boards/rearm-dogfood-4/impl/RD4-6/notes-1.md", templates, root); got != "DETAILED_DESIGN" {
 		t.Errorf("notes: %q", got)
 	}
-	if got := typeOfPath("/tmp/docs/boards/rearm-dogfood-4/tests/RD4-6/run-12.md", templates, root); got != "TEST_REPORT" {
+	if got := typeOfPath("/tmp/docs/boards/rearm-dogfood-4/tests/RD4-6/run-12.md", templates, root); got != "BOARD_TEST_REPORT" {
 		t.Errorf("run: %q", got)
 	}
 	if got := typeOfPath("/tmp/docs/boards/other-board/impl/RD4-6/notes-1.md", templates, root); got != "" {

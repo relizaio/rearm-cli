@@ -92,29 +92,29 @@ func TestGroupInputSendsOnlyWhatWasGiven(t *testing.T) {
 		groupSetKey, groupSetName, groupSetDesc, groupSetStatus = "", "", "", ""
 		groupSetOrder, groupSetLevel, groupSetDeps, groupSetNoDeps, groupSetNoLvl = 0, 0, nil, false, false
 	}()
-	if err := c.ParseFlags([]string{"--key", "perms", "--depends-on", "basic,infra", "--default-level", "0"}); err != nil {
+	if err := c.ParseFlags([]string{"--key", "perms", "--depends-on", "basic,infra", "--default-work-level", "0"}); err != nil {
 		t.Fatal(err)
 	}
 	in, err := groupInput(c, groupSetKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]interface{}{"key": "perms", "dependsOn": []string{"basic", "infra"}, "defaultLevel": 0}
+	want := map[string]interface{}{"key": "perms", "dependsOn": []string{"basic", "infra"}, "defaultWorkLevel": 0}
 	if !reflect.DeepEqual(in, want) {
 		t.Errorf("input %v, want %v (level 0 is a level; name not given is not sent)", in, want)
 	}
 
 	c2 := &cobra.Command{Use: "set"}
 	addGroupSetFlags(c2)
-	if err := c2.ParseFlags([]string{"--key", "perms", "--no-depends-on", "--no-default-level", "--status", "closed"}); err != nil {
+	if err := c2.ParseFlags([]string{"--key", "perms", "--no-depends-on", "--no-default-work-level", "--status", "closed"}); err != nil {
 		t.Fatal(err)
 	}
 	in, err = groupInput(c2, groupSetKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lv, has := in["defaultLevel"]; !has || lv != nil {
-		t.Errorf("--no-default-level sends null: %v", in)
+	if lv, has := in["defaultWorkLevel"]; !has || lv != nil {
+		t.Errorf("--no-default-work-level sends null: %v", in)
 	}
 	if !reflect.DeepEqual(in["dependsOn"], []string{}) || in["status"] != "CLOSED" {
 		t.Errorf("clears and status: %v", in)

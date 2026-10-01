@@ -33,22 +33,22 @@ import (
 //
 //   rearm boards list [--org <uuid>]
 //   rearm boards tasks <board> [--status S]
-//   rearm boards register <board> --title t [--external-ref r] [--source-url u] [--parent p] [--level n]
-//   rearm boards authorize <task> --role r [--order n] [--depends-on t]... [--level n]
+//   rearm boards register <board> --title t [--external-ref r] [--source-url u] [--parent p] [--work-level n]
+//   rearm boards authorize <task> --role r [--order n] [--depends-on t]... [--work-level n]
 //   rearm boards order <task> --order n
 //   rearm boards complete <task> [--note n] [--skip-required-roles]
 //   rearm boards cancel <task> [--note n]
-//   rearm boards decide <task> --spec REVIEW_FINDINGS|TEST_REPORT [--dismiss ID=why]... [--accept ID=why]...
+//   rearm boards decide <task> --spec BOARD_REVIEW_ITEMS|BOARD_TEST_REPORT [--dismiss ID=why]... [--accept ID=why]...
 //                              [--priority ID=N]... [--file title --priority N] [--about SPEC]
 //   rearm boards answer <task> --id q --resolution text [--withdraw] | --all text [--keep-hold]
-//   rearm boards review <task> --approve | --reject [--note n] [--file title --priority N --about SPEC]
+//   rearm boards review <task> --accept | --reject [--note n] [--file title --priority N --about SPEC]
 //   rearm boards signoff <task> --outcome PASSED|REJECTED [--note n]
-//   rearm boards hold <task> --reason r | release <task> [--note n]
+//   rearm boards hold <task> --reason r | lifthold <task> [--note n]
 //   rearm boards require-review <task> [--off]
 //   rearm boards strength <task> --required 6.5 | --clear
 //   rearm boards budget <task> --usd 2.50 | --clear
-//   rearm boards level <task> --level 2 | --clear
-//   rearm boards lock <board> --reason r | unlock <board>
+//   rearm boards work-level <task> --work-level 2 | --clear
+//   rearm boards pause <board> --reason r | resume <board>
 //   rearm boards apply -f board.yaml [--dry-run]
 
 var (
@@ -58,7 +58,7 @@ var (
 	boardsExternalRef  string
 	boardsSourceUrl    string
 	boardsParent       string
-	boardsLevel        int
+	boardsWorkLevel    int
 	boardsRole         string
 	boardsOrder        int
 	boardsDependsOn    []string
@@ -76,7 +76,7 @@ var (
 	boardsWithdraw     bool
 	boardsAnswerAll    string
 	boardsKeepHold     bool
-	boardsApprove      bool
+	boardsAcceptGate   bool
 	boardsReject       bool
 	boardsOutcome      string
 	boardsReason       string
@@ -114,7 +114,7 @@ func personCredentialProblem(mode, keyId string) string {
 
 var boardsCmd = &cobra.Command{
 	Use:   "boards",
-	Short: "A person's board actions: register, authorize, complete, decide, answer, review, hold, lock",
+	Short: "A person's board actions: register, authorize, complete, decide, answer, review, hold, pause",
 	Long: `The board actions a person takes, from a terminal: the same operations as the
 buttons on the board page, recorded under your name.
 
@@ -168,10 +168,10 @@ var boardsTasksCmd = &cobra.Command{
 	},
 }
 
-// levelFlag is the --level a command was given, or nil when it was not: 0 (requirements) is a
-// level, so "not given" cannot be told by the value (RD2-1).
-func levelFlag(cmd *cobra.Command, level int) *int {
-	if !cmd.Flags().Changed("level") {
+// workLevelFlag is the --work-level a command was given, or nil when it was not: 0 (requirements) is a
+// work level, so "not given" cannot be told by the value (RD2-1).
+func workLevelFlag(cmd *cobra.Command, level int) *int {
+	if !cmd.Flags().Changed("work-level") {
 		return nil
 	}
 	return &level
@@ -192,7 +192,7 @@ func registerVariables(board, title, description, externalRef, sourceUrl, parent
 		input["parentTask"] = parent
 	}
 	if level != nil {
-		input["level"] = *level
+		input["workLevel"] = *level
 	}
 	return map[string]interface{}{"boardUuid": board, "input": input}
 }
@@ -203,7 +203,7 @@ var boardsRegisterCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars := registerVariables(personBoardArg(args[0]), boardsTitle, boardsDescription, boardsExternalRef,
-			boardsSourceUrl, boardsParent, levelFlag(cmd, boardsLevel))
+			boardsSourceUrl, boardsParent, workLevelFlag(cmd, boardsWorkLevel))
 		withGroupAndTags(vars["input"].(map[string]interface{}), taskGroupKey, taskTagKeys)
 		runGql(rearm.AgentTaskRegister_Operation, vars, "agentTaskRegister")
 	},
@@ -218,7 +218,7 @@ func authorizeVariables(task, role string, order int, orderSet bool, dependsOn [
 		vars["dependsOn"] = dependsOn
 	}
 	if level != nil {
-		vars["level"] = *level
+		vars["workLevel"] = *level
 	}
 	return vars
 }
@@ -229,7 +229,7 @@ var boardsAuthorizeCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentTaskAuthorize_Operation, authorizeVariables(args[0], boardsRole, boardsOrder,
-			cmd.Flags().Changed("order"), boardsDependsOn, levelFlag(cmd, boardsLevel)), "agentTaskAuthorize")
+			cmd.Flags().Changed("order"), boardsDependsOn, workLevelFlag(cmd, boardsWorkLevel)), "agentTaskAuthorize")
 	},
 }
 
@@ -259,7 +259,7 @@ func completeVariables(task, note string, skip bool) (map[string]interface{}, er
 
 var boardsCompleteCmd = &cobra.Command{
 	Use:   "complete <task-uuid>",
-	Short: "Complete a task; refused while a blocking finding is open or a required role has not passed",
+	Short: "Complete a task; refused while a blocking review item is open or a required role has not passed",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := completeVariables(args[0], boardsNote, boardsSkipRequired)
@@ -292,29 +292,29 @@ func splitPair(flag, v string) (string, string, error) {
 	return strings.TrimSpace(v[:i]), strings.TrimSpace(v[i+1:]), nil
 }
 
-// findingDecisions builds the decisions list shared by decide and review. --priority takes ID=N
-// to re-prioritise a finding, or a bare N for the findings --file raises.
-func findingDecisions(dismiss, accept, priority, file []string) ([]map[string]interface{}, error) {
+// reviewItemDecisions builds the decisions list shared by decide and review. --priority takes ID=N
+// to re-prioritise a review item, or a bare N for the review items --file raises.
+func reviewItemDecisions(dismiss, accept, priority, file []string) ([]map[string]interface{}, error) {
 	var out []map[string]interface{}
 	for _, d := range dismiss {
 		id, why, err := splitPair("dismiss", d)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]interface{}{"action": "DISMISS", "findingId": id, "resolution": why})
+		out = append(out, map[string]interface{}{"action": "DISMISS", "reviewItemId": id, "resolution": why})
 	}
 	for _, a := range accept {
 		id, why, err := splitPair("accept", a)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]interface{}{"action": "ACCEPT", "findingId": id, "resolution": why})
+		out = append(out, map[string]interface{}{"action": "ACCEPT", "reviewItemId": id, "resolution": why})
 	}
 	filePriority := 0
 	for _, p := range priority {
 		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil {
 			if filePriority != 0 {
-				return nil, fmt.Errorf("only one bare --priority N, for the findings --file raises")
+				return nil, fmt.Errorf("only one bare --priority N, for the review items --file raises")
 			}
 			filePriority = n
 			continue
@@ -327,13 +327,13 @@ func findingDecisions(dismiss, accept, priority, file []string) ([]map[string]in
 		if err != nil {
 			return nil, fmt.Errorf("--priority %s: %q is not a number", id, n)
 		}
-		out = append(out, map[string]interface{}{"action": "SET_PRIORITY", "findingId": id, "priority": level})
+		out = append(out, map[string]interface{}{"action": "SET_PRIORITY", "reviewItemId": id, "priority": level})
 	}
 	if len(file) > 0 && filePriority == 0 {
 		return nil, fmt.Errorf("--file needs --priority N (1 is the highest)")
 	}
 	if len(file) == 0 && filePriority != 0 {
-		return nil, fmt.Errorf("a bare --priority %d applies to --file; to re-prioritise a finding use --priority ID=N", filePriority)
+		return nil, fmt.Errorf("a bare --priority %d applies to --file; to re-prioritise a review item use --priority ID=N", filePriority)
 	}
 	for _, title := range file {
 		if strings.TrimSpace(title) == "" {
@@ -357,11 +357,11 @@ func aboutInput(spec, release string) map[string]interface{} {
 
 func decideVariables(task, spec string, dismiss, accept, priority, file []string, about, aboutRelease string) (map[string]interface{}, error) {
 	switch strings.ToUpper(spec) {
-	case "REVIEW_FINDINGS", "TEST_REPORT":
+	case "BOARD_REVIEW_ITEMS", "BOARD_TEST_REPORT":
 	default:
-		return nil, fmt.Errorf("--spec must be REVIEW_FINDINGS or TEST_REPORT")
+		return nil, fmt.Errorf("--spec must be BOARD_REVIEW_ITEMS or BOARD_TEST_REPORT")
 	}
-	decisions, err := findingDecisions(dismiss, accept, priority, file)
+	decisions, err := reviewItemDecisions(dismiss, accept, priority, file)
 	if err != nil {
 		return nil, err
 	}
@@ -377,15 +377,15 @@ func decideVariables(task, spec string, dismiss, accept, priority, file []string
 
 var boardsDecideCmd = &cobra.Command{
 	Use:   "decide <task-uuid>",
-	Short: "Decide findings as one round of the task's REVIEW_FINDINGS or TEST_REPORT",
-	Long: `Records one round of decisions on a task's findings. Whatever the round leaves blocking
+	Short: "Decide review items as one round of the task's BOARD_REVIEW_ITEMS or BOARD_TEST_REPORT",
+	Long: `Records one round of decisions on a task's review items. Whatever the round leaves blocking
 sends the task back to the role that produces what it is about (--about when the index does
 not say yet). Refused while an agent is working the task.
 
   --dismiss R-3='does not apply because ...'   WITHDRAWN, with the reason
   --accept R-4='risk taken because ...'        ACCEPTED, with the reason
   --priority R-5=2                             a new priority
-  --file 'title' --priority 1                  a new finding, numbered P-1, P-2 ... by the board`,
+  --file 'title' --priority 1                  a new review item, numbered P-1, P-2 ... by the board`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := decideVariables(args[0], boardsSpec, boardsDismiss, boardsAccept, boardsPriority, boardsFile,
@@ -393,7 +393,7 @@ not say yet). Refused while an agent is working the task.
 		if err != nil {
 			fail(err.Error())
 		}
-		runGql(rearm.AgentTaskDecideFindings_Operation, vars, "agentTaskDecideFindings")
+		runGql(rearm.AgentTaskDecideReviewItems_Operation, vars, "agentTaskDecideReviewItems")
 	},
 }
 
@@ -417,7 +417,7 @@ func answerVariables(task, id, resolution string, withdraw bool, all string, kee
 		return nil, fmt.Errorf("give --id with --resolution, or --all")
 	}
 	if keepHold {
-		vars["releaseHold"] = false
+		vars["liftHold"] = false
 	}
 	return vars, nil
 }
@@ -435,23 +435,23 @@ var boardsAnswerCmd = &cobra.Command{
 	},
 }
 
-func reviewVariables(task string, approve, reject bool, note string, file, priority []string, about, aboutRelease string) (map[string]interface{}, error) {
-	if approve == reject {
-		return nil, fmt.Errorf("give exactly one of --approve or --reject")
+func reviewVariables(task string, accept, reject bool, note string, file, priority []string, about, aboutRelease string) (map[string]interface{}, error) {
+	if accept == reject {
+		return nil, fmt.Errorf("give exactly one of --accept or --reject")
 	}
-	vars := map[string]interface{}{"taskUuid": task, "approve": approve}
+	vars := map[string]interface{}{"taskUuid": task, "accept": accept}
 	if note != "" {
 		vars["note"] = note
 	}
 	if len(file) > 0 || len(priority) > 0 {
-		if approve {
-			return nil, fmt.Errorf("findings go with --reject")
+		if accept {
+			return nil, fmt.Errorf("review items go with --reject")
 		}
-		findings, err := findingDecisions(nil, nil, priority, file)
+		reviewItems, err := reviewItemDecisions(nil, nil, priority, file)
 		if err != nil {
 			return nil, err
 		}
-		vars["findings"] = findings
+		vars["reviewItems"] = reviewItems
 	}
 	if a := aboutInput(about, aboutRelease); a != nil {
 		vars["about"] = a
@@ -461,10 +461,10 @@ func reviewVariables(task string, approve, reject bool, note string, file, prior
 
 var boardsReviewCmd = &cobra.Command{
 	Use:   "review <task-uuid>",
-	Short: "Your verdict on a human gate: --approve, or --reject with the findings that say why",
+	Short: "Your verdict on a human gate: --accept, or --reject with the review items that say why",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := reviewVariables(args[0], boardsApprove, boardsReject, boardsNote, boardsFile, boardsPriority,
+		vars, err := reviewVariables(args[0], boardsAcceptGate, boardsReject, boardsNote, boardsFile, boardsPriority,
 			boardsAbout, boardsAboutRelease)
 		if err != nil {
 			fail(err.Error())
@@ -500,9 +500,9 @@ var boardsHoldCmd = &cobra.Command{
 	},
 }
 
-// operatorReleaseVars are the variables of a person's release: the note and the role only when
-// given, so a bare release lets routing pick, as before (task 4c566d0d).
-func operatorReleaseVars(task, note, role string) map[string]interface{} {
+// operatorLiftVars are the variables of a person's hold lift: the note and the role only when
+// given, so a bare lift lets routing pick, as before (task 4c566d0d).
+func operatorLiftVars(task, note, role string) map[string]interface{} {
 	vars := map[string]interface{}{"taskUuid": task, "hold": false}
 	if note != "" {
 		vars["reason"] = note
@@ -513,16 +513,16 @@ func operatorReleaseVars(task, note, role string) map[string]interface{} {
 	return vars
 }
 
-var boardsReleaseCmd = &cobra.Command{
-	Use:   "release <task-uuid>",
-	Short: "Release a hold; on a question hold, --note is the answer",
-	Long: `Releases a hold. The task routes on from its last hop, as routing would have routed it;
---role names an active role on the board to send it to instead. Releasing a no-progress or
+var boardsLiftholdCmd = &cobra.Command{
+	Use:   "lifthold <task-uuid>",
+	Short: "Lift a hold; on a question hold, --note is the answer",
+	Long: `Lifts a hold. The task routes on from its last hop, as routing would have routed it;
+--role names an active role on the board to send it to instead. Lifting a no-progress or
 cycle-cap stop routes past that stop once. On a question hold, --note is the answer, and an
 answer takes no --role.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskOperatorHold_Operation, operatorReleaseVars(args[0], boardsNote, boardsRole), "agentTaskOperatorHold")
+		runGql(rearm.AgentTaskOperatorHold_Operation, operatorLiftVars(args[0], boardsNote, boardsRole), "agentTaskOperatorHold")
 	},
 }
 
@@ -579,7 +579,7 @@ func budgetVariables(task, usd string, clear bool) (map[string]interface{}, erro
 
 var boardsBudgetCmd = &cobra.Command{
 	Use:   "budget <task-uuid>",
-	Short: "Set what one task may spend, in dollars, or --clear; a raise does not release a budget hold",
+	Short: "Set what one task may spend, in dollars, or --clear; a raise does not lift a budget hold",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := budgetVariables(args[0], boardsBudget, boardsClear)
@@ -590,36 +590,36 @@ var boardsBudgetCmd = &cobra.Command{
 	},
 }
 
-// levelVariables are a task level's variables (RD2-1): 0 to 9, or --clear, which sends null so the
+// workLevelVariables are a task work level's variables (RD2-1): 0 to 9, or --clear, which sends null so the
 // task reads the board's default again.
-func levelVariables(task string, level int, levelSet, clear bool) (map[string]interface{}, error) {
+func workLevelVariables(task string, level int, levelSet, clear bool) (map[string]interface{}, error) {
 	vars := map[string]interface{}{"taskUuid": task}
 	switch {
 	case clear && levelSet:
-		return nil, fmt.Errorf("give --level or --clear, not both")
+		return nil, fmt.Errorf("give --work-level or --clear, not both")
 	case clear:
-		vars["level"] = nil
+		vars["workLevel"] = nil
 	case levelSet:
 		if level < 0 || level > 9 {
-			return nil, fmt.Errorf("--level is 0 to 9")
+			return nil, fmt.Errorf("--work-level is 0 to 9")
 		}
-		vars["level"] = level
+		vars["workLevel"] = level
 	default:
-		return nil, fmt.Errorf("give --level N or --clear")
+		return nil, fmt.Errorf("give --work-level N or --clear")
 	}
 	return vars, nil
 }
 
-var boardsTaskLevelCmd = &cobra.Command{
-	Use:   "level <task-uuid>",
-	Short: "Set a task's level, a rung of the board's ladder (refused on a board without one), or --clear to read the default",
+var boardsTaskWorkLevelCmd = &cobra.Command{
+	Use:   "work-level <task-uuid>",
+	Short: "Set a task's work level, a rung of the board's ladder (refused on a board without one), or --clear to read the default",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := levelVariables(args[0], boardsLevel, cmd.Flags().Changed("level"), boardsClear)
+		vars, err := workLevelVariables(args[0], boardsWorkLevel, cmd.Flags().Changed("work-level"), boardsClear)
 		if err != nil {
 			fail(err.Error())
 		}
-		runGql(rearm.AgentTaskSetLevel_Operation, vars, "agentTaskSetLevel")
+		runGql(rearm.AgentTaskSetWorkLevel_Operation, vars, "agentTaskSetWorkLevel")
 	},
 }
 
@@ -636,23 +636,23 @@ var boardsStrengthCmd = &cobra.Command{
 	},
 }
 
-var boardsLockCmd = &cobra.Command{
-	Use:   "lock <board>",
-	Short: "Operator lock: no new assignments until you unlock; the coordinator cannot lift it",
+var boardsPauseCmd = &cobra.Command{
+	Use:   "pause <board>",
+	Short: "Operator pause: no new assignments until you resume; the coordinator cannot lift it",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardOperatorLock_Operation,
-			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "lock": true, "reason": boardsReason}, "agentBoardOperatorLock")
+		runGql(rearm.AgentBoardOperatorPause_Operation,
+			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "pause": true, "reason": boardsReason}, "agentBoardOperatorPause")
 	},
 }
 
-var boardsUnlockCmd = &cobra.Command{
-	Use:   "unlock <board>",
-	Short: "Lift your operator lock",
+var boardsResumeCmd = &cobra.Command{
+	Use:   "resume <board>",
+	Short: "Resume the board: lift your operator pause",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentBoardOperatorLock_Operation,
-			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "lock": false}, "agentBoardOperatorLock")
+		runGql(rearm.AgentBoardOperatorPause_Operation,
+			map[string]interface{}{"boardUuid": personBoardArg(args[0]), "pause": false}, "agentBoardOperatorPause")
 	},
 }
 
@@ -672,13 +672,13 @@ func init() {
 	boardsRegisterCmd.Flags().StringVar(&boardsExternalRef, "external-ref", "", "tracker reference; required on a board with sources")
 	boardsRegisterCmd.Flags().StringVar(&boardsSourceUrl, "source-url", "", "link to the issue")
 	boardsRegisterCmd.Flags().StringVar(&boardsParent, "parent", "", "parent task uuid")
-	boardsRegisterCmd.Flags().IntVar(&boardsLevel, "level", 0, "task level on the board's target")
+	boardsRegisterCmd.Flags().IntVar(&boardsWorkLevel, "work-level", 0, "task work level on the board's target")
 	_ = boardsRegisterCmd.MarkFlagRequired("title")
 
 	boardsAuthorizeCmd.Flags().StringVar(&boardsRole, "role", "", "role to authorize the task for — required")
 	boardsAuthorizeCmd.Flags().IntVar(&boardsOrder, "order", 0, "order index")
 	boardsAuthorizeCmd.Flags().StringSliceVar(&boardsDependsOn, "depends-on", nil, "task uuids this one waits on")
-	boardsAuthorizeCmd.Flags().IntVar(&boardsLevel, "level", 0, "task level on the board's target")
+	boardsAuthorizeCmd.Flags().IntVar(&boardsWorkLevel, "work-level", 0, "task work level on the board's target")
 	_ = boardsAuthorizeCmd.MarkFlagRequired("role")
 
 	boardsOrderCmd.Flags().IntVar(&boardsOrder, "order", 0, "order index — required")
@@ -688,15 +688,15 @@ func init() {
 	boardsCompleteCmd.Flags().BoolVar(&boardsSkipRequired, "skip-required-roles", false, "complete without the required roles; needs --note")
 	boardsCancelCmd.Flags().StringVar(&boardsNote, "note", "", "why")
 
-	boardsDecideCmd.Flags().StringVar(&boardsSpec, "spec", "", "REVIEW_FINDINGS or TEST_REPORT — required")
-	boardsDecideCmd.Flags().StringArrayVar(&boardsDismiss, "dismiss", nil, "ID=why: the finding does not apply")
+	boardsDecideCmd.Flags().StringVar(&boardsSpec, "spec", "", "BOARD_REVIEW_ITEMS or BOARD_TEST_REPORT — required")
+	boardsDecideCmd.Flags().StringArrayVar(&boardsDismiss, "dismiss", nil, "ID=why: the review item does not apply")
 	boardsDecideCmd.Flags().StringArrayVar(&boardsAccept, "accept", nil, "ID=why: the risk is taken knowingly")
 	_ = boardsDecideCmd.MarkFlagRequired("spec")
 	for _, c := range []*cobra.Command{boardsDecideCmd, boardsReviewCmd} {
-		c.Flags().StringArrayVar(&boardsPriority, "priority", nil, "ID=N to re-prioritise a finding, or N for the findings --file raises")
-		c.Flags().StringArrayVar(&boardsFile, "file", nil, "raise a new finding with this title")
-		c.Flags().StringVar(&boardsAbout, "about", "", "the specification the findings are about, when the index does not say yet")
-		c.Flags().StringVar(&boardsAboutRelease, "about-release", "", "the release the findings are about")
+		c.Flags().StringArrayVar(&boardsPriority, "priority", nil, "ID=N to re-prioritise a review item, or N for the review items --file raises")
+		c.Flags().StringArrayVar(&boardsFile, "file", nil, "raise a new review item with this title")
+		c.Flags().StringVar(&boardsAbout, "about", "", "the specification the review items are about, when the index does not say yet")
+		c.Flags().StringVar(&boardsAboutRelease, "about-release", "", "the release the review items are about")
 	}
 
 	boardsAnswerCmd.Flags().StringVar(&boardsAnswerId, "id", "", "the question's id")
@@ -705,8 +705,8 @@ func init() {
 	boardsAnswerCmd.Flags().StringVar(&boardsAnswerAll, "all", "", "one answer for every open question")
 	boardsAnswerCmd.Flags().BoolVar(&boardsKeepHold, "keep-hold", false, "answer without lifting the question hold")
 
-	boardsReviewCmd.Flags().BoolVar(&boardsApprove, "approve", false, "approve the gated hop")
-	boardsReviewCmd.Flags().BoolVar(&boardsReject, "reject", false, "reject it; the findings say why")
+	boardsReviewCmd.Flags().BoolVar(&boardsAcceptGate, "accept", false, "accept the gated hop")
+	boardsReviewCmd.Flags().BoolVar(&boardsReject, "reject", false, "reject it; the review items say why")
 	boardsReviewCmd.Flags().StringVar(&boardsNote, "note", "", "your note")
 
 	boardsSignoffCmd.Flags().StringVar(&boardsOutcome, "outcome", "", "PASSED or REJECTED — required")
@@ -715,8 +715,8 @@ func init() {
 
 	boardsHoldCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
 	_ = boardsHoldCmd.MarkFlagRequired("reason")
-	boardsReleaseCmd.Flags().StringVar(&boardsNote, "note", "", "on a question hold, the answer")
-	boardsReleaseCmd.Flags().StringVar(&boardsRole, "role", "", "an active role to route the task to instead of the one routing would pick")
+	boardsLiftholdCmd.Flags().StringVar(&boardsNote, "note", "", "on a question hold, the answer")
+	boardsLiftholdCmd.Flags().StringVar(&boardsRole, "role", "", "an active role to route the task to instead of the one routing would pick")
 
 	boardsRequireReviewCmd.Flags().BoolVar(&boardsOff, "off", false, "clear the requirement")
 
@@ -725,11 +725,11 @@ func init() {
 
 	boardsBudgetCmd.Flags().StringVar(&boardsBudget, "usd", "", "what the task may spend, in dollars, e.g. 2.50")
 	boardsBudgetCmd.Flags().BoolVar(&boardsClear, "clear", false, "remove the task's budget")
-	boardsTaskLevelCmd.Flags().IntVar(&boardsLevel, "level", 0, "the task's level, a rung of the board's ladder")
-	boardsTaskLevelCmd.Flags().BoolVar(&boardsClear, "clear", false, "clear it: the task reads the board's default level")
+	boardsTaskWorkLevelCmd.Flags().IntVar(&boardsWorkLevel, "work-level", 0, "the task's work level, a rung of the board's ladder")
+	boardsTaskWorkLevelCmd.Flags().BoolVar(&boardsClear, "clear", false, "clear it: the task reads the board's default work level")
 
-	boardsLockCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
-	_ = boardsLockCmd.MarkFlagRequired("reason")
+	boardsPauseCmd.Flags().StringVar(&boardsReason, "reason", "", "why — required")
+	_ = boardsPauseCmd.MarkFlagRequired("reason")
 
 	boardsApplyCmd.Flags().StringVarP(&specFile, "file", "f", "", "the board file (YAML or JSON)")
 	boardsApplyCmd.Flags().BoolVar(&specDryRun, "dry-run", false, "show the change set without applying it")
@@ -737,8 +737,8 @@ func init() {
 
 	for _, c := range []*cobra.Command{boardsListCmd, boardsTasksCmd, boardsRegisterCmd, boardsAuthorizeCmd,
 		boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd, boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd,
-		boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd, boardsRequireReviewCmd, boardsStrengthCmd, boardsBudgetCmd, boardsTaskLevelCmd,
-		boardsLockCmd, boardsUnlockCmd, boardsApplyCmd} {
+		boardsSignoffCmd, boardsHoldCmd, boardsLiftholdCmd, boardsRequireReviewCmd, boardsStrengthCmd, boardsBudgetCmd, boardsTaskWorkLevelCmd,
+		boardsPauseCmd, boardsResumeCmd, boardsApplyCmd} {
 		boardsCmd.AddCommand(c)
 	}
 	rootCmd.AddCommand(boardsCmd)

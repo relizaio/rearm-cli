@@ -114,11 +114,11 @@ func acceptTaskKeys(cmd *cobra.Command, positional int, flags []*string, sliceFl
 
 func init() {
 	for _, c := range []*cobra.Command{
-		agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd, agentTaskHoldCmd, agentTaskReleaseholdCmd,
+		agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd, agentTaskHoldCmd, agentTaskLiftholdCmd,
 		agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd, agentTaskSplitCmd, agentTaskCompleteCmd,
 		agentTaskCancelCmd, agentTaskReopenCmd, agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskMergeplanCmd,
-		agentTaskDeliveredCmd, agentTaskSupersedeCmd, boardsDeliveredCmd, boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd,
-		boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd, boardsSignoffCmd, boardsHoldCmd, boardsReleaseCmd,
+		agentTaskDeclareDeliveryCmd, agentTaskSupersedeCmd, boardsDeclareDeliveryCmd, boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd,
+		boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd, boardsSignoffCmd, boardsHoldCmd, boardsLiftholdCmd,
 		boardsRequireReviewCmd, boardsBudgetCmd, boardsStrengthCmd,
 	} {
 		acceptTaskKeys(c, firstTaskArg, nil, nil)
@@ -128,7 +128,7 @@ func init() {
 	acceptTaskKeys(boardsAuthorizeCmd, firstTaskArg, nil, []*[]string{&boardsDependsOn})
 	acceptTaskKeys(boardsRegisterCmd, noTaskArgs, []*string{&boardsParent}, nil)
 	acceptTaskKeys(agentDocPublishCmd, noTaskArgs, []*string{&docTask}, nil)
-	acceptTaskKeys(agentDocCheckCmd, noTaskArgs, []*string{&checkTask}, nil)
+	acceptTaskKeys(agentDocElementCheckCmd, noTaskArgs, []*string{&checkTask}, nil)
 	acceptTaskKeys(agentSessionUsageCmd, noTaskArgs, []*string{&usageTask}, nil)
 }
 

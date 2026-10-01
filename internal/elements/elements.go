@@ -42,7 +42,7 @@ const (
 var DefaultFamilies = map[string]string{
 	"REQ": "requirement", "FN": "function", "PBS": "product", "IBS": "interface", "IF": "interface",
 	"DS": "data", "TEST": "test", "T": "test", "GLOSS": "glossary", "ADR": "decision", "UC": "use-case",
-	"CONOPS": "concept", "Q": "question", "F": "finding",
+	"CONOPS": "concept", "Q": "question", "F": "review-item",
 }
 
 // ProseTypes are the specification types that are not an index type, in the server's enum order:
@@ -62,7 +62,7 @@ var DefaultDefinedIn = func() map[string][]string {
 		}
 	}
 	return map[string][]string{
-		"test":        {"TEST_PLAN", "TEST_REPORT"},
+		"test":        {"TEST_PLAN", "BOARD_TEST_REPORT"},
 		"requirement": own("REQUIREMENTS"),
 		"decision":    {"DECISION_RECORD", "ARCHITECTURE"},
 		"function":    own("FUNCTIONS"),
@@ -72,8 +72,8 @@ var DefaultDefinedIn = func() map[string][]string {
 		"concept":     own("CONOPS"),
 		"use-case":    own("USE_CASES"),
 		"glossary":    glossary,
-		"question":    {"QUESTIONS"},
-		"finding":     {"REVIEW_FINDINGS"},
+		"question":    {"BOARD_QUESTIONS"},
+		"review-item": {"BOARD_REVIEW_ITEMS"},
 	}
 }()
 

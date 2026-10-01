@@ -13,7 +13,7 @@
   {
     "name": "the same heading in a test report defines",
     "file": "report-t-heading.md",
-    "specification": "TEST_REPORT",
+    "specification": "BOARD_TEST_REPORT",
     "index": "report-t-heading.index.json",
     "checks": {
       "ids.family": "PASS",
@@ -41,7 +41,7 @@
   {
     "name": "a questions document defines Q",
     "file": "questions-q-heading.md",
-    "specification": "QUESTIONS",
+    "specification": "BOARD_QUESTIONS",
     "index": "questions-q-heading.index.json",
     "checks": {
       "ids.family": "PASS"
@@ -60,9 +60,9 @@
     }
   },
   {
-    "name": "review findings define F",
+    "name": "review items define F",
     "file": "review-f-heading.md",
-    "specification": "REVIEW_FINDINGS",
+    "specification": "BOARD_REVIEW_ITEMS",
     "index": "review-f-heading.index.json",
     "checks": {
       "ids.family": "PASS"
@@ -80,7 +80,7 @@
   {
     "name": "a board override with an empty list makes test ids references only",
     "file": "report-t-heading.md",
-    "specification": "TEST_REPORT",
+    "specification": "BOARD_TEST_REPORT",
     "index": "override-empty.index.json",
     "elementFamilies": {
       "T": {
@@ -98,7 +98,7 @@
   {
     "name": "an unknown prefix where nothing is defined is a reference and passes ids.family",
     "file": "unknown-prefix.md",
-    "specification": "TEST_REPORT",
+    "specification": "BOARD_TEST_REPORT",
     "index": "unknown-prefix-elsewhere.index.json",
     "elementFamilies": {
       "T": {

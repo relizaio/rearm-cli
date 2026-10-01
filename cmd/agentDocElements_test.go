@@ -27,9 +27,9 @@ func TestAProseDocumentSendsItsElementIndexWithTheDigest(t *testing.T) {
 }
 
 func TestAnIndexTypeAndNoElementsSendNone(t *testing.T) {
-	for _, spec := range []string{"TEST_REPORT", "REVIEW_FINDINGS", "QUESTIONS"} {
+	for _, spec := range []string{"BOARD_TEST_REPORT", "BOARD_REVIEW_ITEMS", "BOARD_QUESTIONS"} {
 		if extra, _, _ := elementsInput(spec, []byte(designDoc), nil); extra != nil {
-			t.Errorf("%s carries a findings index, not elements: %v", spec, extra)
+			t.Errorf("%s carries a review item index, not elements: %v", spec, extra)
 		}
 	}
 	docNoElements = true

@@ -24,65 +24,65 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Releasing a stalled assignment (task RD3-4): the board's staleness sweep only ALERTs, and a person
+// Unassigning a stalled task (task RD3-4): the board's staleness sweep only ALERTs, and a person
 // -- or the coordinator seat -- puts an ASSIGNED task back to QUEUED for the same role, with a reason.
 // The holding session stays open; its later sign-off, publish or question on the task is refused,
-// naming who released it and when.
+// naming who unassigned it and when.
 
 var unassignReason string
 
 var agentTaskUnassignCmd = &cobra.Command{
 	Use:   "unassign <task>",
-	Short: "Coordinator: release a stalled assignment, putting the task back in the queue for the same role (--reason)",
+	Short: "Coordinator: unassign a stalled task, putting it back in the queue for the same role (--reason)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(unassignReason) == "" {
 			fail("give --reason: it goes on the task's history and the board")
 		}
-		runGqlCompact(rearm.AgentTaskReleaseAssignmentProgrammatic_Operation, map[string]interface{}{
+		runGqlCompact(rearm.AgentTaskUnassignProgrammatic_Operation, map[string]interface{}{
 			"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": unassignReason,
-		}, "agentTaskReleaseAssignmentProgrammatic")
+		}, "agentTaskUnassignProgrammatic")
 	},
 }
 
 var boardsUnassignCmd = &cobra.Command{
 	Use:   "unassign <task>",
-	Short: "Release a stalled assignment: the task goes back to the queue for the same role (needs BOARD_WRITE)",
+	Short: "Unassign a stalled task: it goes back to the queue for the same role (needs BOARD_WRITE)",
 	Long: `Puts an ASSIGNED task back to QUEUED for the same role, with a reason. The session that held it
-stays open, and its later sign-off, publish or question on the task is refused, naming who released it
+stays open, and its later sign-off, publish or question on the task is refused, naming who unassigned it
 and when. For an agent that is gone or stuck; the board's staleness ALERT says when a hop stalled.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(unassignReason) == "" {
 			fail("give --reason: it goes on the task's history and the board")
 		}
-		runGql(rearm.AgentTaskReleaseAssignment_Operation, map[string]interface{}{"taskUuid": args[0], "reason": unassignReason},
-			"agentTaskReleaseAssignment")
+		runGql(rearm.AgentTaskUnassign_Operation, map[string]interface{}{"taskUuid": args[0], "reason": unassignReason},
+			"agentTaskUnassign")
 	},
 }
 
-// releasedHop reads a refusal that says a person released this session's assignment on the task.
-func releasedHop(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "was released by") && strings.Contains(err.Error(), "the task is queued again")
+// unassignedHop reads a refusal that says a person unassigned this session from the task.
+func unassignedHop(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "you were unassigned from") && strings.Contains(err.Error(), "the task is queued again")
 }
 
 // runHopCompact is runGqlCompact for a verb that closes a hop (sign-off, return). When the server says
-// the assignment was released, the task is no longer this session's: it is forgotten locally, so the
+// the session was unassigned, the task is no longer this session's: it is forgotten locally, so the
 // session's usage stops being reported against it.
 func runHopCompact(query string, variables map[string]interface{}, key, sessionUuid, taskUuid string) {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
-		forgetReleasedHop(err, sessionUuid, taskUuid)
+		forgetUnassignedHop(err, sessionUuid, taskUuid)
 		printRefusal(err)
 		os.Exit(1)
 	}
 	printCompact(data[key])
 }
 
-// forgetReleasedHop drops the task from the session's local state when the refusal says its assignment
-// was released; any other error leaves the state alone. Reports whether it did.
-func forgetReleasedHop(err error, sessionUuid, taskUuid string) bool {
-	if !releasedHop(err) {
+// forgetUnassignedHop drops the task from the session's local state when the refusal says the session
+// was unassigned; any other error leaves the state alone. Reports whether it did.
+func forgetUnassignedHop(err error, sessionUuid, taskUuid string) bool {
+	if !unassignedHop(err) {
 		return false
 	}
 	clearCurrentTask(sessionUuid, taskUuid)
@@ -95,7 +95,7 @@ func init() {
 	agentTaskUnassignCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid (the coordinator seat) — required")
 	_ = agentTaskUnassignCmd.MarkPersistentFlagRequired("session")
 	for _, c := range []*cobra.Command{agentTaskUnassignCmd, boardsUnassignCmd} {
-		c.Flags().StringVar(&unassignReason, "reason", "", "why the assignment is released — required")
+		c.Flags().StringVar(&unassignReason, "reason", "", "why the task is unassigned — required")
 		acceptTaskKeys(c, firstTaskArg, nil, nil)
 	}
 	agentTaskUnassignCmd.Flags().BoolVar(&compactJson, "json", false, "print the full response as JSON instead of the compact lines")

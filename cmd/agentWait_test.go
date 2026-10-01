@@ -277,7 +277,7 @@ func TestTheCursorStartsNowAndCarriesInfoAndAlerts(t *testing.T) {
 		snapshots: [][]map[string]interface{}{{}},
 		pages: []eventPage{
 			{Events: []map[string]interface{}{{"seq": float64(41), "kind": "INFO", "message": "hello"}}, NextAfter: seq(41), HasMore: true},
-			{Events: []map[string]interface{}{{"seq": float64(42), "kind": "LOCKED"}, {"seq": float64(43), "kind": "ALERT", "message": "stop"}}, NextAfter: seq(43)},
+			{Events: []map[string]interface{}{{"seq": float64(42), "kind": "PAUSED"}, {"seq": float64(43), "kind": "ALERT", "message": "stop"}}, NextAfter: seq(43)},
 		},
 	}
 	code, printed := runCoordinator(t, coordinator(t), f)
@@ -292,7 +292,7 @@ func TestTheCursorStartsNowAndCarriesInfoAndAlerts(t *testing.T) {
 	}
 	events, _ := printed["events"].([]interface{})
 	if len(events) != 2 || printed["nextAfter"].(float64) != 43 {
-		t.Errorf("printed events %v nextAfter %v: INFO and ALERT, not LOCKED", events, printed["nextAfter"])
+		t.Errorf("printed events %v nextAfter %v: INFO and ALERT, not PAUSED", events, printed["nextAfter"])
 	}
 
 	// --after starts the cursor there instead.

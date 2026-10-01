@@ -33,8 +33,8 @@ import (
 
 // Publishing a document version from a board hop.
 //
-//   rearm agent doc publish --session <uuid> --type REVIEW_FINDINGS --task <uuid> \
-//       [--file findings/1a2b3c4d/round-2.md] [--index findings/1a2b3c4d/round-2.json] \
+//   rearm agent doc publish --session <uuid> --type BOARD_REVIEW_ITEMS --task <uuid> \
+//       [--file review-items/1a2b3c4d/round-2.md] [--index review-items/1a2b3c4d/round-2.json] \
 //       [--repo /path/to/documents-checkout] [--component <uuid>]
 //
 // There is no lifecycle to choose: the server publishes a DRAFT and the board promotes it to
@@ -59,28 +59,28 @@ var (
 	docCheck         bool
 )
 
-// taskScopedTypes need a task and carry a findings index; everything else is a document series
+// taskScopedTypes need a task and carry a review item index; everything else is a document series
 // belonging to a component.
 var taskScopedTypes = map[string]bool{
-	"REVIEW_FINDINGS": true,
-	"TEST_REPORT":     true,
-	// QUESTIONS is task-scoped like the other two -- it is in the server's INDEXED_TYPES and its
-	// items are always about one task. Left out, every `doc publish --type QUESTIONS` was refused
+	"BOARD_REVIEW_ITEMS": true,
+	"BOARD_TEST_REPORT":  true,
+	// BOARD_QUESTIONS is task-scoped like the other two -- it is in the server's INDEXED_TYPES and its
+	// items are always about one task. Left out, every `doc publish --type BOARD_QUESTIONS` was refused
 	// here with "--component is required", a flag a task-scoped type has nothing to put in, so an
 	// agent could not ask a question through the CLI at all.
-	"QUESTIONS": true,
+	"BOARD_QUESTIONS": true,
 }
 
-// findingHeading matches a markdown heading that opens with a finding id, e.g.
+// reviewItemHeading matches a markdown heading that opens with a review item id, e.g.
 // "### F-3: Null dereference" or "## T-1 - flaky under load".
 //
 // The id shape is deliberately narrow: letters, then a dash, then digits, which is the `F-<n>`
 // convention the role prompts describe. A looser rule -- any word before a colon -- turned
-// ordinary prose headings into phantom ids: "## Context: what was reviewed" became finding
+// ordinary prose headings into phantom ids: "## Context: what was reviewed" became review item
 // "Context", absent from the index, and the publish was refused for a document that was perfectly
 // correct. Being too permissive here blocks real work, while being too strict only means an agent
 // that invents its own id scheme has to pass the heading it used.
-var findingHeading = regexp.MustCompile(`(?m)^#{1,6}\s+([A-Za-z]{1,4}-\d+)\s*[:\-–]\s`)
+var reviewItemHeading = regexp.MustCompile(`(?m)^#{1,6}\s+([A-Za-z]{1,4}-\d+)\s*[:\-–]\s`)
 
 func sha256File(path string) (string, error) {
 	b, err := os.ReadFile(path)
@@ -91,16 +91,16 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// crossCheckIds verifies that the index and the markdown describe the same findings.
+// crossCheckIds verifies that the index and the markdown describe the same review items.
 //
 // Both directions matter and they fail differently. An id in the index with no heading gives the
-// next hop a finding it cannot read about; a heading with no index entry is a finding the router
+// next hop a review item it cannot read about; a heading with no index entry is a review item the router
 // never sees, which is the same silent loss the carry-forward rule exists to prevent. Checked here
 // rather than server-side because only the client has the markdown.
 func crossCheckIds(indexRaw map[string]interface{}, markdown string) error {
-	findings, _ := indexRaw["findings"].([]interface{})
+	reviewItems, _ := indexRaw["reviewItems"].([]interface{})
 	inIndex := map[string]bool{}
-	for _, f := range findings {
+	for _, f := range reviewItems {
 		if m, ok := f.(map[string]interface{}); ok {
 			if id, ok := m["id"].(string); ok && id != "" {
 				inIndex[id] = true
@@ -108,7 +108,7 @@ func crossCheckIds(indexRaw map[string]interface{}, markdown string) error {
 		}
 	}
 	inDoc := map[string]bool{}
-	for _, m := range findingHeading.FindAllStringSubmatch(markdown, -1) {
+	for _, m := range reviewItemHeading.FindAllStringSubmatch(markdown, -1) {
 		inDoc[m[1]] = true
 	}
 
@@ -143,7 +143,7 @@ func crossCheckIds(indexRaw map[string]interface{}, markdown string) error {
 
 var agentDocCmd = &cobra.Command{
 	Use:   "doc",
-	Short: "Documents a board hop produces (findings, test reports, designs)",
+	Short: "Documents a board hop produces (review items, test reports, designs)",
 }
 
 var agentDocPublishCmd = &cobra.Command{
@@ -159,7 +159,7 @@ The documents repository is usually NOT the repository you are working in. It is
 resolved from --repo, else the current directory when its origin matches the
 board's documents repository, else the path remembered from an earlier --repo.
 
-For REVIEW_FINDINGS and TEST_REPORT the index is read alongside the markdown and
+For BOARD_REVIEW_ITEMS and BOARD_TEST_REPORT the index is read alongside the markdown and
 checked against it: every id in one must appear in the other.
 
 Publishing is idempotent on the task, the type, the commit and the digest, so a
@@ -167,7 +167,7 @@ re-run after a failure returns the release the first attempt created rather than
 opening a new round.
 
 --advisory puts a round on a task another role holds, for example an architect's
-amendment answering a finding while the coder works the task. Only a prose type a
+amendment answering a review item while the coder works the task. Only a prose type a
 role you have held on the board produces, on an active task; never an index type.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocPublish(); err != nil {
@@ -216,7 +216,7 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	// The board checked the elements as it took the document (elements.md §7): say what it found
 	// now, while the author can still fix it, rather than at the sign-off it would refuse.
 	if _, withElements := input["elements"]; withElements && releaseUuid != "" && input["taskUuid"] != nil {
-		printCheckReport(releaseUuid)
+		printElementCheckReport(releaseUuid)
 	}
 	return nil
 }
@@ -255,8 +255,8 @@ func publishIndexOnly(st *agentSessionState) error {
 	}
 	spec := strings.ToUpper(strings.ReplaceAll(docType, "-", "_"))
 	if about, ok := idx["about"].(map[string]interface{}); !ok || about["specification"] == nil {
-		if spec == "QUESTIONS" {
-			return fmt.Errorf("a QUESTIONS index needs \"about\": {\"specification\": ...}, which is what" +
+		if spec == "BOARD_QUESTIONS" {
+			return fmt.Errorf("a BOARD_QUESTIONS index needs \"about\": {\"specification\": ...}, which is what" +
 				" sends it to the role that produces that input")
 		}
 	}
@@ -283,11 +283,11 @@ func runDocPublish() error {
 	}
 	spec := strings.ToUpper(strings.ReplaceAll(docType, "-", "_"))
 	if spec == "" {
-		return fmt.Errorf("--type is required, e.g. REVIEW_FINDINGS")
+		return fmt.Errorf("--type is required, e.g. BOARD_REVIEW_ITEMS")
 	}
-	if spec == "CHECK_REPORT" {
-		return fmt.Errorf("the board cuts CHECK_REPORT rounds when a document with elements is published;" +
-			" run `rearm agent doc check` to re-run the checks")
+	if spec == "BOARD_ELEMENT_CHECK_REPORT" {
+		return fmt.Errorf("the board cuts BOARD_ELEMENT_CHECK_REPORT rounds when a document with elements is published;" +
+			" run `rearm agent doc element-check` to re-run the element checks")
 	}
 	if docCheck && (docIndexOnly() || docTask == "") {
 		return fmt.Errorf("--check previews the element checks of a task's document with a file: give --task," +
@@ -308,7 +308,7 @@ func runDocPublish() error {
 
 	st := lookupAgentState(docSession)
 
-	// An index with no markdown: the items ARE the document. Usual for QUESTIONS, where forcing a
+	// An index with no markdown: the items ARE the document. Usual for BOARD_QUESTIONS, where forcing a
 	// file would mean committing an empty page to satisfy a check. Nothing below this touches the
 	// documents repository -- there is no file to commit, no digest to take and no commit to pin.
 	if docIndexOnly() {
@@ -475,20 +475,20 @@ func documentFile(board map[string]interface{}, spec string) (string, error) {
 func init() {
 	f := agentDocPublishCmd.Flags()
 	f.StringVar(&docSession, "session", "", "session publishing the document")
-	f.StringVar(&docType, "type", "", "specification type, e.g. REVIEW_FINDINGS")
+	f.StringVar(&docType, "type", "", "specification type, e.g. BOARD_REVIEW_ITEMS")
 	f.StringVar(&docTask, "task", "", "task this round belongs to (task-scoped types)")
 	f.StringVar(&docComponent, "component", "", "document series (component-scoped types)")
 	f.StringVar(&docFile, "file", "", "repo-relative path; asked of the board (its template, placeholders filled) when omitted")
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
 	f.BoolVar(&docIndexOnlyFlag, "index-only", false,
 		"publish the index alone, with no file: the items ARE the document, which is the usual"+
-			" shape for QUESTIONS. --index is then a path in the current directory, not in the"+
+			" shape for BOARD_QUESTIONS. --index is then a path in the current directory, not in the"+
 			" documents repository, and nothing is committed")
 	f.StringVar(&docRepoPath, "repo", "", "path to the documents repository checkout")
 	f.StringVar(&docBoard, "board", "", "board this document belongs to; needed for component-scoped types when the session holds no seat")
 	f.BoolVar(&docDryRun, "dry-run", false, "print what would be sent and exit")
 	f.BoolVar(&docCheck, "check", false,
-		"build the element index from the committed file and print the checks the board would run on it,"+
+		"build the element index from the committed file and print the element checks the board would run on it,"+
 			" in the task's current scope, without publishing; exits 1 on a failure the board blocks on")
 	f.BoolVar(&docAdvisory, "advisory", false,
 		"publish on a task another session holds, as an advisory round: a prose type a role you have"+

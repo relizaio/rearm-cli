@@ -22,7 +22,7 @@ import (
 )
 
 // Task groups and tags (task-groups-and-tags.md §2-§3, task RD2-29). A group is a board's batch with
-// an order, the groups it waits on and a default level; a tag is a free label. Keys are resolved by
+// an order, the groups it waits on and a default work level; a tag is a free label. Keys are resolved by
 // the server: a group key is the board's handle, which the CLI cannot resolve without a read.
 
 var (
@@ -133,7 +133,7 @@ func tagsAfter(current []interface{}, add, remove []string) []map[string]interfa
 }
 
 // groupInput is a group to create or edit: the key, and only what the command was given, so an edit
-// leaves the rest as it is. --no-depends-on clears the dependencies; --no-default-level the level.
+// leaves the rest as it is. --no-depends-on clears the dependencies; --no-default-work-level the work level.
 func groupInput(cmd *cobra.Command, key string) (map[string]interface{}, error) {
 	k := strings.TrimSpace(key)
 	if k == "" {
@@ -157,16 +157,16 @@ func groupInput(cmd *cobra.Command, key string) (map[string]interface{}, error) 
 	} else if groupSetNoDeps {
 		in["dependsOn"] = []string{}
 	}
-	if cmd.Flags().Changed("default-level") && groupSetNoLvl {
-		return nil, fmt.Errorf("--default-level and --no-default-level say opposite things; give one")
+	if cmd.Flags().Changed("default-work-level") && groupSetNoLvl {
+		return nil, fmt.Errorf("--default-work-level and --no-default-work-level say opposite things; give one")
 	}
-	if cmd.Flags().Changed("default-level") {
+	if cmd.Flags().Changed("default-work-level") {
 		if groupSetLevel < 0 || groupSetLevel > 9 {
-			return nil, fmt.Errorf("--default-level is 0 to 9")
+			return nil, fmt.Errorf("--default-work-level is 0 to 9")
 		}
-		in["defaultLevel"] = groupSetLevel
+		in["defaultWorkLevel"] = groupSetLevel
 	} else if groupSetNoLvl {
-		in["defaultLevel"] = nil
+		in["defaultWorkLevel"] = nil
 	}
 	if cmd.Flags().Changed("status") {
 		s := strings.ToUpper(strings.TrimSpace(groupSetStatus))
@@ -237,8 +237,8 @@ var agentBoardGroupSetCmd = &cobra.Command{
 	Short: "Coordinator: create a group, or edit the one --key names (only what is given changes)",
 	Long: `Creates a group of the board, or edits the one --key names. On an edit only the flags given
 change. --depends-on names the groups it waits on, by key (repeat or comma-separate): a task in the
-group is not offered while one of them has an open task. --default-level is the level its tasks
-read when they set none. --status CLOSED stops new tasks joining it; OPEN reopens it.`,
+group is not offered while one of them has an open task. --default-work-level is the work level its
+tasks read when they set none. --status CLOSED stops new tasks joining it; OPEN reopens it.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		in, err := groupInput(cmd, groupSetKey)
@@ -363,8 +363,8 @@ func addGroupSetFlags(c *cobra.Command) {
 	c.Flags().IntVar(&groupSetOrder, "order", 0, "display order among the board's groups (new groups append)")
 	c.Flags().StringSliceVar(&groupSetDeps, "depends-on", nil, "keys of the groups this one waits on (repeat or comma-separate)")
 	c.Flags().BoolVar(&groupSetNoDeps, "no-depends-on", false, "clear the groups it waits on")
-	c.Flags().IntVar(&groupSetLevel, "default-level", 0, "the level its tasks read when they set none, a rung of the board's ladder")
-	c.Flags().BoolVar(&groupSetNoLvl, "no-default-level", false, "clear the default level")
+	c.Flags().IntVar(&groupSetLevel, "default-work-level", 0, "the work level its tasks read when they set none, a rung of the board's ladder")
+	c.Flags().BoolVar(&groupSetNoLvl, "no-default-work-level", false, "clear the default work level")
 	c.Flags().StringVar(&groupSetStatus, "status", "", "OPEN or CLOSED")
 }
 

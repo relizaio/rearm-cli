@@ -48,11 +48,11 @@ func TestDifferentRepositoriesDoNotMatch(t *testing.T) {
 // ---------- the index / markdown cross-check ----------
 
 func indexWith(ids ...string) map[string]interface{} {
-	var findings []interface{}
+	var reviewItems []interface{}
 	for _, id := range ids {
-		findings = append(findings, map[string]interface{}{"id": id})
+		reviewItems = append(reviewItems, map[string]interface{}{"id": id})
 	}
-	return map[string]interface{}{"findings": findings}
+	return map[string]interface{}{"reviewItems": reviewItems}
 }
 
 func TestCrossCheckAcceptsAMatchingPair(t *testing.T) {
@@ -62,8 +62,8 @@ func TestCrossCheckAcceptsAMatchingPair(t *testing.T) {
 	}
 }
 
-func TestCrossCheckCatchesAFindingWithNoHeading(t *testing.T) {
-	// The index promises the next hop a finding it cannot read about. Caught here because only the
+func TestCrossCheckCatchesAReviewItemWithNoHeading(t *testing.T) {
+	// The index promises the next hop a review item it cannot read about. Caught here because only the
 	// client has the markdown -- the server never sees it.
 	md := "### F-1: something\n"
 	err := crossCheckIds(indexWith("F-1", "F-2"), md)
@@ -73,7 +73,7 @@ func TestCrossCheckCatchesAFindingWithNoHeading(t *testing.T) {
 }
 
 func TestCrossCheckCatchesAHeadingWithNoIndexEntry(t *testing.T) {
-	// The opposite direction, and the worse one: a finding written up but absent from the index is
+	// The opposite direction, and the worse one: a review item written up but absent from the index is
 	// invisible to routing, which is the same silent loss the carry-forward rule exists to stop.
 	md := "### F-1: something\n\n### F-9: written up but never filed\n"
 	err := crossCheckIds(indexWith("F-1"), md)
@@ -96,16 +96,16 @@ func TestCrossCheckAcceptsTheHeadingFormsTheRolePromptsDescribe(t *testing.T) {
 }
 
 func TestCrossCheckIgnoresOrdinaryProse(t *testing.T) {
-	// A heading that is not a finding must not be read as one. The colon forms matter most: an
+	// A heading that is not a review item must not be read as one. The colon forms matter most: an
 	// earlier rule took any word before a colon as an id, so "## Context: what was reviewed"
-	// became finding "Context" and refused a document that was perfectly correct. Being too
+	// became review item "Context" and refused a document that was perfectly correct. Being too
 	// permissive here blocks real work.
 	for _, md := range []string{
-		"## Summary\n\nWe looked at it.\n\n### F-1: the actual finding\n",
-		"## Context: what was reviewed\n\n### F-1: the actual finding\n",
-		"## Scope - files touched\n\n### F-1: the actual finding\n",
-		"# Review: round 2\n\n### F-1: the actual finding\n",
-		"## Note: F-1 is discussed below\n\n### F-1: the actual finding\n",
+		"## Summary\n\nWe looked at it.\n\n### F-1: the actual review item\n",
+		"## Context: what was reviewed\n\n### F-1: the actual review item\n",
+		"## Scope - files touched\n\n### F-1: the actual review item\n",
+		"# Review: round 2\n\n### F-1: the actual review item\n",
+		"## Note: F-1 is discussed below\n\n### F-1: the actual review item\n",
 	} {
 		if err := crossCheckIds(indexWith("F-1"), md); err != nil {
 			t.Errorf("prose heading should be ignored in %q: %v", md, err)
@@ -192,14 +192,14 @@ func TestUncommittedChangesAreRefused(t *testing.T) {
 	// A release pins a commit while the digest is taken from the working tree. If they disagree
 	// the release points at bytes that were never at that commit, and both halves look fine.
 	dir := newRepo(t, "https://github.com/acme/docs")
-	commitFile(t, dir, "findings/a/round-1.md", "### F-1: x\n")
-	if err := assertCommitted(dir, []string{"findings/a/round-1.md"}); err != nil {
+	commitFile(t, dir, "review-items/a/round-1.md", "### F-1: x\n")
+	if err := assertCommitted(dir, []string{"review-items/a/round-1.md"}); err != nil {
 		t.Fatalf("a clean file should pass: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "findings/a/round-1.md"), []byte("edited\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "review-items/a/round-1.md"), []byte("edited\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := assertCommitted(dir, []string{"findings/a/round-1.md"})
+	err := assertCommitted(dir, []string{"review-items/a/round-1.md"})
 	if err == nil || !strings.Contains(err.Error(), "round-1.md") {
 		t.Errorf("expected the dirty file to be named, got %v", err)
 	}
@@ -221,7 +221,7 @@ func TestAnUnpushedCommitIsRefusedAndAPushedOneIsNot(t *testing.T) {
 		}
 	}
 	run("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
-	commitFile(t, dir, "findings/a/round-1.md", "### F-1: x\n")
+	commitFile(t, dir, "review-items/a/round-1.md", "### F-1: x\n")
 
 	head, _ := git(dir, "rev-parse", "HEAD")
 	err := assertPushed(dir)
@@ -237,7 +237,7 @@ func TestAnUnpushedCommitIsRefusedAndAPushedOneIsNot(t *testing.T) {
 	}
 
 	// A new local commit on top is unpushed again.
-	commitFile(t, dir, "findings/a/round-2.md", "### F-1: y\n")
+	commitFile(t, dir, "review-items/a/round-2.md", "### F-1: y\n")
 	if err := assertPushed(dir); err == nil {
 		t.Fatal("a commit made after the push must be refused until it is pushed")
 	}
@@ -245,7 +245,7 @@ func TestAnUnpushedCommitIsRefusedAndAPushedOneIsNot(t *testing.T) {
 
 func TestHeadFactsComeFromTheDocumentsCheckout(t *testing.T) {
 	dir := newRepo(t, "https://github.com/acme/docs")
-	commitFile(t, dir, "findings/a/round-1.md", "### F-1: x\n")
+	commitFile(t, dir, "review-items/a/round-1.md", "### F-1: x\n")
 	head, err := readHead(dir)
 	if err != nil {
 		t.Fatal(err)

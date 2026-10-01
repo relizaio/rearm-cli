@@ -16,7 +16,7 @@ import (
 // coordinator reading stdout never takes a refusal for the completed task.
 
 const completeRefusal = "Task RD3-4 passed, but its delivery will not land: https://github.com/relizaio/rearm-saas/pull/692" +
-	" attested abandoned (superseded by #694). Reopen it to the role that must redo the work, or link the PR that replaces it."
+	" declared abandoned (superseded by #694). Reopen it to the role that must redo the work, or link the PR that replaces it."
 
 func TestARefusedCompleteExitsOneWithTheReasonOnStderr(t *testing.T) {
 	if url := os.Getenv("REARM_TEST_COMPLETE_CHILD"); url != "" {

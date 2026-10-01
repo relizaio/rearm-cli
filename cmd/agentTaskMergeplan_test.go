@@ -94,7 +94,7 @@ func TestMergePlanShortHeadUnseen(t *testing.T) {
 func TestTheTaskReadSelectsTheHeads(t *testing.T) {
 	op := strings.Join(strings.Fields(rearm.AgentTaskProgrammatic_Operation), " ")
 	// "registered head " rather than "registered head }": the PR selection goes on to the
-	// attestation since client-go#43 (task 18c5c293).
+	// declaration since client-go#43 (task 18c5c293).
 	for _, want := range []string{"testedHeads { pr head }", "registered head "} {
 		if !strings.Contains(op, want) {
 			t.Errorf("AgentTaskProgrammatic lacks %q; is rearm-client-go pinned at #40 or later?", want)
@@ -102,9 +102,9 @@ func TestTheTaskReadSelectsTheHeads(t *testing.T) {
 	}
 }
 
-// The attest line (task 18c5c293): after a ready PR's merge command when the board requires it or
+// The declare line (task 18c5c293): after a ready PR's merge command when the board requires it or
 // cannot see the merge, runnable as printed but for the merge sha; never on a PR that is not ready.
-func TestMergePlanAttestLines(t *testing.T) {
+func TestMergePlanDeclareLines(t *testing.T) {
 	steps := []mergeStep{
 		{PR: "https://github.com/o/r/pull/1", Registered: false, Status: "ready", at: fullA},
 		{PR: "https://github.com/o/r/pull/2", Registered: true, Status: "ready", at: fullA},
@@ -112,21 +112,21 @@ func TestMergePlanAttestLines(t *testing.T) {
 	}
 	cp := func() []mergeStep { return append([]mergeStep(nil), steps...) }
 	rows := withProcedure(cp(), "t-1", procedureOf(map[string]interface{}{"mode": "PR_ROWS"}), true, "")
-	want := "rearm agent task delivered t-1 --session <seat-session> --unit https://github.com/o/r/pull/1 --commit <merge sha>"
-	if rows[0].Attest != want {
-		t.Errorf("an unregistered ready PR is attested on any board: %q", rows[0].Attest)
+	want := "rearm agent task declare-delivery t-1 --session <seat-session> --unit https://github.com/o/r/pull/1 --commit <merge sha>"
+	if rows[0].Declare != want {
+		t.Errorf("an unregistered ready PR is declared on any board: %q", rows[0].Declare)
 	}
-	if rows[1].Attest != "" || rows[2].Attest != "" {
+	if rows[1].Declare != "" || rows[2].Declare != "" {
 		t.Errorf("a registered PR on a PR_ROWS board, and a moved one, get none: %+v", rows)
 	}
-	attested := withProcedure(cp(), "t-1", procedureOf(map[string]interface{}{"mode": "ATTESTED"}), true, "")
-	if !strings.Contains(attested[1].Attest, "--unit https://github.com/o/r/pull/2 ") || attested[2].Attest != "" {
-		t.Errorf("on an ATTESTED board every ready PR is attested: %+v", attested)
+	declared := withProcedure(cp(), "t-1", procedureOf(map[string]interface{}{"mode": "DECLARED"}), true, "")
+	if !strings.Contains(declared[1].Declare, "--unit https://github.com/o/r/pull/2 ") || declared[2].Declare != "" {
+		t.Errorf("on a DECLARED board every ready PR is declared: %+v", declared)
 	}
 	required := withProcedure(cp(), "t-1", procedureOf(map[string]interface{}{"mode": "PR_ROWS",
-		"merge": map[string]interface{}{"requireAttestation": true}}), true, "")
-	if required[1].Attest == "" {
-		t.Error("requireAttestation attests a registered PR too")
+		"merge": map[string]interface{}{"requireDeclaration": true}}), true, "")
+	if required[1].Declare == "" {
+		t.Error("requireDeclaration declares a registered PR too")
 	}
 }
 
@@ -206,8 +206,8 @@ func TestMayMergeAndThePlanWhenItIsNotYours(t *testing.T) {
 
 // A server from before the setting serves no merge: the coordinator's merge commit at the tested head.
 func TestProcedureDefaultsWithoutAMerge(t *testing.T) {
-	p := procedureOf(map[string]interface{}{"mode": "ATTESTED"})
-	if p != (mergeProcedure{By: "COORDINATOR", Method: "MERGE", AtTestedHead: true, RequireAttestation: true, Order: "NOTE_ORDER"}) {
+	p := procedureOf(map[string]interface{}{"mode": "DECLARED"})
+	if p != (mergeProcedure{By: "COORDINATOR", Method: "MERGE", AtTestedHead: true, RequireDeclaration: true, Order: "NOTE_ORDER"}) {
 		t.Errorf("%+v", p)
 	}
 }

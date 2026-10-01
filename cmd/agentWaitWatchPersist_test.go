@@ -160,7 +160,7 @@ func TestAnOfferPrintsWhenTheWatchReadFails(t *testing.T) {
 		t.Fatalf("the earlier run: exit %d", code)
 	}
 	sf := &snapFails{fakeWatch: &fakeWatch{fakeBoard: &fakeBoard{offers: []interface{}{anOffer}, snapshots: snaps{{}},
-		pages: []eventPage{{Events: []map[string]interface{}{{"seq": float64(50), "kind": "LOCKED"}}, NextAfter: seq(50)}}},
+		pages: []eventPage{{Events: []map[string]interface{}{{"seq": float64(50), "kind": "PAUSED"}}, NextAfter: seq(50)}}},
 		worked: worked(), roles: boardRoles}, failOn: map[int]bool{0: true}}
 	code, printed := runWatchOn(t, o, sf)
 	if code != waitExitWork || printed["offer"] == nil {
@@ -169,7 +169,7 @@ func TestAnOfferPrintsWhenTheWatchReadFails(t *testing.T) {
 	if ch, ok := printed["changes"].([]interface{}); !ok || len(ch) != 0 {
 		t.Errorf("changes %v: an empty list when the board was not read", printed["changes"])
 	}
-	if ev := mapsOf(printed["events"]); len(ev) != 1 || ev[0]["kind"] != "LOCKED" {
+	if ev := mapsOf(printed["events"]); len(ev) != 1 || ev[0]["kind"] != "PAUSED" {
 		t.Errorf("events %v: the event read before the failure prints with the offer", printed["events"])
 	}
 	if kept := readWatchState(state); kept.After == nil || *kept.After != 50 {

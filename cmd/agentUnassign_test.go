@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// Releasing a stalled assignment (task RD3-4): the coordinator's and the person's unassign verbs send
+// Unassigning a stalled task (task RD3-4): the coordinator's and the person's unassign verbs send
 // the task, the reason and, for the seat, the session; a sign-off or return refused because the hop
-// was released forgets the task locally, and no other refusal does.
+// was unassigned forgets the task locally, and no other refusal does.
 
 type unassignBoard struct {
 	mu   sync.Mutex
@@ -29,7 +29,7 @@ func (f *unassignBoard) serve() *httptest.Server {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		data := map[string]any{}
 		task := map[string]any{"uuid": "t-1", "key": "RD-7", "status": "QUEUED", "role": "coder"}
-		for _, op := range []string{"agentTaskReleaseAssignmentProgrammatic", "agentTaskReleaseAssignment"} {
+		for _, op := range []string{"agentTaskUnassignProgrammatic", "agentTaskUnassign"} {
 			if strings.Contains(req.Query, op+"(") {
 				f.mu.Lock()
 				f.sent[op] = req.Variables
@@ -51,9 +51,9 @@ func TestTheUnassignVerbsSendTheTaskTheReasonAndTheSeat(t *testing.T) {
 
 	taskSessionUuid, unassignReason = "seat-1", "the agent is gone"
 	out := captureStdout(t, func() { agentTaskUnassignCmd.Run(agentTaskUnassignCmd, []string{"t-1"}) })
-	got := f.sent["agentTaskReleaseAssignmentProgrammatic"]
+	got := f.sent["agentTaskUnassignProgrammatic"]
 	if got["taskUuid"] != "t-1" || got["sessionUuid"] != "seat-1" || got["reason"] != "the agent is gone" {
-		t.Fatalf("the seat's release sends task, session and reason, got %v", got)
+		t.Fatalf("the seat's unassign sends task, session and reason, got %v", got)
 	}
 	if !strings.Contains(out, "RD-7") {
 		t.Errorf("prints the task compactly, got %q", out)
@@ -61,9 +61,9 @@ func TestTheUnassignVerbsSendTheTaskTheReasonAndTheSeat(t *testing.T) {
 
 	unassignReason = "stuck for two hours"
 	boardsUnassignCmd.Run(boardsUnassignCmd, []string{"t-1"})
-	got = f.sent["agentTaskReleaseAssignment"]
+	got = f.sent["agentTaskUnassign"]
 	if got["taskUuid"] != "t-1" || got["reason"] != "stuck for two hours" || got["sessionUuid"] != nil {
-		t.Fatalf("a person's release sends task and reason, no session, got %v", got)
+		t.Fatalf("a person's unassign sends task and reason, no session, got %v", got)
 	}
 
 	for _, c := range []string{"agent task unassign", "boards unassign"} {
@@ -77,23 +77,23 @@ func TestTheUnassignVerbsSendTheTaskTheReasonAndTheSeat(t *testing.T) {
 	}
 }
 
-func TestARefusalForAReleasedHopForgetsTheTaskLocally(t *testing.T) {
+func TestARefusalForAnUnassignedHopForgetsTheTaskLocally(t *testing.T) {
 	withStateDir(t)
 	if err := writeAgentState(&agentSessionState{SessionUuid: "s-1", ClientSessionId: "c-1", CurrentTask: "t-1"}); err != nil {
 		t.Fatal(err)
 	}
 	other := errors.New("Task t-1 is assigned to a different session")
-	if forgetReleasedHop(other, "s-1", "t-1") {
+	if forgetUnassignedHop(other, "s-1", "t-1") {
 		t.Fatal("any other refusal leaves the task")
 	}
 	if st := findStateBySessionUuid("s-1"); st == nil || st.CurrentTask != "t-1" {
 		t.Fatalf("still the session's task, got %+v", st)
 	}
-	released := errors.New("your assignment on RD-7 was released by ops@acme.example at 2026-09-28T17:00:00Z; the task is queued again")
-	if !forgetReleasedHop(released, "s-1", "t-1") {
-		t.Fatal("the released refusal is recognised")
+	unassigned := errors.New("you were unassigned from RD-7 by ops@acme.example at 2026-09-28T17:00:00Z; the task is queued again")
+	if !forgetUnassignedHop(unassigned, "s-1", "t-1") {
+		t.Fatal("the unassigned refusal is recognised")
 	}
 	if st := findStateBySessionUuid("s-1"); st == nil || st.CurrentTask != "" {
-		t.Fatalf("the released task is forgotten, got %+v", st)
+		t.Fatalf("the unassigned task is forgotten, got %+v", st)
 	}
 }

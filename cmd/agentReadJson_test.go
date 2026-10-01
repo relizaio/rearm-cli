@@ -135,11 +135,11 @@ func TestMutationsPrintCompactWithoutTheFlagAndJsonWithIt(t *testing.T) {
 		{agentTaskReturnCmd, append([]string{"t-1", "--reason", "OTHER", "--description", "why", "--outputs", "r-1"}, session...)},
 		{agentTaskAuthorizeCmd, append([]string{"t-1", "--role", "coder"}, session...)},
 		{agentTaskHoldCmd, append([]string{"t-1", "--reason", "legal"}, session...)},
-		{agentTaskReleaseholdCmd, append([]string{"t-1"}, session...)},
+		{agentTaskLiftholdCmd, append([]string{"t-1"}, session...)},
 		{agentTaskEscalateCmd, append([]string{"t-1", "--reason", "decide"}, session...)},
 		{agentTaskRequireReviewCmd, append([]string{"t-1"}, session...)},
 		{agentTaskOrderCmd, append([]string{"t-1", "--order", "3"}, session...)},
-		{agentTaskLevelCmd, append([]string{"t-1", "--level", "2"}, session...)},
+		{agentTaskWorkLevelCmd, append([]string{"t-1", "--work-level", "2"}, session...)},
 		{agentTaskSplitCmd, append([]string{"t-1", "--children-json", `[{"title":"part 1"}]`}, session...)},
 		{agentTaskCompleteCmd, append([]string{"t-1"}, session...)},
 		{agentTaskCancelCmd, append([]string{"t-1", "--note", "dup"}, session...)},
@@ -183,14 +183,14 @@ func TestEveryAgentVerbIsClassifiedForJson(t *testing.T) {
 	}
 	// Text by default, JSON with the flag: their own --json.
 	for _, c := range []*cobra.Command{agentTaskBriefCmd, agentBoardEventsCmd, agentBoardAgentsCmd, agentTaskMergeplanCmd,
-		agentDocCheckCmd} {
+		agentDocElementCheckCmd} {
 		takesJson[c] = "own"
 	}
 	without := map[string]bool{
 		// mutations that print the full response already
-		"rearm agent board coordinate": true, "rearm agent board lock": true, "rearm agent board unlock": true,
+		"rearm agent board coordinate": true, "rearm agent board pause": true, "rearm agent board resume": true,
 		"rearm agent board postevent": true, "rearm agent board roleconfig set": true, "rearm agent board group set": true,
-		"rearm agent board group close": true, "rearm agent board group reopen": true, "rearm agent task delivered": true,
+		"rearm agent board group close": true, "rearm agent board group reopen": true, "rearm agent task declare-delivery": true,
 		"rearm agent session init": true, "rearm agent session touch": true, "rearm agent session close": true,
 		"rearm agent session add-artifact": true, "rearm agent session update-meta": true, "rearm agent session usage": true,
 		"rearm agent enrollkey": true,

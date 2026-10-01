@@ -12,7 +12,7 @@ func TestTheLinkprHelpSaysALinkOnAParkedTaskAnswersNothing(t *testing.T) {
 	for _, want := range []string{
 		"On a task the coordinator seat parked for the operator (task hold --operator --question) the link is accepted too",
 		"recorded on the decision as the PR, your key's agent and the time, and posted as an INFO",
-		"it does not answer the question or release the hold (task RD4-19)",
+		"it does not answer the question or lift the hold (task RD4-19)",
 		"A person who will supersede a PR links its replacement first.",
 	} {
 		if !strings.Contains(long, want) {
