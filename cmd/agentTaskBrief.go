@@ -294,6 +294,21 @@ func intOf(v interface{}) int {
 }
 
 // briefTaskFields is the task as the brief shows it: who it is, where it stands, what holds it.
+// returnedReportLine is one report an investigation brought back (task RD4-12): the pinned report, or a
+// cancelled investigation that returned none, with the cancel's note (design round 2 §2), so the asker sees the
+// answer is not coming.
+func returnedReportLine(r map[string]interface{}) string {
+	inv := orElse(str(r["investigationKey"]), str(r["investigation"]))
+	if c, _ := r["cancelled"].(bool); c {
+		line := inv + ": cancelled, no report; this task no longer waits on it"
+		if n := str(r["note"]); n != "" {
+			line += " (" + n + ")"
+		}
+		return line
+	}
+	return inv + ": report " + str(r["report"]) + " pinned"
+}
+
 func briefTaskFields(t map[string]interface{}) map[string]any {
 	out := map[string]any{}
 	for _, k := range []string{"key", "title", "description", "status", "role", "effectiveLevel", "budgetMicros", "spentMicros"} {
@@ -328,7 +343,7 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	}
 	var back []string
 	for _, r := range asList(t["reportsReturned"]) {
-		back = append(back, orElse(str(r["investigationKey"]), str(r["investigation"]))+": report "+str(r["report"])+" pinned")
+		back = append(back, returnedReportLine(r))
 	}
 	if len(back) > 0 {
 		out["reportsReturned"] = back

@@ -168,6 +168,18 @@ func TestTheBriefShowsAnInvestigation(t *testing.T) {
 	if !reflect.DeepEqual(back["reportsReturned"], []string{"RD-13: report rep-1 pinned"}) {
 		t.Errorf("a commissioning task lists the reports returned, got %v", back["reportsReturned"])
 	}
+	cancelled := briefTaskFields(map[string]interface{}{"key": "RD-12", "reportsReturned": []interface{}{
+		map[string]interface{}{"investigation": "i-1", "investigationKey": "RD-13", "report": "rep-1", "cancelled": false},
+		map[string]interface{}{"investigation": "i-2", "investigationKey": "RD-14", "report": nil, "cancelled": true,
+			"note": "not needed after all"}}})
+	if !reflect.DeepEqual(cancelled["reportsReturned"], []string{"RD-13: report rep-1 pinned",
+		"RD-14: cancelled, no report; this task no longer waits on it (not needed after all)"}) {
+		t.Errorf("a cancelled investigation is listed among the reports returned, with its note, got %v", cancelled["reportsReturned"])
+	}
+	if out := renderTaskBrief(&taskBrief{Key: "RD-12", Role: "architect", Task: cancelled}); !strings.Contains(out,
+		"- reports returned: RD-13: report rep-1 pinned; RD-14: cancelled, no report; this task no longer waits on it (not needed after all)") {
+		t.Errorf("the brief lacks the cancelled investigation:\n%s", out)
+	}
 	if _, ok := briefTaskFields(map[string]interface{}{"key": "RD-1", "kind": "WORK"})["investigation"]; ok {
 		t.Error("a work task has no investigation line")
 	}

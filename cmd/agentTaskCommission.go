@@ -227,7 +227,7 @@ func init() {
 // them without a rearm-client-go pin move; a server without them answers with an error, and the brief goes on.
 const investigationRead = `query AgentTaskInvestigationProgrammatic ($taskUuid: ID!) { agentTaskProgrammatic(taskUuid: $taskUuid) {
 	kind investigation { commissionedBy { role roleUuid session task } deliverable role review deadline returnTo report completedAt }
-	reportsReturned { investigation investigationKey report session role at reoffered }
+	reportsReturned { investigation investigationKey report session role at reoffered cancelled note }
 	requiredInputs { kind specification release }
 } }`
 
