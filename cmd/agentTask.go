@@ -562,7 +562,9 @@ attestation, a supersede, a complete, a reopen, a cancel, a new order or level);
 as the answer, reading "<action> by <person>: <note>", and the task returns to the state it was
 parked from, so a DELIVERING task goes on delivering, before the action moves it on if it does.
 Until then every task verb a session runs on it is refused (delivered, --abandoned, supersedepr,
-complete, reopen, cancel, order, level and the rest). A DELIVERING task is parked only this way.`,
+complete, reopen, cancel, order, level and the rest), except task linkpr, which is accepted,
+recorded on the decision and posted as an INFO; it does not answer the question (task RD4-19).
+A DELIVERING task is parked only this way.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runHold(args[0])
@@ -747,7 +749,13 @@ var agentTaskBindrefCmd = &cobra.Command{
 var agentTaskLinkprCmd = &cobra.Command{
 	Use:   "linkpr <task-uuid>",
 	Short: "Attach a delivering pull-request URL to the task",
-	Args:  cobra.ExactArgs(1),
+	Long: `Attaches a delivering pull-request URL to the task.
+
+On a task the coordinator seat parked for the operator (task hold --operator --question) the link
+is accepted too, recorded on the decision as the PR, your key's agent and the time, and posted as
+an INFO; it does not answer the question or release the hold (task RD4-19). A person who will
+supersede a PR links its replacement first.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGqlCompact(rearm.AgentTaskLinkPrProgrammatic_Operation, map[string]interface{}{"taskUuid": args[0], "prUrl": taskPrUrl}, "agentTaskLinkPrProgrammatic")
 	},
