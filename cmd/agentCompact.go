@@ -98,6 +98,9 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 		first += ", prompt " + str(assignment["promptVersion"])
 	}
 	lines := []string{first}
+	if inv := investigationLine(t); inv != "" {
+		lines = append(lines, inv)
+	}
 	held, _ := t["assignment"].(map[string]interface{})
 	switch status {
 	case "QUEUED":
@@ -154,7 +157,7 @@ func compactCommands() []*cobra.Command {
 		agentTaskHoldCmd, agentTaskReleaseholdCmd, agentTaskEscalateCmd, agentTaskRequireReviewCmd, agentTaskOrderCmd,
 		agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd, agentTaskReopenCmd,
 		agentTaskBindrefCmd, agentTaskLinkprCmd, agentTaskSetGroupCmd, agentTaskTagCmd, agentDocPublishCmd,
-		agentTaskSupersedeCmd, agentTaskWithdrawCmd,
+		agentTaskSupersedeCmd, agentTaskWithdrawCmd, agentTaskCommissionCmd,
 	}
 }
 

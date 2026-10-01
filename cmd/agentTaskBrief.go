@@ -236,6 +236,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		return nil, nil, fmt.Errorf("the board has no role %q", role)
 	}
 
+	mergeInvestigation(task, taskUuid)
 	b.Task = briefTaskFields(task)
 	b.Dependencies = briefDependencies(task)
 	b.Documents = briefDocuments(task)
@@ -293,6 +294,21 @@ func intOf(v interface{}) int {
 }
 
 // briefTaskFields is the task as the brief shows it: who it is, where it stands, what holds it.
+// returnedReportLine is one report an investigation brought back (task RD4-12): the pinned report, or a
+// cancelled investigation that returned none, with the cancel's note (design round 2 §2), so the asker sees the
+// answer is not coming.
+func returnedReportLine(r map[string]interface{}) string {
+	inv := orElse(str(r["investigationKey"]), str(r["investigation"]))
+	if c, _ := r["cancelled"].(bool); c {
+		line := inv + ": cancelled, no report; this task no longer waits on it"
+		if n := str(r["note"]); n != "" {
+			line += " (" + n + ")"
+		}
+		return line
+	}
+	return inv + ": report " + str(r["report"]) + " pinned"
+}
+
 func briefTaskFields(t map[string]interface{}) map[string]any {
 	out := map[string]any{}
 	for _, k := range []string{"key", "title", "description", "status", "role", "effectiveLevel", "budgetMicros", "spentMicros"} {
@@ -312,6 +328,25 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	}
 	if h, _ := t["hold"].(map[string]interface{}); h != nil {
 		out["hold"] = map[string]any{"kind": h["kind"], "level": h["level"], "reason": h["reason"]}
+	}
+	if inv := investigationLine(t); inv != "" {
+		out["investigation"] = inv
+	}
+	var pins []string
+	for _, in := range asList(t["requiredInputs"]) {
+		if r := str(in["release"]); r != "" {
+			pins = append(pins, orElse(str(in["specification"]), str(in["kind"]))+" "+r)
+		}
+	}
+	if len(pins) > 0 {
+		out["pinnedInputs"] = pins
+	}
+	var back []string
+	for _, r := range asList(t["reportsReturned"]) {
+		back = append(back, returnedReportLine(r))
+	}
+	if len(back) > 0 {
+		out["reportsReturned"] = back
 	}
 	var qs []string
 	for _, q := range asList(t["openQuestions"]) {
@@ -476,6 +511,15 @@ func renderTaskBrief(b *taskBrief) string {
 	sb.WriteString("\n")
 	if h, ok := t["hold"].(map[string]any); ok {
 		fmt.Fprintf(&sb, "- held (%v, %v): %v\n", h["kind"], h["level"], h["reason"])
+	}
+	if inv, ok := t["investigation"].(string); ok {
+		fmt.Fprintf(&sb, "- %s. Deliver an INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
+	}
+	if pins, ok := t["pinnedInputs"].([]string); ok {
+		fmt.Fprintf(&sb, "- pinned inputs: %s\n", strings.Join(pins, ", "))
+	}
+	if back, ok := t["reportsReturned"].([]string); ok {
+		fmt.Fprintf(&sb, "- reports returned: %s\n", strings.Join(back, "; "))
 	}
 	if bm, ok := t["budgetMicros"]; ok {
 		fmt.Fprintf(&sb, "- budget %s, spent %s\n", usd(bm), usd(t["spentMicros"]))
