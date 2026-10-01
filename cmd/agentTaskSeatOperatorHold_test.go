@@ -90,6 +90,8 @@ func TestTheHoldHelpNamesTheSeatsOperatorHold(t *testing.T) {
 		"or by anything else they do on the task (answering its questions,",
 		`reading "<action> by <person>: <note>"`,
 		"Until then every task verb a session runs on it is refused",
+		// RD4-19: the link is the exception, preparation for the decision rather than its answer
+		"except task linkpr, which is accepted, recorded on the decision and posted as an INFO; it does not answer the question",
 	} {
 		if !strings.Contains(long, want) {
 			t.Errorf("task hold --help lacks %q", want)
