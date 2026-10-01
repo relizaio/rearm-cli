@@ -17,7 +17,7 @@ import (
 // commissionOperation is the commission mutation, local to the CLI so the verb needs no rearm-client-go pin move.
 const commissionOperation = `mutation AgentTaskCommissionProgrammatic ($input: AgentTaskCommissionInput!) {
 	agentTaskCommissionProgrammatic(input: $input) {
-	key number uuid org board title description status role orderIndex level budgetMicros dependsOn
+	key number uuid org board title description status role orderIndex workLevel budgetMicros dependsOn
 	kind investigation { commissionedBy { role roleUuid session task by { kind uuid name } } deliverable role roleUuid review reviewUuid deadline returnTo report completedAt }
 	requiredInputs { kind specification scope minLifecycle resolution release }
 	createdDate
@@ -45,7 +45,7 @@ var agentTaskCommissionCmd = &cobra.Command{
 	Use:   "commission",
 	Short: "Commission an investigation: ask a role for a report that comes back pinned on your task",
 	Long: `Commissions an investigation: a new task of kind INVESTIGATION for a role that produces
-INVESTIGATION_REPORT, with the brief as its description and the --input releases pinned as what
+BOARD_INVESTIGATION_REPORT, with the brief as its description and the --input releases pinned as what
 it reads. It delivers a report, not code, and completes when that role passes with it (and the
 --review role passes it, when one was asked for).
 
@@ -66,7 +66,7 @@ investigationOverdue staleness rule alerts past it.`,
 			session: commissionSession, board: commissionBoard, role: commissionRole, title: commissionTitle,
 			brief: commissionBrief, briefFile: commissionBriefFile, fromTask: commissionFromTask,
 			inputs: commissionInputs, budget: commissionBudget, deadline: commissionDeadline, review: commissionReview,
-			returnTo: commissionReturnTo, level: commissionLevel, levelSet: cmd.Flags().Changed("level"),
+			returnTo: commissionReturnTo, level: commissionLevel, levelSet: cmd.Flags().Changed("work-level"),
 			group: commissionGroup, tags: commissionTags,
 		}, time.Now(), os.ReadFile)
 		if err != nil {
@@ -93,7 +93,7 @@ func commissionVariables(o commissionOpts, now time.Time, readFile func(string) 
 		return nil, errors.New("give --board: the board the investigation goes on")
 	}
 	if strings.TrimSpace(o.role) == "" {
-		return nil, errors.New("give --role: the role to investigate, one that produces INVESTIGATION_REPORT")
+		return nil, errors.New("give --role: the role to investigate, one that produces BOARD_INVESTIGATION_REPORT")
 	}
 	if strings.TrimSpace(o.title) == "" {
 		return nil, errors.New("give --title: one line; the rest goes in the brief")
@@ -156,7 +156,7 @@ func commissionVariables(o commissionOpts, now time.Time, readFile func(string) 
 		input["returnTo"] = r
 	}
 	if o.levelSet {
-		input["level"] = o.level
+		input["workLevel"] = o.level
 	}
 	return map[string]interface{}{"input": withGroupAndTags(input, o.group, o.tags)}, nil
 }
@@ -205,7 +205,7 @@ func init() {
 	f := agentTaskCommissionCmd.Flags()
 	f.StringVar(&commissionSession, "session", "", "your board session, holding --from-task; left out, the key commissions as a person")
 	f.StringVar(&commissionBoard, "board", "", "the board, by uuid or name — required")
-	f.StringVar(&commissionRole, "role", "", "the role to investigate, one that produces INVESTIGATION_REPORT — required")
+	f.StringVar(&commissionRole, "role", "", "the role to investigate, one that produces BOARD_INVESTIGATION_REPORT — required")
 	f.StringVar(&commissionTitle, "title", "", "one line, at most 120 characters — required")
 	f.StringVar(&commissionBrief, "brief", "", "what to find out: the investigation's description")
 	f.StringVar(&commissionBriefFile, "brief-file", "", "read the brief from this file")
@@ -215,7 +215,7 @@ func init() {
 	f.StringVar(&commissionDeadline, "deadline", "", "when the report is due: RFC 3339, or a span from now (48h, 3d)")
 	f.StringVar(&commissionReview, "review", "", "a role that reviews the report before it comes back")
 	f.StringVar(&commissionReturnTo, "return-to", "", "TASK (the default with --from-task) or NONE")
-	f.IntVar(&commissionLevel, "level", 0, "the investigation's level, a rung of the board's ladder")
+	f.IntVar(&commissionLevel, "work-level", 0, "the investigation's work level, a rung of the board's ladder")
 	f.StringVar(&commissionGroup, "group", "", "a task group by key")
 	f.StringSliceVar(&commissionTags, "tag", nil, "a tag; repeat or separate with commas")
 	agentTaskCmd.AddCommand(agentTaskCommissionCmd)

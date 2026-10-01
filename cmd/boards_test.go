@@ -40,7 +40,8 @@ func TestNoBoardsVerbTakesASession(t *testing.T) {
 		}
 	}
 	want := []string{"list", "tasks", "register", "authorize", "order", "complete", "cancel", "decide", "answer",
-		"review", "signoff", "hold", "release", "require-review", "strength", "lock", "unlock", "apply"}
+		"review", "signoff", "hold", "lifthold", "require-review", "strength", "pause", "resume", "apply", "work-level",
+		"declare-delivery", "unassign"}
 	for _, name := range want {
 		found := false
 		for _, c := range boardsCmd.Commands() {
@@ -60,7 +61,7 @@ func TestNoBoardsVerbTakesASession(t *testing.T) {
 func TestRequiredFlags(t *testing.T) {
 	for cmd, flags := range map[*cobra.Command][]string{
 		boardsRegisterCmd: {"title"}, boardsAuthorizeCmd: {"role"}, boardsOrderCmd: {"order"},
-		boardsDecideCmd: {"spec"}, boardsSignoffCmd: {"outcome"}, boardsHoldCmd: {"reason"}, boardsLockCmd: {"reason"},
+		boardsDecideCmd: {"spec"}, boardsSignoffCmd: {"outcome"}, boardsHoldCmd: {"reason"}, boardsPauseCmd: {"reason"},
 	} {
 		for _, name := range flags {
 			f := cmd.Flags().Lookup(name)
@@ -87,7 +88,7 @@ func TestAuthorizeSendsTheOrderOnlyWhenSet(t *testing.T) {
 		t.Error("orderIndex sent without --order")
 	}
 	got := authorizeVariables("t", "coder", 0, true, []string{"d-1"}, intp(2))
-	want := map[string]interface{}{"taskUuid": "t", "role": "coder", "orderIndex": 0, "dependsOn": []string{"d-1"}, "level": 2}
+	want := map[string]interface{}{"taskUuid": "t", "role": "coder", "orderIndex": 0, "dependsOn": []string{"d-1"}, "workLevel": 2}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -104,16 +105,16 @@ func TestSkippingRequiredRolesNeedsANote(t *testing.T) {
 }
 
 func TestDecideBuildsEachKindOfDecision(t *testing.T) {
-	got, err := decideVariables("t", "review_findings", []string{"R-3=not reachable"}, []string{"R-4=known, tracked"},
+	got, err := decideVariables("t", "board_review_items", []string{"R-3=not reachable"}, []string{"R-4=known, tracked"},
 		[]string{"R-5=2", "1"}, []string{"missing null check"}, "architecture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]interface{}{"taskUuid": "t", "specification": "REVIEW_FINDINGS",
+	want := map[string]interface{}{"taskUuid": "t", "specification": "BOARD_REVIEW_ITEMS",
 		"decisions": []map[string]interface{}{
-			{"action": "DISMISS", "findingId": "R-3", "resolution": "not reachable"},
-			{"action": "ACCEPT", "findingId": "R-4", "resolution": "known, tracked"},
-			{"action": "SET_PRIORITY", "findingId": "R-5", "priority": 2},
+			{"action": "DISMISS", "reviewItemId": "R-3", "resolution": "not reachable"},
+			{"action": "ACCEPT", "reviewItemId": "R-4", "resolution": "known, tracked"},
+			{"action": "SET_PRIORITY", "reviewItemId": "R-5", "priority": 2},
 			{"action": "FILE", "title": "missing null check", "priority": 1},
 		},
 		"about": map[string]interface{}{"specification": "ARCHITECTURE"}}
@@ -128,12 +129,12 @@ func TestDecideRefusesWhatTheServerWould(t *testing.T) {
 		dismiss, accept, priority, file []string
 	}{
 		"spec":            {"ARCHITECTURE", []string{"R-1=x"}, nil, nil, nil},
-		"nothing":         {"TEST_REPORT", nil, nil, nil, nil},
-		"no reason":       {"TEST_REPORT", []string{"R-1"}, nil, nil, nil},
-		"file unranked":   {"TEST_REPORT", nil, nil, nil, []string{"t"}},
-		"stray priority":  {"TEST_REPORT", nil, nil, []string{"2"}, nil},
-		"priority not N":  {"TEST_REPORT", nil, nil, []string{"R-1=high"}, nil},
-		"two bare levels": {"TEST_REPORT", nil, nil, []string{"1", "2"}, []string{"t"}},
+		"nothing":         {"BOARD_TEST_REPORT", nil, nil, nil, nil},
+		"no reason":       {"BOARD_TEST_REPORT", []string{"R-1"}, nil, nil, nil},
+		"file unranked":   {"BOARD_TEST_REPORT", nil, nil, nil, []string{"t"}},
+		"stray priority":  {"BOARD_TEST_REPORT", nil, nil, []string{"2"}, nil},
+		"priority not N":  {"BOARD_TEST_REPORT", nil, nil, []string{"R-1=high"}, nil},
+		"two bare levels": {"BOARD_TEST_REPORT", nil, nil, []string{"1", "2"}, []string{"t"}},
 	} {
 		if _, err := decideVariables("t", c.spec, c.dismiss, c.accept, c.priority, c.file, "", ""); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -146,7 +147,7 @@ func TestAnswerOneOrAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]interface{}{"taskUuid": "t", "releaseHold": false,
+	want := map[string]interface{}{"taskUuid": "t", "liftHold": false,
 		"answers": []map[string]interface{}{{"id": "q1", "status": "WITHDRAWN", "resolution": "use the v2 API"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -161,7 +162,7 @@ func TestAnswerOneOrAll(t *testing.T) {
 	}
 }
 
-func TestReviewTakesOneVerdictAndFindingsOnlyWithReject(t *testing.T) {
+func TestReviewTakesOneVerdictAndReviewItemsOnlyWithReject(t *testing.T) {
 	if _, err := reviewVariables("t", true, true, "", nil, nil, "", ""); err == nil {
 		t.Error("both verdicts accepted")
 	}
@@ -169,15 +170,15 @@ func TestReviewTakesOneVerdictAndFindingsOnlyWithReject(t *testing.T) {
 		t.Error("no verdict accepted")
 	}
 	if _, err := reviewVariables("t", true, false, "", []string{"t"}, []string{"1"}, "", ""); err == nil {
-		t.Error("findings with --approve accepted")
+		t.Error("review items with --accept accepted")
 	}
 	got, err := reviewVariables("t", false, true, "not yet", []string{"no rollback plan"}, []string{"1"}, "ARCHITECTURE", "r-9")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]interface{}{"taskUuid": "t", "approve": false, "note": "not yet",
-		"findings": []map[string]interface{}{{"action": "FILE", "title": "no rollback plan", "priority": 1}},
-		"about":    map[string]interface{}{"specification": "ARCHITECTURE", "release": "r-9"}}
+	want := map[string]interface{}{"taskUuid": "t", "accept": false, "note": "not yet",
+		"reviewItems": []map[string]interface{}{{"action": "FILE", "title": "no rollback plan", "priority": 1}},
+		"about":       map[string]interface{}{"specification": "ARCHITECTURE", "release": "r-9"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
@@ -228,12 +229,12 @@ func TestBudgetVariables(t *testing.T) {
 	}
 }
 
-// A person's release sends the role only when one is named, and the note only when given: a bare
-// release lets routing pick (task 4c566d0d).
-func TestOperatorReleaseVars(t *testing.T) {
-	bare := operatorReleaseVars("t", "", "")
+// A person's hold lift sends the role only when one is named, and the note only when given: a bare
+// lift lets routing pick (task 4c566d0d).
+func TestOperatorLiftVars(t *testing.T) {
+	bare := operatorLiftVars("t", "", "")
 	if bare["taskUuid"] != "t" || bare["hold"] != false {
-		t.Errorf("a release is hold=false on the task: %v", bare)
+		t.Errorf("a lift is hold=false on the task: %v", bare)
 	}
 	if _, ok := bare["role"]; ok {
 		t.Errorf("no --role sends no role: %v", bare)
@@ -241,11 +242,11 @@ func TestOperatorReleaseVars(t *testing.T) {
 	if _, ok := bare["reason"]; ok {
 		t.Errorf("no --note sends no reason: %v", bare)
 	}
-	named := operatorReleaseVars("t", "go on", " coder ")
+	named := operatorLiftVars("t", "go on", " coder ")
 	if named["role"] != "coder" || named["reason"] != "go on" {
 		t.Errorf("--role and --note are sent, the role trimmed: %v", named)
 	}
-	if boardsReleaseCmd.Flags().Lookup("role") == nil {
-		t.Error("boards release takes --role")
+	if boardsLiftholdCmd.Flags().Lookup("role") == nil {
+		t.Error("boards lifthold takes --role")
 	}
 }

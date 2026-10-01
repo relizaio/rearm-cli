@@ -37,7 +37,7 @@ import (
 //
 //   rearm agent board list | show <board>
 //   rearm agent board coordinate <board> --session <uuid>
-//   rearm agent board lock|unlock <board> --session <uuid> [--reason r]
+//   rearm agent board pause|resume <board> --session <uuid> [--reason r]
 //   rearm agent board roleconfig set <board> --session <uuid> --name <r> [...]
 //   rearm agent board roleconfig list <board>
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
@@ -75,7 +75,7 @@ var (
 	taskOutputs      []string
 	// Task documents read by other means, added to what show and assign recorded (RD2-34).
 	taskSeen []string
-	// The pass's round changes nothing to build (RD4-13): after a finding about the signing role's own
+	// The pass's round changes nothing to build (RD4-13): after a review item about the signing role's own
 	// document, the task goes back to the filer instead of to the role that builds from the round.
 	taskNoChange     bool
 	taskShowSession  string
@@ -84,7 +84,7 @@ var (
 	taskBudget       string
 	taskStatusFilter string
 	taskChangedSince string
-	taskLockReason   string
+	taskPauseReason  string
 	taskDependsOn    []string
 	taskEventKind    string
 	roleName         string
@@ -115,7 +115,7 @@ func runGqlRead(query string, variables map[string]interface{}, key string) inte
 
 var agentBoardCmd = &cobra.Command{
 	Use:   "board",
-	Short: "Agent task boards (list / show / coordinate / lock / roleconfig)",
+	Short: "Agent task boards (list / show / coordinate / pause / roleconfig)",
 }
 
 var agentBoardListCmd = &cobra.Command{
@@ -128,7 +128,7 @@ var agentBoardListCmd = &cobra.Command{
 
 var agentBoardShowCmd = &cobra.Command{
 	Use:   "show <board>",
-	Short: "Show one board incl. sources, lock state, seat, coordinator prompt, document components and documents root",
+	Short: "Show one board incl. sources, pause state, seat, coordinator prompt, document components and documents root",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGql(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentBoardProgrammatic")
@@ -169,28 +169,28 @@ then who merges on this board and how (delivery.merge).`,
 	},
 }
 
-func boardLockRun(lock bool) func(cmd *cobra.Command, args []string) {
+func boardPauseRun(pause bool) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
-		variables := map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "lock": lock}
-		if taskLockReason != "" {
-			variables["reason"] = taskLockReason
+		variables := map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "pause": pause}
+		if taskPauseReason != "" {
+			variables["reason"] = taskPauseReason
 		}
-		runGql(rearm.AgentBoardCoordinatorLockProgrammatic_Operation, variables, "agentBoardCoordinatorLockProgrammatic")
+		runGql(rearm.AgentBoardCoordinatorPauseProgrammatic_Operation, variables, "agentBoardCoordinatorPauseProgrammatic")
 	}
 }
 
-var agentBoardLockCmd = &cobra.Command{
-	Use:   "lock <board>",
-	Short: "Coordinator lock: stop new assignments (cannot touch an OPERATOR lock)",
+var agentBoardPauseCmd = &cobra.Command{
+	Use:   "pause <board>",
+	Short: "Coordinator pause: stop new assignments (cannot touch an OPERATOR pause)",
 	Args:  cobra.ExactArgs(1),
-	Run:   boardLockRun(true),
+	Run:   boardPauseRun(true),
 }
 
-var agentBoardUnlockCmd = &cobra.Command{
-	Use:   "unlock <board>",
-	Short: "Lift a coordinator lock",
+var agentBoardResumeCmd = &cobra.Command{
+	Use:   "resume <board>",
+	Short: "Resume the board: lift a coordinator pause",
 	Args:  cobra.ExactArgs(1),
-	Run:   boardLockRun(false),
+	Run:   boardPauseRun(false),
 }
 
 var agentBoardPosteventCmd = &cobra.Command{
@@ -269,7 +269,7 @@ The title is one line of at most 120 characters -- what a card shows; the
 server refuses a longer one or one with a line break. Everything else goes in
 --description (at most 4000 characters, kept whole).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		taskLevelSet = cmd.Flags().Changed("level")
+		taskLevelSet = cmd.Flags().Changed("work-level")
 		if taskBoardUuid != "" {
 			taskBoardUuid = boardArg(taskBoardUuid)
 		}
@@ -295,7 +295,7 @@ func agentRegisterInput() map[string]interface{} {
 		input["sessionUuid"] = taskSessionUuid
 	}
 	if taskLevelSet {
-		input["level"] = taskLevel
+		input["workLevel"] = taskLevel
 	}
 	return withGroupAndTags(input, taskGroupKey, taskTagKeys)
 }
@@ -501,14 +501,14 @@ or clear one, ask the operator. Left out, the requirement is unchanged.
 only: the server refuses it when the task already has a budget -- changing
 one is the operator's decision. Left out, the budget is unchanged.
 
---level sets the task's level, a rung of the board's ladder (0 is a level):
-on a board with a ladder, set it here rather than leave the task to the
-default. The server refuses a level off the ladder, naming it, and any
-level on a board without one. Left out, the level is unchanged.`,
+--work-level sets the task's work level, a rung of the board's ladder (0 is a
+level): on a board with a ladder, set it here rather than leave the task to the
+default. The server refuses a work level off the ladder, naming it, and any
+work level on a board without one. Left out, the work level is unchanged.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
-		agentAuthorizeLevel(variables, taskLevel, cmd.Flags().Changed("level"))
+		agentAuthorizeWorkLevel(variables, taskLevel, cmd.Flags().Changed("work-level"))
 		if taskOrder != 0 {
 			variables["orderIndex"] = taskOrder
 		}
@@ -535,11 +535,11 @@ level on a board without one. Left out, the level is unchanged.`,
 	},
 }
 
-// agentAuthorizeLevel adds the level to authorize's variables when --level was given, 0 included
-// (task RD3-6): the coordinator sets a task's level on a ladder board when it authorizes it.
-func agentAuthorizeLevel(variables map[string]interface{}, level int, set bool) {
+// agentAuthorizeWorkLevel adds the work level to authorize's variables when --work-level was given, 0
+// included (task RD3-6): the coordinator sets a task's work level on a ladder board when it authorizes it.
+func agentAuthorizeWorkLevel(variables map[string]interface{}, level int, set bool) {
 	if set {
-		variables["level"] = level
+		variables["workLevel"] = level
 	}
 }
 
@@ -547,22 +547,22 @@ var agentTaskHoldCmd = &cobra.Command{
 	Use:   "hold <task-uuid>",
 	Short: "Coordinator: put the task ON_HOLD (--reason), or park it for an operator decision (--operator --question); the hop's holder: park its hop (--operator --question)",
 	Long: `The coordinator seat puts a task nobody is working ON_HOLD at COORDINATOR level, with --reason;
-it is excluded from polls until released.
+it is excluded from polls until the hold is lifted.
 
 The session holding the task parks its own hop for a person with --operator --question (task RD4-5):
 the task shows "awaiting the operator: <question>", the people who write the board are notified,
-and the hop stays yours. A person releases it with the answer as the note, which is recorded on the
+and the hop stays yours. A person lifts it with the answer as the note, which is recorded on the
 task, and the hop resumes with you.
 
 The coordinator seat parks a task nobody is working for a person's decision the same way, with
 --operator --question (task RD4-17): in PENDING_INTAKE, QUEUED, AWAITING_COORDINATOR or DELIVERING.
-Put the question, the options you see and your recommendation in it. A person answers by releasing
-the hold with a note, or by anything else they do on the task (answering its questions, an
-attestation, a supersede, a complete, a reopen, a cancel, a new order or level); either is recorded
+Put the question, the options you see and your recommendation in it. A person answers by lifting
+the hold with a note, or by anything else they do on the task (answering its questions, a
+declaration, a supersede, a complete, a reopen, a cancel, a new order or work level); either is recorded
 as the answer, reading "<action> by <person>: <note>", and the task returns to the state it was
 parked from, so a DELIVERING task goes on delivering, before the action moves it on if it does.
-Until then every task verb a session runs on it is refused (delivered, --abandoned, supersedepr,
-complete, reopen, cancel, order, level and the rest), except task linkpr, which is accepted,
+Until then every task verb a session runs on it is refused (declare-delivery, --abandoned, supersedepr,
+complete, reopen, cancel, order, work-level and the rest), except task linkpr, which is accepted,
 recorded on the decision and posted as an INFO; it does not answer the question (task RD4-19).
 A DELIVERING task is parked only this way.`,
 	Args: cobra.ExactArgs(1),
@@ -572,15 +572,15 @@ A DELIVERING task is parked only this way.`,
 }
 
 var (
-	taskReleaseRole    string
-	taskReleaseNote    string
+	taskLiftRole       string
+	taskLiftNote       string
 	taskEscalateReason string
 )
 
-// releaseHoldVars are the variables of a coordinator's release: the role only when one is named,
-// so a release without --role lets routing pick, as before (task 4c566d0d); the note only when
+// liftHoldVars are the variables of a coordinator's hold lift: the role only when one is named,
+// so a lift without --role lets routing pick, as before (task 4c566d0d); the note only when
 // given (task c0a2134c).
-func releaseHoldVars(task, session, role, note string) map[string]interface{} {
+func liftHoldVars(task, session, role, note string) map[string]interface{} {
 	vars := map[string]interface{}{"taskUuid": task, "sessionUuid": session}
 	if r := strings.TrimSpace(role); r != "" {
 		vars["role"] = r
@@ -600,21 +600,21 @@ func escalateHoldVars(task, session, reason string) (map[string]interface{}, err
 	return map[string]interface{}{"taskUuid": task, "sessionUuid": session, "reason": r}, nil
 }
 
-var agentTaskReleaseholdCmd = &cobra.Command{
-	Use:   "releasehold <task-uuid>",
-	Short: "Coordinator: release a hold; the task routes on from its last hop, or to --role",
-	Long: `Releases a COORDINATOR-level hold. The task routes on from its last hop, as routing would
+var agentTaskLiftholdCmd = &cobra.Command{
+	Use:   "lifthold <task-uuid>",
+	Short: "Coordinator: lift a hold; the task routes on from its last hop, or to --role",
+	Long: `Lifts a COORDINATOR-level hold. The task routes on from its last hop, as routing would
 have routed it; --role names an active role on the board to send it to instead. --note says why,
 on the board feed.
 
 A no-progress or cycle-cap stop parks at COORDINATOR level first when the board allows it (the
-default): releasing it routes past the stop once. One release per stop kind per task; the next
+default): lifting it routes past the stop once. One lift per stop kind per task; the next
 identical stop is the operator's. If it is a judgement call, escalate instead.
 
-An OPERATOR hold (a second loop stop, a budget stop, a person's hold) is the operator's to release.`,
+An OPERATOR hold (a second loop stop, a budget stop, a person's hold) is the operator's to lift.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGqlCompact(rearm.AgentTaskReleaseHoldProgrammatic_Operation, releaseHoldVars(args[0], taskSessionUuid, taskReleaseRole, taskReleaseNote), "agentTaskReleaseHoldProgrammatic")
+		runGqlCompact(rearm.AgentTaskLiftHoldProgrammatic_Operation, liftHoldVars(args[0], taskSessionUuid, taskLiftRole, taskLiftNote), "agentTaskLiftHoldProgrammatic")
 	},
 }
 
@@ -653,17 +653,17 @@ var agentTaskOrderCmd = &cobra.Command{
 	},
 }
 
-var agentTaskLevelCmd = &cobra.Command{
-	Use:   "level <task-uuid>",
-	Short: "Coordinator: set a task's level, a rung of the board's ladder, or --clear so it reads the default",
+var agentTaskWorkLevelCmd = &cobra.Command{
+	Use:   "work-level <task-uuid>",
+	Short: "Coordinator: set a task's work level, a rung of the board's ladder, or --clear so it reads the default",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := levelVariables(args[0], taskLevel, cmd.Flags().Changed("level"), taskLevelClear)
+		vars, err := workLevelVariables(args[0], taskLevel, cmd.Flags().Changed("work-level"), taskLevelClear)
 		if err != nil {
 			fail(err.Error())
 		}
 		vars["sessionUuid"] = taskSessionUuid
-		runGqlCompact(rearm.AgentTaskSetLevelProgrammatic_Operation, vars, "agentTaskSetLevelProgrammatic")
+		runGqlCompact(rearm.AgentTaskSetWorkLevelProgrammatic_Operation, vars, "agentTaskSetWorkLevelProgrammatic")
 	},
 }
 
@@ -671,7 +671,7 @@ var agentTaskSplitCmd = &cobra.Command{
 	Use:   "split <task-uuid>",
 	Short: "Coordinator: split into PENDING_INTAKE children (authorize each separately)",
 	Long: `Splits a task into PENDING_INTAKE children, given as --children-json: a list of
-{"title", "description", "externalRef", "sourceUrl", "level", "producesComponent",
+{"title", "description", "externalRef", "sourceUrl", "workLevel", "producesComponent",
 "dependsOnSiblingIndexes"}. Each title is one line of at most 120 characters;
 the rest goes in the child's description.`,
 	Args: cobra.ExactArgs(1),
@@ -753,7 +753,7 @@ var agentTaskLinkprCmd = &cobra.Command{
 
 On a task the coordinator seat parked for the operator (task hold --operator --question) the link
 is accepted too, recorded on the decision as the PR, your key's agent and the time, and posted as
-an INFO; it does not answer the question or release the hold (task RD4-19). A person who will
+an INFO; it does not answer the question or lift the hold (task RD4-19). A person who will
 supersede a PR links its replacement first.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -831,9 +831,9 @@ func init() {
 	// board flags
 	agentBoardCoordinateCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
 	_ = agentBoardCoordinateCmd.MarkPersistentFlagRequired("session")
-	for _, c := range []*cobra.Command{agentBoardLockCmd, agentBoardUnlockCmd} {
+	for _, c := range []*cobra.Command{agentBoardPauseCmd, agentBoardResumeCmd} {
 		c.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
-		c.PersistentFlags().StringVar(&taskLockReason, "reason", "", "Lock reason")
+		c.PersistentFlags().StringVar(&taskPauseReason, "reason", "", "Pause reason")
 		_ = c.MarkPersistentFlagRequired("session")
 	}
 	agentBoardRoleconfigSetCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
@@ -852,7 +852,7 @@ func init() {
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskExternalRef, "external-ref", "", "Tracker ref, e.g. github:owner/repo#123")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskTitle, "title", "", "Task title, one line of at most 120 characters — required")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskDescription, "description", "", "What the task is, beyond its title (at most 4000 characters)")
-	agentTaskRegisterCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, a rung of the board's ladder (refused on a board without one); left out, it reads the default")
+	agentTaskRegisterCmd.PersistentFlags().IntVar(&taskLevel, "work-level", 0, "The task's work level, a rung of the board's ladder (refused on a board without one); left out, it reads the default")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSourceUrl, "source-url", "", "Human-clickable tracker URL")
 	agentTaskRegisterCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Registering session (intake provenance)")
 	_ = agentTaskRegisterCmd.MarkPersistentFlagRequired("board")
@@ -867,7 +867,7 @@ func init() {
 	_ = agentTaskNextCmd.MarkPersistentFlagRequired("session")
 
 	for _, c := range []*cobra.Command{agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd,
-		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
+		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskWorkLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
 		agentTaskReopenCmd} {
 		c.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Calling session uuid — required")
 		_ = c.MarkPersistentFlagRequired("session")
@@ -877,8 +877,8 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskSeen, "seen", nil,
 		"Task documents read by other means than task show or assign; added to what they recorded")
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoChange, "no-change", false,
-		"On a PASSED that answers a finding about your own document: the new round changes nothing to build,"+
-			" so the task goes back to whoever filed the finding instead of to the role that builds from the round")
+		"On a PASSED that answers a review item about your own document: the new round changes nothing to build,"+
+			" so the task goes back to whoever filed the review item instead of to the role that builds from the round")
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoCode, "no-code", false,
 		"On a PASSED: this round changed no code (a note-only round). Where CI registers the task's PRs, a pass by a"+
 			" role that pushes code is refused while no linked PR moved since the assignment; this says why none did")
@@ -899,18 +899,18 @@ func init() {
 		"Raise the model strength this task needs above its role's floor (raise only)")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskBudget, "budget", "",
 		"Seed what the task may spend, in dollars (only when it has no budget yet)")
-	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskLevel, "level", 0,
-		"Set the task's level, a rung of the board's ladder (refused on a board without one); left out, unchanged")
+	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskLevel, "work-level", 0,
+		"Set the task's work level, a rung of the board's ladder (refused on a board without one); left out, unchanged")
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "",
 		"Calling session uuid: the coordinator seat, or with --operator the session holding the task — required")
 	agentTaskRequireReviewCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskNote, "reason", "", "Why the task waits for a human (the seat's hold) — required without --operator")
 	_ = agentTaskHoldCmd.MarkPersistentFlagRequired("session")
-	agentTaskReleaseholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
-	_ = agentTaskReleaseholdCmd.MarkPersistentFlagRequired("session")
-	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseRole, "role", "", "Route the released task to this role instead of the one routing would pick")
-	agentTaskReleaseholdCmd.Flags().StringVar(&taskReleaseNote, "note", "", "Why, posted to the board feed with the release")
+	agentTaskLiftholdCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
+	_ = agentTaskLiftholdCmd.MarkPersistentFlagRequired("session")
+	agentTaskLiftholdCmd.Flags().StringVar(&taskLiftRole, "role", "", "Route the task to this role instead of the one routing would pick")
+	agentTaskLiftholdCmd.Flags().StringVar(&taskLiftNote, "note", "", "Why, posted to the board feed with the lift")
 	agentTaskEscalateCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "", "Coordinator seat session uuid — required")
 	_ = agentTaskEscalateCmd.MarkPersistentFlagRequired("session")
 	agentTaskEscalateCmd.Flags().StringVar(&taskEscalateReason, "reason", "", "Your recommendation: what the operator is to decide — required")
@@ -921,8 +921,8 @@ func init() {
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("session")
 	_ = agentBoardPosteventCmd.MarkPersistentFlagRequired("message")
 	agentTaskOrderCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order — required")
-	agentTaskLevelCmd.PersistentFlags().IntVar(&taskLevel, "level", 0, "The task's level, a rung of the board's ladder")
-	agentTaskLevelCmd.PersistentFlags().BoolVar(&taskLevelClear, "clear", false, "Clear it: the task reads the board's default level")
+	agentTaskWorkLevelCmd.PersistentFlags().IntVar(&taskLevel, "work-level", 0, "The task's work level, a rung of the board's ladder")
+	agentTaskWorkLevelCmd.PersistentFlags().BoolVar(&taskLevelClear, "clear", false, "Clear it: the task reads the board's default work level")
 	_ = agentTaskOrderCmd.MarkPersistentFlagRequired("order")
 	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]' — required`)
 	_ = agentTaskSplitCmd.MarkPersistentFlagRequired("children-json")
@@ -949,8 +949,8 @@ func init() {
 	agentBoardCmd.AddCommand(agentBoardShowCmd)
 	agentBoardCmd.AddCommand(agentBoardSnapshotCmd)
 	agentBoardCmd.AddCommand(agentBoardCoordinateCmd)
-	agentBoardCmd.AddCommand(agentBoardLockCmd)
-	agentBoardCmd.AddCommand(agentBoardUnlockCmd)
+	agentBoardCmd.AddCommand(agentBoardPauseCmd)
+	agentBoardCmd.AddCommand(agentBoardResumeCmd)
 	agentBoardCmd.AddCommand(agentBoardPosteventCmd)
 	agentBoardCmd.AddCommand(agentBoardRoleconfigCmd)
 
@@ -961,9 +961,9 @@ func init() {
 	agentTaskCmd.AddCommand(agentTaskReturnCmd)
 	agentTaskCmd.AddCommand(agentTaskAuthorizeCmd)
 	agentTaskCmd.AddCommand(agentTaskOrderCmd)
-	agentTaskCmd.AddCommand(agentTaskLevelCmd)
+	agentTaskCmd.AddCommand(agentTaskWorkLevelCmd)
 	agentTaskCmd.AddCommand(agentTaskHoldCmd)
-	agentTaskCmd.AddCommand(agentTaskReleaseholdCmd)
+	agentTaskCmd.AddCommand(agentTaskLiftholdCmd)
 	agentTaskCmd.AddCommand(agentTaskEscalateCmd)
 	agentTaskCmd.AddCommand(agentTaskRequireReviewCmd)
 	agentTaskCmd.AddCommand(agentTaskSplitCmd)

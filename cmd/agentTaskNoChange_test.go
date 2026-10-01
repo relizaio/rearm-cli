@@ -7,7 +7,7 @@ import (
 	rearm "github.com/relizaio/rearm-client-go"
 )
 
-// A pass that answers a finding about the signing role's own document can say its round changes nothing to build
+// A pass that answers a review item about the signing role's own document can say its round changes nothing to build
 // (task RD4-13): `task signoff --no-change` sends noChange true; without the flag nothing is sent, so the server
 // records nothing and routes the round to the role that builds from it.
 

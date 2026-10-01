@@ -113,7 +113,7 @@ func reservedOf(board map[string]interface{}) map[string]bool {
 // elementsInput is what a publish of spec adds for the document src (gaps §2.A): the element
 // index as the JSON text it digested, and the digest. Nothing with --no-elements, or for a document
 // with no ids and nothing to warn about -- which publishes exactly as it did before elements existed.
-// A type that carries a findings index sends elements only when the server reads grammar 1.2 and the
+// A type that carries a review item index sends elements only when the server reads grammar 1.2 and the
 // board defines a family in it (a test report defines test ids, task RD4-6); an older server refuses
 // elements on an index type.
 func elementsInput(spec string, src []byte, board map[string]interface{}) (map[string]interface{}, *elements.Index, error) {
@@ -220,7 +220,7 @@ the index doc publish would send: each element's id, family, title, parent, link
 (**term** in its content) and content digest, the references, and every warning. Nothing is sent.
 
 Grammar 1.2 reads a heading by the document's type: an id defines only in a type its family lists
-(test ids in a test plan or report, a finding id in review findings), and is a reference elsewhere,
+(test ids in a test plan or report, a review item id in a review), and is a reference elsewhere,
 defining nothing. So give the type with --type; with --board and no --type it is read off the board's
 path templates. A bold span leading a line and ending with a period or colon ("**Fix.**", "- **Why:**")
 is emphasis, not a glossary term.

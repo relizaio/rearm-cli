@@ -621,7 +621,7 @@ was reopened, or that a later hop passed after the session's own rejection (the 
 round landed); an open question on the board addressed to the session's role (--role, else the
 roles it worked) while it is still the session's to answer: its task is not COMPLETED or CANCELLED,
 and the session has published no round of the answering role's specification on it since the
-question was asked (task RD4-14); an ALERT, LOCKED or UNLOCKED event. It prints {"offer": null, "changes": [...],
+question was asked (task RD4-14); an ALERT, PAUSED or RESUMED event. It prints {"offer": null, "changes": [...],
 "questions": [...], "events": [...], "nextAfter": N}: each change names the task, the transition
 (from, to, trigger, by, at) and the document rounds published since the session's last sign-off
 on it, so the rejection can be read without a 'task show'. It wakes only on what it has not
@@ -669,6 +669,6 @@ func init() {
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
 	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator or --watch: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json; with --watch wait-<board>-watch-<session>.json)")
-	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/LOCKED/UNLOCKED event; needs --board")
+	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/PAUSED/RESUMED event; needs --board")
 	agentCmd.AddCommand(agentWaitCmd)
 }

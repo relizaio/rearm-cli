@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Every command the package defines is attached somewhere (RD2-1 T-1): agentTaskLevelCmd was defined
+// Every command the package defines is attached somewhere (RD2-1 T-1): agentTaskWorkLevelCmd was defined
 // with its flags and never added to agent task, so every call stopped at the parent with "unknown
 // flag", while a test of the unattached command object passed.
 func TestEveryDefinedCommandIsAttached(t *testing.T) {
@@ -60,19 +60,19 @@ func TestEveryDefinedCommandIsAttached(t *testing.T) {
 	}
 }
 
-// The seat's level verb runs from the root, as a person types it: the command is found under
+// The seat's work-level verb runs from the root, as a person types it: the command is found under
 // agent task and its flags parse.
-func TestAgentTaskLevelIsReachableFromTheRoot(t *testing.T) {
-	cmd, rest, err := rootCmd.Find([]string{"agent", "task", "level", "t1", "--session", "s1", "--level", "0"})
+func TestAgentTaskWorkLevelIsReachableFromTheRoot(t *testing.T) {
+	cmd, rest, err := rootCmd.Find([]string{"agent", "task", "work-level", "t1", "--session", "s1", "--work-level", "0"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmd != agentTaskLevelCmd {
-		t.Fatalf("agent task level resolves to %q, not the level command", cmd.CommandPath())
+	if cmd != agentTaskWorkLevelCmd {
+		t.Fatalf("agent task work-level resolves to %q, not the work-level command", cmd.CommandPath())
 	}
 	defer func() {
 		taskSessionUuid, taskLevel, taskLevelClear = "", 0, false
-		for _, f := range []string{"session", "level", "clear"} {
+		for _, f := range []string{"session", "work-level", "clear"} {
 			if fl := cmd.Flags().Lookup(f); fl != nil {
 				fl.Changed = false
 			}
@@ -81,14 +81,14 @@ func TestAgentTaskLevelIsReachableFromTheRoot(t *testing.T) {
 	if err := cmd.ParseFlags(rest); err != nil {
 		t.Fatalf("flags do not parse from the root: %v", err)
 	}
-	if taskSessionUuid != "s1" || taskLevel != 0 || !cmd.Flags().Changed("level") {
-		t.Errorf("parsed session %q level %d changed %v", taskSessionUuid, taskLevel, cmd.Flags().Changed("level"))
+	if taskSessionUuid != "s1" || taskLevel != 0 || !cmd.Flags().Changed("work-level") {
+		t.Errorf("parsed session %q level %d changed %v", taskSessionUuid, taskLevel, cmd.Flags().Changed("work-level"))
 	}
-	vars, err := levelVariables(cmd.Flags().Arg(0), taskLevel, cmd.Flags().Changed("level"), taskLevelClear)
-	if err != nil || vars["taskUuid"] != "t1" || vars["level"] != 0 {
+	vars, err := workLevelVariables(cmd.Flags().Arg(0), taskLevel, cmd.Flags().Changed("work-level"), taskLevelClear)
+	if err != nil || vars["taskUuid"] != "t1" || vars["workLevel"] != 0 {
 		t.Errorf("variables %v %v", vars, err)
 	}
-	if boards, _, err := rootCmd.Find([]string{"boards", "level", "t1"}); err != nil || boards != boardsTaskLevelCmd {
-		t.Errorf("boards level resolves to %v (%v)", boards, err)
+	if boards, _, err := rootCmd.Find([]string{"boards", "work-level", "t1"}); err != nil || boards != boardsTaskWorkLevelCmd {
+		t.Errorf("boards work-level resolves to %v (%v)", boards, err)
 	}
 }

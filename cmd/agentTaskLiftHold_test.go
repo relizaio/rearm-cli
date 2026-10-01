@@ -7,36 +7,36 @@ import (
 	rearm "github.com/relizaio/rearm-client-go"
 )
 
-// A coordinator's release names a role only when one is given (task 4c566d0d).
-func TestReleaseHoldVars(t *testing.T) {
-	plain := releaseHoldVars("t1", "s1", "", "")
+// A coordinator's hold lift names a role only when one is given (task 4c566d0d).
+func TestLiftHoldVars(t *testing.T) {
+	plain := liftHoldVars("t1", "s1", "", "")
 	if _, ok := plain["role"]; ok || plain["taskUuid"] != "t1" || plain["sessionUuid"] != "s1" {
 		t.Errorf("without --role, routing picks: %v", plain)
 	}
-	if got := releaseHoldVars("t1", "s1", " coder ", "")["role"]; got != "coder" {
+	if got := liftHoldVars("t1", "s1", " coder ", "")["role"]; got != "coder" {
 		t.Errorf("with --role, the trimmed role is sent: %v", got)
 	}
-	if !strings.Contains(rearm.AgentTaskReleaseHoldProgrammatic_Operation, "role: $role") {
-		t.Error("the release operation does not take a role; is rearm-client-go pinned at #38 or later?")
+	if !strings.Contains(rearm.AgentTaskLiftHoldProgrammatic_Operation, "role: $role") {
+		t.Error("the lift operation does not take a role")
 	}
-	if f := agentTaskReleaseholdCmd.Flags().Lookup("role"); f == nil {
-		t.Error("releasehold has no --role flag")
+	if f := agentTaskLiftholdCmd.Flags().Lookup("role"); f == nil {
+		t.Error("lifthold has no --role flag")
 	}
 }
 
-// The coordinator's release carries a note, and escalate a reason (task c0a2134c).
-func TestReleaseNoteAndEscalateVars(t *testing.T) {
-	if _, ok := releaseHoldVars("t1", "s1", "", "  ")["note"]; ok {
+// The coordinator's hold lift carries a note, and escalate a reason (task c0a2134c).
+func TestLiftNoteAndEscalateVars(t *testing.T) {
+	if _, ok := liftHoldVars("t1", "s1", "", "  ")["note"]; ok {
 		t.Error("a blank --note sends no note")
 	}
-	if got := releaseHoldVars("t1", "s1", "", " one more round ")["note"]; got != "one more round" {
+	if got := liftHoldVars("t1", "s1", "", " one more round ")["note"]; got != "one more round" {
 		t.Errorf("--note is sent, trimmed: %v", got)
 	}
-	if agentTaskReleaseholdCmd.Flags().Lookup("note") == nil {
-		t.Error("releasehold has no --note flag")
+	if agentTaskLiftholdCmd.Flags().Lookup("note") == nil {
+		t.Error("lifthold has no --note flag")
 	}
-	if !strings.Contains(rearm.AgentTaskReleaseHoldProgrammatic_Operation, "note: $note") {
-		t.Error("the release operation does not take a note")
+	if !strings.Contains(rearm.AgentTaskLiftHoldProgrammatic_Operation, "note: $note") {
+		t.Error("the lift operation does not take a note")
 	}
 	vars, err := escalateHoldVars("t1", "s1", " recommend accepting T-1 ")
 	if err != nil || vars["reason"] != "recommend accepting T-1" || vars["sessionUuid"] != "s1" || vars["taskUuid"] != "t1" {

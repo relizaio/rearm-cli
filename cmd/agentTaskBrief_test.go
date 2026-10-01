@@ -77,20 +77,20 @@ func (b *briefBoard) serve() *httptest.Server {
 }
 
 func briefTaskFixture() map[string]any {
-	doc := func(uuid, spec string, round int, path string, advisory bool, findings map[string]any) map[string]any {
+	doc := func(uuid, spec string, round int, path string, advisory bool, reviewItems map[string]any) map[string]any {
 		d := map[string]any{"specification": spec, "round": round, "path": path, "advisory": advisory}
-		if findings != nil {
-			d["findings"] = findings
+		if reviewItems != nil {
+			d["reviewItems"] = reviewItems
 		}
 		return map[string]any{"uuid": uuid, "version": "7", "lifecycle": "ASSEMBLED", "document": d}
 	}
 	return map[string]any{"uuid": "t-1", "key": "RD-1", "board": "b-1", "title": "build it", "description": "Build the thing.",
-		"status": "ASSIGNED", "role": "coder", "effectiveLevel": 1, "dependsOn": []any{"t-0"},
+		"status": "ASSIGNED", "role": "coder", "effectiveWorkLevel": 1, "dependsOn": []any{"t-0"},
 		"tags": []any{map[string]any{"key": "urgent"}}, "spentMicros": 1_500_000,
 		"openQuestions": []any{map[string]any{"id": "Q-1", "title": "which branch?"}},
 		"documents": []any{
 			doc("r-a1", "ARCHITECTURE", 1, "boards/x/design/RD-1/architecture-1.md", false, nil),
-			doc("r-t1", "TEST_REPORT", 1, "boards/x/tests/RD-1/run-1.md", false,
+			doc("r-t1", "BOARD_TEST_REPORT", 1, "boards/x/tests/RD-1/run-1.md", false,
 				map[string]any{"verdict": "REJECTED", "counts": map[string]any{"passed": 3, "failed": 1, "skipped": 0}}),
 			doc("r-a2", "ARCHITECTURE", 2, "boards/x/design/RD-1/architecture-2.md", true, nil),
 		}}
@@ -141,7 +141,7 @@ func TestTheBriefPrintsItsSixPartsInOrder(t *testing.T) {
 	for _, h := range []string{"Brief for RD-1 as coder: prompt", "## 1. Your prompt (coder, version abc123)", "SERVED coder prompt",
 		"Orientation: https://rearm.example/api/agents/orientation.md", "## 2. The task", "**RD-1** build it",
 		"depends on RD-0 the base (completed)", "open question Q-1: which branch?", "## 3. Its documents",
-		"ARCHITECTURE round 2 v7, assembled, advisory", "ARCHITECTURE round 1 v7", "TEST_REPORT round 1 v7, assembled, rejected (3 passed, 1 failed, 0 skipped)",
+		"ARCHITECTURE round 2 v7, assembled, advisory", "ARCHITECTURE round 1 v7", "BOARD_TEST_REPORT round 1 v7, assembled, rejected (3 passed, 1 failed, 0 skipped)",
 		"## 4. The repository", "github.com/acme/docs", "the board's root: `boards/x/`", "## 5. The rules", "Never force-push", "## 6. Notes (notes/coder.md)",
 		"- note y"} {
 		i := strings.Index(out, h)

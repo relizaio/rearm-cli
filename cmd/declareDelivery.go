@@ -27,18 +27,18 @@ import (
 )
 
 var (
-	deliveredSession   string
-	deliveredUnit      string
-	deliveredCommit    string
-	deliveredAbandoned bool
-	deliveredNote      string
+	declareSession   string
+	declareUnit      string
+	declareCommit    string
+	declareAbandoned bool
+	declareNote      string
 )
 
-var deliveredSha = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+var declareSha = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
-// deliveredVars are an attestation's variables (task 18c5c293): the unit, and the commit that
+// declareDeliveryVars are a delivery declaration's variables (task 18c5c293): the unit, and the commit that
 // landed unless the unit is abandoned; a session only on the agent's verb.
-func deliveredVars(task, session, unit, commit string, abandoned bool, note string) (map[string]interface{}, error) {
+func declareDeliveryVars(task, session, unit, commit string, abandoned bool, note string) (map[string]interface{}, error) {
 	u := strings.TrimSpace(unit)
 	if u == "" {
 		return nil, fmt.Errorf("--unit is required: a linked PR's URL, or a branch or release on a board without PRs")
@@ -51,7 +51,7 @@ func deliveredVars(task, session, unit, commit string, abandoned bool, note stri
 	if abandoned {
 		vars["outcome"] = "ABANDONED"
 	} else {
-		if !deliveredSha.MatchString(c) {
+		if !declareSha.MatchString(c) {
 			return nil, fmt.Errorf("--commit is the merged or pushed sha, 7 to 40 hex characters (or --abandoned)")
 		}
 		vars["outcome"] = "DELIVERED"
@@ -65,50 +65,50 @@ func deliveredVars(task, session, unit, commit string, abandoned bool, note stri
 	return vars, nil
 }
 
-const deliveredLong = `Records that a delivery unit landed, or never will (task 18c5c293): a linked PR merged where this
+const declareDeliveryLong = `Records that a delivery unit landed, or never will (task 18c5c293): a linked PR merged where this
 ReARM cannot see it (its CI reports to another instance, or not at all), or on a board delivering
 without PRs a push or release. A DELIVERING task then settles: completed once every unit is
 delivered, back to the coordinator when one is --abandoned.`
 
-var agentTaskDeliveredCmd = &cobra.Command{
-	Use:   "delivered <task-uuid>",
-	Short: "Coordinator or merging role: attest that a PR merged, a push landed, or a unit is abandoned",
-	Long:  deliveredLong + "\n\nThe coordinator seat, or a session that worked the task in a role with PR_MERGE.",
+var agentTaskDeclareDeliveryCmd = &cobra.Command{
+	Use:   "declare-delivery <task-uuid>",
+	Short: "Coordinator or merging role: declare that a PR merged, a push landed, or a unit is abandoned",
+	Long:  declareDeliveryLong + "\n\nThe coordinator seat, or a session that worked the task in a role with PR_MERGE.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := deliveredVars(args[0], deliveredSession, deliveredUnit, deliveredCommit, deliveredAbandoned, deliveredNote)
+		vars, err := declareDeliveryVars(args[0], declareSession, declareUnit, declareCommit, declareAbandoned, declareNote)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTaskDeliveredProgrammatic_Operation, vars, "agentTaskDeliveredProgrammatic")
+		runGql(rearm.AgentTaskDeclareDeliveryProgrammatic_Operation, vars, "agentTaskDeclareDeliveryProgrammatic")
 	},
 }
 
-var boardsDeliveredCmd = &cobra.Command{
-	Use:   "delivered <task-uuid>",
-	Short: "Attest that a PR merged, a push landed, or a unit is abandoned (org admin)",
-	Long:  deliveredLong,
+var boardsDeclareDeliveryCmd = &cobra.Command{
+	Use:   "declare-delivery <task-uuid>",
+	Short: "Declare that a PR merged, a push landed, or a unit is abandoned (org admin)",
+	Long:  declareDeliveryLong,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		vars, err := deliveredVars(args[0], "", deliveredUnit, deliveredCommit, deliveredAbandoned, deliveredNote)
+		vars, err := declareDeliveryVars(args[0], "", declareUnit, declareCommit, declareAbandoned, declareNote)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
-		runGql(rearm.AgentTaskDelivered_Operation, vars, "agentTaskDelivered")
+		runGql(rearm.AgentTaskDeclareDelivery_Operation, vars, "agentTaskDeclareDelivery")
 	},
 }
 
 func init() {
-	for _, c := range []*cobra.Command{agentTaskDeliveredCmd, boardsDeliveredCmd} {
-		c.Flags().StringVar(&deliveredUnit, "unit", "", "a linked PR's URL, or a branch or release on a board without PRs — required")
-		c.Flags().StringVar(&deliveredCommit, "commit", "", "the merged or pushed sha — required unless --abandoned")
-		c.Flags().BoolVar(&deliveredAbandoned, "abandoned", false, "the unit will never land; the task goes back to the coordinator")
-		c.Flags().StringVar(&deliveredNote, "note", "", "why, or where it landed")
+	for _, c := range []*cobra.Command{agentTaskDeclareDeliveryCmd, boardsDeclareDeliveryCmd} {
+		c.Flags().StringVar(&declareUnit, "unit", "", "a linked PR's URL, or a branch or release on a board without PRs — required")
+		c.Flags().StringVar(&declareCommit, "commit", "", "the merged or pushed sha — required unless --abandoned")
+		c.Flags().BoolVar(&declareAbandoned, "abandoned", false, "the unit will never land; the task goes back to the coordinator")
+		c.Flags().StringVar(&declareNote, "note", "", "why, or where it landed")
 	}
-	agentTaskDeliveredCmd.Flags().StringVar(&deliveredSession, "session", "", "Coordinator seat or merging role session uuid — required")
-	_ = agentTaskDeliveredCmd.MarkFlagRequired("session")
-	agentTaskCmd.AddCommand(agentTaskDeliveredCmd)
-	boardsCmd.AddCommand(boardsDeliveredCmd)
+	agentTaskDeclareDeliveryCmd.Flags().StringVar(&declareSession, "session", "", "Coordinator seat or merging role session uuid — required")
+	_ = agentTaskDeclareDeliveryCmd.MarkFlagRequired("session")
+	agentTaskCmd.AddCommand(agentTaskDeclareDeliveryCmd)
+	boardsCmd.AddCommand(boardsDeclareDeliveryCmd)
 }

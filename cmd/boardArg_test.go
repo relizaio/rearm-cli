@@ -128,7 +128,7 @@ func TestEveryBoardVerbSendsTheResolvedUuid(t *testing.T) {
 	}{
 		{"agent board show", agentBoardShowCmd, []string{"ReARM Dogfood 3"}, "AgentBoardProgrammatic", false},
 		{"agent board snapshot", agentBoardSnapshotCmd, []string{"ReARM Dogfood 3"}, "AgentBoardSnapshotProgrammatic", false},
-		{"agent board lock", agentBoardLockCmd, []string{"ReARM Dogfood 3"}, "AgentBoardCoordinatorLockProgrammatic", false},
+		{"agent board pause", agentBoardPauseCmd, []string{"ReARM Dogfood 3"}, "AgentBoardCoordinatorPauseProgrammatic", false},
 		{"agent board postevent", agentBoardPosteventCmd, []string{"ReARM Dogfood 3"}, "AgentBoardPostEventProgrammatic", false},
 		{"agent board roleconfig list", agentBoardRoleconfigListCmd, []string{"ReARM Dogfood 3"}, "AgentTaskRoleConfigsProgrammatic", false},
 		{"agent board events", agentBoardEventsCmd, []string{"ReARM Dogfood 3"}, "AgentBoardEventsProgrammatic", false},
@@ -136,7 +136,7 @@ func TestEveryBoardVerbSendsTheResolvedUuid(t *testing.T) {
 		{"agent task next --board", agentTaskNextCmd, nil, "AgentTaskNextProgrammatic", true},
 		{"agent task register --board", agentTaskRegisterCmd, nil, "AgentTaskRegisterProgrammatic", true},
 		{"boards tasks", boardsTasksCmd, []string{"ReARM Dogfood 3"}, "AgentTasksOfBoard", false},
-		{"boards lock", boardsLockCmd, []string{"ReARM Dogfood 3"}, "AgentBoardOperatorLock", false},
+		{"boards pause", boardsPauseCmd, []string{"ReARM Dogfood 3"}, "AgentBoardOperatorPause", false},
 	}
 	for _, tc := range cases {
 		taskBoardUuid = ""

@@ -16,13 +16,13 @@ func release(t *testing.T, js string) map[string]interface{} {
 }
 
 func TestTheSummaryCountsAndNamesWhatBlocks(t *testing.T) {
-	r := release(t, `{"uuid":"r","document":{"round":2,"checks":{"catalogueVersion":"2026-09.1","results":[
+	r := release(t, `{"uuid":"r","document":{"round":2,"elementChecks":{"catalogueVersion":"2026-09.1","results":[
 		{"check":"ids.family","result":"PASS","blocking":false},
 		{"check":"trace.parent_exists","result":"FAIL","blocking":true,"offences":[{"elementId":"REQ-12","message":"REQ-12 → REQ-4 not found"}]},
 		{"check":"tests.no_orphans","result":"FAIL","blocking":false,"offences":[{"elementId":"REQ-30","message":"requirement REQ-30 is verified by nothing"}]},
 		{"check":"speculative.inputs_recorded","result":"SKIP","blocking":false,"reason":"no assignment"}]}}}`)
-	got := checkSummary(r)
-	if got[0] != "checks (2026-09.1): 1 pass, 2 fail, 1 skip (report round 2) — blocking: trace.parent_exists" {
+	got := elementCheckSummary(r)
+	if got[0] != "element checks (2026-09.1): 1 pass, 2 fail, 1 skip (report round 2) — blocking: trace.parent_exists" {
 		t.Errorf("head: %q", got[0])
 	}
 	joined := strings.Join(got, "\n")
@@ -35,16 +35,16 @@ func TestTheSummaryCountsAndNamesWhatBlocks(t *testing.T) {
 }
 
 func TestANonBlockingFailureDoesNotWarnOfTheSignOff(t *testing.T) {
-	r := release(t, `{"document":{"round":1,"checks":{"catalogueVersion":"2026-09.1","results":[
+	r := release(t, `{"document":{"round":1,"elementChecks":{"catalogueVersion":"2026-09.1","results":[
 		{"check":"tests.no_orphans","result":"FAIL","blocking":false,"offences":[{"message":"x"}]}]}}}`)
-	joined := strings.Join(checkSummary(r), "\n")
+	joined := strings.Join(elementCheckSummary(r), "\n")
 	if strings.Contains(joined, "blocking") || strings.Contains(joined, "sign-off") {
 		t.Errorf("a report-only failure reads as blocking:\n%s", joined)
 	}
 }
 
 func TestNoReportIsSaid(t *testing.T) {
-	if got := checkSummary(nil); len(got) != 1 || !strings.Contains(got[0], "no report") {
+	if got := elementCheckSummary(nil); len(got) != 1 || !strings.Contains(got[0], "no report") {
 		t.Errorf("got %v", got)
 	}
 }
@@ -52,17 +52,17 @@ func TestNoReportIsSaid(t *testing.T) {
 func TestTheTargetsAreTheNewestElementBearingDocumentOfEachTypeOnTheTask(t *testing.T) {
 	task := release(t, `{"uuid":"t1","documents":[
 		{"uuid":"a2","document":{"specification":"ARCHITECTURE","round":2,"task":"t1","elements":{"digest":"x"}}},
-		{"uuid":"c1","document":{"specification":"CHECK_REPORT","round":1,"task":"t1"}},
+		{"uuid":"c1","document":{"specification":"BOARD_ELEMENT_CHECK_REPORT","round":1,"task":"t1"}},
 		{"uuid":"a1","document":{"specification":"ARCHITECTURE","round":1,"task":"t1","elements":{"digest":"y"}}},
 		{"uuid":"d1","document":{"specification":"DETAILED_DESIGN","round":1,"task":"t1"}},
 		{"uuid":"o1","document":{"specification":"REQUIREMENTS","round":1,"task":"other","elements":{"digest":"z"}}}]}`)
-	got := checkTargets(task)
+	got := elementCheckTargets(task)
 	if len(got) != 1 || got[0]["uuid"] != "a2" {
 		t.Errorf("targets: %v", got)
 	}
 }
 
-func TestCheckTakesASessionAndOneOfReleaseOrTask(t *testing.T) {
+func TestElementCheckTakesASessionAndOneOfReleaseOrTask(t *testing.T) {
 	defer func(s, r, k string) { checkSession, checkRelease, checkTask = s, r, k }(checkSession, checkRelease, checkTask)
 	for _, c := range []struct{ s, r, k, want string }{
 		{"", "r", "", "--session is required"},
@@ -70,20 +70,20 @@ func TestCheckTakesASessionAndOneOfReleaseOrTask(t *testing.T) {
 		{"s", "r", "t", "give --release"},
 	} {
 		checkSession, checkRelease, checkTask = c.s, c.r, c.k
-		if err := runDocCheck(); err == nil || !strings.Contains(err.Error(), c.want) {
+		if err := runDocElementCheck(); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%+v: %v", c, err)
 		}
 	}
-	if agentDocCheckCmd.Parent() != agentDocCmd {
-		t.Error("check is not under `agent doc`")
+	if agentDocElementCheckCmd.Parent() != agentDocCmd {
+		t.Error("element-check is not under `agent doc`")
 	}
 }
 
-func TestPublishingACheckReportIsRefusedWithTheWayRound(t *testing.T) {
+func TestPublishingAnElementCheckReportIsRefusedWithTheWayRound(t *testing.T) {
 	defer func(s, ty string) { docSession, docType = s, ty }(docSession, docType)
-	docSession, docType = "s", "check-report"
+	docSession, docType = "s", "board-element-check-report"
 	err := runDocPublish()
-	if err == nil || !strings.Contains(err.Error(), "rearm agent doc check") {
+	if err == nil || !strings.Contains(err.Error(), "rearm agent doc element-check") {
 		t.Errorf("got %v", err)
 	}
 }

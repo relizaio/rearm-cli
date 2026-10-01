@@ -311,7 +311,7 @@ func returnedReportLine(r map[string]interface{}) string {
 
 func briefTaskFields(t map[string]interface{}) map[string]any {
 	out := map[string]any{}
-	for _, k := range []string{"key", "title", "description", "status", "role", "effectiveLevel", "budgetMicros", "spentMicros"} {
+	for _, k := range []string{"key", "title", "description", "status", "role", "effectiveWorkLevel", "budgetMicros", "spentMicros"} {
 		if v, ok := t[k]; ok && v != nil {
 			out[k] = v
 		}
@@ -403,7 +403,7 @@ func briefDocuments(t map[string]interface{}) []briefDocument {
 				newest[key] = bd.Version
 			}
 		}
-		if f, _ := d["findings"].(map[string]interface{}); f != nil {
+		if f, _ := d["reviewItems"].(map[string]interface{}); f != nil {
 			bd.Verdict = str(f["verdict"])
 			if c, _ := f["counts"].(map[string]interface{}); c != nil {
 				bd.Counts = fmt.Sprintf("%d passed, %d failed, %d skipped", intOf(c["passed"]), intOf(c["failed"]), intOf(c["skipped"]))
@@ -499,8 +499,8 @@ func renderTaskBrief(b *taskBrief) string {
 	t := b.Task
 	fmt.Fprintf(&sb, "- **%s** %s\n", str(t["key"]), str(t["title"]))
 	fmt.Fprintf(&sb, "- status %s, role %s", strings.ToLower(strings.ReplaceAll(str(t["status"]), "_", " ")), str(t["role"]))
-	if lv, ok := t["effectiveLevel"]; ok {
-		fmt.Fprintf(&sb, ", level %d", intOf(lv))
+	if lv, ok := t["effectiveWorkLevel"]; ok {
+		fmt.Fprintf(&sb, ", work level %d", intOf(lv))
 	}
 	if g, ok := t["group"]; ok && g != nil {
 		fmt.Fprintf(&sb, ", group %v", g)
@@ -513,7 +513,7 @@ func renderTaskBrief(b *taskBrief) string {
 		fmt.Fprintf(&sb, "- held (%v, %v): %v\n", h["kind"], h["level"], h["reason"])
 	}
 	if inv, ok := t["investigation"].(string); ok {
-		fmt.Fprintf(&sb, "- %s. Deliver an INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
+		fmt.Fprintf(&sb, "- %s. Deliver a BOARD_INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
 	}
 	if pins, ok := t["pinnedInputs"].([]string); ok {
 		fmt.Fprintf(&sb, "- pinned inputs: %s\n", strings.Join(pins, ", "))

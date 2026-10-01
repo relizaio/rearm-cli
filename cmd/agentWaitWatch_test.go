@@ -91,7 +91,7 @@ func signOff(session, role, outcome, at string) map[string]interface{} {
 func doc(uuid, spec string, round int, at, verdict string) map[string]interface{} {
 	ref := map[string]interface{}{"specification": spec, "round": float64(round), "path": "p/" + uuid + ".md", "publishedByRole": "tester"}
 	if verdict != "" {
-		ref["findings"] = map[string]interface{}{"verdict": verdict}
+		ref["reviewItems"] = map[string]interface{}{"verdict": verdict}
 	}
 	return map[string]interface{}{"uuid": uuid, "createdDate": at, "document": ref}
 }
@@ -128,7 +128,7 @@ func rejected() map[string]interface{} {
 			signOff("tester-s", "tester", "REJECTED", "2026-09-27T11:30:00Z"),
 		},
 		[]map[string]interface{}{
-			doc("rel-test", "TEST_REPORT", 1, "2026-09-27T11:29:00Z", "REJECTED"),
+			doc("rel-test", "BOARD_TEST_REPORT", 1, "2026-09-27T11:29:00Z", "REJECTED"),
 			doc("rel-notes", "DETAILED_DESIGN", 1, "2026-09-27T09:55:00Z", ""),
 			doc("rel-arch", "ARCHITECTURE", 1, "2026-09-27T08:59:00Z", ""),
 		}, nil)
@@ -173,7 +173,7 @@ func TestWatchWakesOnARejectionWithTheRoundsSinceTheSessionsSignOff(t *testing.T
 	for _, d := range mapsOf(c["documents"]) {
 		docs = append(docs, d["release"].(string)+" "+d["specification"].(string))
 	}
-	if strings.Join(docs, ",") != "rel-notes DETAILED_DESIGN,rel-test TEST_REPORT" {
+	if strings.Join(docs, ",") != "rel-notes DETAILED_DESIGN,rel-test BOARD_TEST_REPORT" {
 		t.Errorf("documents %v: the rounds since the session's sign-off, oldest first, not its own design", docs)
 	}
 	if v := mapsOf(c["documents"])[1]["verdict"]; v != "REJECTED" {
@@ -260,7 +260,7 @@ func TestWatchWakesOnAQuestionToItsRoleOnly(t *testing.T) {
 	}
 }
 
-func TestWatchWakesOnAlertLockedAndUnlockedButNotInfo(t *testing.T) {
+func TestWatchWakesOnAlertPausedAndResumedButNotInfo(t *testing.T) {
 	seq := func(n int64) *int64 { return &n }
 	o := watcher(t, filepath.Join(t.TempDir(), "w.json"))
 	f := &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{}}, pages: []eventPage{
@@ -268,7 +268,7 @@ func TestWatchWakesOnAlertLockedAndUnlockedButNotInfo(t *testing.T) {
 	if code, _ := runWatch(t, o, f); code != waitExitTimeout {
 		t.Errorf("an INFO woke it: exit %d", code)
 	}
-	for _, kind := range []string{"ALERT", "LOCKED", "UNLOCKED"} {
+	for _, kind := range []string{"ALERT", "PAUSED", "RESUMED"} {
 		f := &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{}}, pages: []eventPage{
 			{Events: []map[string]interface{}{{"seq": float64(11), "kind": "INFO"}, {"seq": float64(12), "kind": kind}}, NextAfter: seq(12)}}},
 			worked: worked(), roles: boardRoles}
@@ -331,7 +331,7 @@ func TestWatchReportsAChangeOnceAndASecondRejectionAgain(t *testing.T) {
 	again := rejected()
 	again["signOffs"] = append(again["signOffs"].([]interface{}),
 		signOff("coder-s", "coder", "PASSED", "2026-09-27T12:00:00Z"), signOff("tester-s", "tester", "REJECTED", "2026-09-27T12:30:00Z"))
-	again["documents"] = append([]interface{}{doc("rel-test2", "TEST_REPORT", 2, "2026-09-27T12:29:00Z", "REJECTED")}, again["documents"].([]interface{})...)
+	again["documents"] = append([]interface{}{doc("rel-test2", "BOARD_TEST_REPORT", 2, "2026-09-27T12:29:00Z", "REJECTED")}, again["documents"].([]interface{})...)
 	f = &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{snapEntry("RD-1", "QUEUED", "coder", "rel-test2")}}}, worked: worked("RD-1"), roles: boardRoles,
 		details: []map[string]map[string]interface{}{{"u-RD-1": again}}}
 	code, printed := runWatch(t, o, f)
@@ -425,7 +425,7 @@ func TestWatchWakesARejectingReviewerOnTheProducersNextRound(t *testing.T) {
 		signOff(me, "reviewer", "REJECTED", "2026-09-27T10:00:00Z"),
 		signOff("coder-s", "coder", "PASSED", "2026-09-27T11:30:00Z")},
 		[]map[string]interface{}{doc("rel-notes2", "DETAILED_DESIGN", 2, "2026-09-27T11:29:00Z", ""),
-			doc("rel-review", "REVIEW_FINDINGS", 1, "2026-09-27T09:59:00Z", "REJECTED")}, nil)
+			doc("rel-review", "BOARD_REVIEW_ITEMS", 1, "2026-09-27T09:59:00Z", "REJECTED")}, nil)
 	o := watcher(t, filepath.Join(t.TempDir(), "w.json"))
 	f := &fakeWatch{fakeBoard: &fakeBoard{snapshots: snaps{{snapEntry("RD-7", "QUEUED", "tester", "rel-notes2")}}},
 		worked: worked("RD-7"), roles: boardRoles, details: []map[string]map[string]interface{}{{"u-RD-7": resubmitted}}}

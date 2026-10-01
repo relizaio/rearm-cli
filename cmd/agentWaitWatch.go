@@ -23,7 +23,7 @@ import (
 )
 
 // A worker's wait with --watch (task RD4-3). Without it a worker wakes only on an offer, so an
-// architect answering tester rejections, or a reviewer following its findings, ran a polling loop of
+// architect answering tester rejections, or a reviewer following its review items, ran a polling loop of
 // its own beside the wait. With it, a poll that finds no offer also reads the board's snapshot and
 // its events, and wakes on:
 //   (a) a task the session signed off on that a later hop rejected, returned, or that was reopened,
@@ -31,7 +31,7 @@ import (
 //   (b) an open question on the board addressed to the session's role, while it is still the
 //       session's to answer (task RD4-14): its task is open and the session published no round of
 //       the answering role's specification on it since it was asked;
-//   (c) an ALERT, LOCKED or UNLOCKED event since the cursor.
+//   (c) an ALERT, PAUSED or RESUMED event since the cursor.
 // It wakes only on what it has not reported (as the coordinator's wait, task RD3-15): the changes
 // and the questions each poll saw, and the event cursor, are kept in --state.
 // Whatever ends the wait -- an offer, a change, a question, an event or the timeout -- the watch has read
@@ -52,7 +52,7 @@ const (
 	returns { role session reason returnedAt }
 	reopens { role at reason by { kind name } }
 	statusHistory { from to at trigger }
-	documents { uuid createdDate document { specification path round advisory publishedByRole session findings { verdict } } }
+	documents { uuid createdDate document { specification path round advisory publishedByRole session reviewItems { verdict } } }
 } }`
 	// watchTasksPage is the most tasks one AgentTasksByUuid read takes.
 	watchTasksPage = 100
@@ -211,7 +211,7 @@ func (w *workerWatch) cursorOut() map[string]interface{} {
 }
 
 func watchedEventKind(kind string) bool {
-	return kind == "ALERT" || kind == "LOCKED" || kind == "UNLOCKED"
+	return kind == "ALERT" || kind == "PAUSED" || kind == "RESUMED"
 }
 
 // object is what a watch prints on every exit (task RD4-16): the offer or null, the changes and the
@@ -505,7 +505,7 @@ func changeOf(t map[string]interface{}, session string) *watchChange {
 func fromOf(t map[string]interface{}, trigger string, at time.Time) string {
 	kinds := map[string][]string{
 		"REJECTED": {"SIGNOFF", "HUMAN_REJECT", "HUMAN_SIGNOFF"},
-		"PASSED":   {"SIGNOFF", "HUMAN_APPROVE", "HUMAN_SIGNOFF"},
+		"PASSED":   {"SIGNOFF", "HUMAN_ACCEPT", "HUMAN_SIGNOFF"},
 		"RETURNED": {"RETURN"},
 		"REOPENED": {"REOPEN"},
 	}[trigger]
@@ -549,7 +549,7 @@ func documentsSince(t map[string]interface{}, since time.Time) []watchDocument {
 			doc.Path = str(ref["path"])
 			doc.Advisory, _ = ref["advisory"].(bool)
 			doc.Role = str(ref["publishedByRole"])
-			if f, _ := ref["findings"].(map[string]interface{}); f != nil {
+			if f, _ := ref["reviewItems"].(map[string]interface{}); f != nil {
 				doc.Verdict = str(f["verdict"])
 			}
 		}
@@ -596,13 +596,13 @@ func questionsTo(snap []map[string]interface{}, roles map[string]bool, names map
 }
 
 // answeredBy says whether the session published, after the instant, a round of one of the answering
-// specifications; of any specification but QUESTIONS when the answering role declares none.
+// specifications; of any specification but BOARD_QUESTIONS when the answering role declares none.
 func answeredBy(m *watchMine, specs []string, asked time.Time) bool {
 	if m == nil {
 		return false
 	}
 	for spec, at := range m.Rounds {
-		if len(specs) == 0 && spec == "QUESTIONS" {
+		if len(specs) == 0 && spec == "BOARD_QUESTIONS" {
 			continue
 		}
 		if len(specs) > 0 && !contains(specs, spec) {

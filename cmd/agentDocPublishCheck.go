@@ -28,9 +28,9 @@ import (
 
 // checkPreviewQuery asks the board for the report. A CLI-local operation until the client-go pin moves
 // past RD4-6, which adds it to the shared operations.
-const checkPreviewQuery = `query AgentCheckPreviewProgrammatic($sessionUuid: ID!, $taskUuid: ID!,
+const checkPreviewQuery = `query AgentElementCheckPreviewProgrammatic($sessionUuid: ID!, $taskUuid: ID!,
 	$specification: SpecificationType!, $elements: String!, $elementsDigest: String) {
-	agentCheckPreviewProgrammatic(sessionUuid: $sessionUuid, taskUuid: $taskUuid, specification: $specification,
+	agentElementCheckPreviewProgrammatic(sessionUuid: $sessionUuid, taskUuid: $taskUuid, specification: $specification,
 		elements: $elements, elementsDigest: $elementsDigest) {
 		catalogueVersion grammarVersion
 		results { check result blocking reason offences { elementId release message } }
@@ -42,14 +42,14 @@ var previewChecks = func(vars map[string]interface{}) (map[string]interface{}, e
 	if err != nil {
 		return nil, err
 	}
-	report, _ := data["agentCheckPreviewProgrammatic"].(map[string]interface{})
+	report, _ := data["agentElementCheckPreviewProgrammatic"].(map[string]interface{})
 	return report, nil
 }
 
 // previewSummary renders a preview report the way doc publish renders a published one, and whether a
 // check the board blocks on failed.
 func previewSummary(report map[string]interface{}) ([]string, bool) {
-	lines := checkSummary(map[string]interface{}{"document": map[string]interface{}{"checks": report}})
+	lines := elementCheckSummary(map[string]interface{}{"document": map[string]interface{}{"elementChecks": report}})
 	blocking := false
 	results, _ := report["results"].([]interface{})
 	for _, r := range results {
