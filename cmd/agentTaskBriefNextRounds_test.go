@@ -184,3 +184,35 @@ func TestTheTaskOutputsAreTaskScopedTypesAndTheIndexTypes(t *testing.T) {
 		t.Errorf("task outputs %v", got)
 	}
 }
+
+// A release the server does not count as a round leaves the next round where it is (tester run 1, T-1): a
+// PENDING release is the reservation while a round is being cut, and a REJECTED one was refused. Each case puts
+// that release on round 2 over a settled round 1, so counting it would name round 3; and alone on round 1, so
+// counting it would name round 2. Each case runs without and with the hop's recorded outputs naming it, so it
+// counts neither as a round nor as the round the hop published.
+func TestPendingAndRejectedReleasesAreNotRounds(t *testing.T) {
+	settled := nextDoc("r-d1", "DETAILED_DESIGN", 1, "4", "ASSEMBLED", "r/impl/RD-1/notes-1.md")
+	for _, lifecycle := range []string{"PENDING", "REJECTED"} {
+		unsettled := func(round int) map[string]any {
+			return nextDoc("r-u", "DETAILED_DESIGN", round, "5", lifecycle, "r/impl/RD-1/notes-x.md")
+		}
+		cases := []struct {
+			name  string
+			docs  []any
+			round int
+			path  string
+		}{
+			{"over a settled round 1", []any{unsettled(2), settled}, 2, "r/impl/RD-1/notes-2.md"},
+			{"alone on round 1", []any{unsettled(1)}, 1, "r/impl/RD-1/notes-1.md"},
+		}
+		for _, tc := range cases {
+			for _, published := range [][]string{nil, {"r-u"}} {
+				got := briefNextRounds([]string{"DETAILED_DESIGN"}, nil, "r/", "RD-1", "t-1", asList(tc.docs), published)
+				want := []briefNextRound{{Type: "DETAILED_DESIGN", Path: tc.path, Round: tc.round}}
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("%s %s, hop outputs %v: got %+v, want %+v", lifecycle, tc.name, published, got, want)
+				}
+			}
+		}
+	}
+}
