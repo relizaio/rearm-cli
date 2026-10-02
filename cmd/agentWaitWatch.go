@@ -51,7 +51,7 @@ const (
 	signOffs { role session signedOffAt outcome }
 	returns { role session reason returnedAt }
 	reopens { role at reason by { kind name } }
-	statusHistory { from to at trigger }
+	statusHistory { from to at trigger actor { kind } }
 	documents { uuid createdDate document { specification path round advisory publishedByRole session reviewItems { verdict } } }
 } }`
 	// watchTasksPage is the most tasks one AgentTasksByUuid read takes.
@@ -86,12 +86,15 @@ func (o waitOpts) watching() (waitOpts, error) {
 	return o, nil
 }
 
-// watchChange is what happened to a task the session signed off on, as a wake prints it.
+// watchChange is what happened to a task the session signed off on, as a wake prints it. From and To
+// are one transition, the one the change wrote in the task's status history; Status is where the task
+// stands at the poll, which a later hop (a pick-up) may have moved on (task RD5-7).
 type watchChange struct {
 	Task    string `json:"task"`
 	Uuid    string `json:"uuid"`
 	From    string `json:"from,omitempty"`
 	To      string `json:"to"`
+	Status  string `json:"status"`
 	Role    string `json:"role,omitempty"`
 	Trigger string `json:"trigger"`
 	// By is the role whose hop rejected, returned or passed it, or who reopened it.
@@ -100,7 +103,8 @@ type watchChange struct {
 	Reason string `json:"reason,omitempty"`
 	// Documents are the rounds published on the task since the session's last sign-off on it, oldest first.
 	Documents []watchDocument `json:"documents"`
-	New       bool            `json:"new,omitempty"`
+	// New is always printed: false marks a standing change, one an earlier wake reported (task RD5-7).
+	New bool `json:"new"`
 }
 
 // id names the change, not the task's state: the same rejection read again is not new, a second one is.
@@ -495,23 +499,36 @@ func changeOf(t map[string]interface{}, session string) *watchChange {
 	}
 	status, _ := t["status"].(string)
 	role, _ := t["role"].(string)
-	return &watchChange{Task: taskName(t), Uuid: str(t["uuid"]), From: fromOf(t, newest.trigger, newest.at),
-		To: status, Role: role, Trigger: newest.trigger, By: newest.by, At: newest.raw, Reason: newest.reason,
+	from, to := transitionOf(t, newest.trigger, newest.at)
+	return &watchChange{Task: taskName(t), Uuid: str(t["uuid"]), From: from, To: to, Status: status, Role: role, Trigger: newest.trigger, By: newest.by, At: newest.raw, Reason: newest.reason,
 		Documents: documentsSince(t, mine)}
 }
 
-// fromOf is the status the task left at the change, from its status history: the transition the hop
-// end or reopen wrote, the newest of its kind at or before the change.
-func fromOf(t map[string]interface{}, trigger string, at time.Time) string {
+// transitionOf is the status the task left at the change and the one the change's transaction left it
+// in, from its status history (task RD5-7). from is the from of the hop end's own row (hopEndRow); to
+// follows that row's chain (chainedTo). Both are empty when the history has no such row.
+func transitionOf(t map[string]interface{}, trigger string, at time.Time) (string, string) {
+	rows := mapsOf(t["statusHistory"])
+	i := hopEndRow(rows, trigger, at)
+	if i < 0 {
+		return "", ""
+	}
+	from, _ := rows[i]["from"].(string)
+	return from, chainedTo(rows, i, at)
+}
+
+// hopEndRow is the index of the row the hop end or reopen wrote: the newest of its kind at or before the
+// change, or -1.
+func hopEndRow(rows []map[string]interface{}, trigger string, at time.Time) int {
 	kinds := map[string][]string{
 		"REJECTED": {"SIGNOFF", "HUMAN_REJECT", "HUMAN_SIGNOFF"},
 		"PASSED":   {"SIGNOFF", "HUMAN_ACCEPT", "HUMAN_SIGNOFF"},
 		"RETURNED": {"RETURN"},
 		"REOPENED": {"REOPEN"},
 	}[trigger]
-	from := ""
+	picked := -1
 	var best time.Time
-	for _, h := range mapsOf(t["statusHistory"]) {
+	for i, h := range rows {
 		tr, _ := h["trigger"].(string)
 		match := false
 		for _, k := range kinds {
@@ -523,9 +540,34 @@ func fromOf(t map[string]interface{}, trigger string, at time.Time) string {
 			continue
 		}
 		best = ht
-		from, _ = h["from"].(string)
+		picked = i
 	}
-	return from
+	return picked
+}
+
+// chainedTo is where the transaction that wrote row i left the task: row i's to, followed through the
+// later rows the system wrote (actor kind SYSTEM, the routing after a sign-off: AUTHORIZE to QUEUED,
+// DELIVER_WAIT, HOLD) whose from is the current to, within the same second's slack as hopEndRow. It
+// chains on the actor, not on the trigger names, so a routing trigger added later is followed too.
+func chainedTo(rows []map[string]interface{}, i int, at time.Time) string {
+	to, _ := rows[i]["to"].(string)
+	last := timeOf(rows[i]["at"])
+	for _, h := range rows[i+1:] {
+		ht := timeOf(h["at"])
+		if actorKind(h) != "SYSTEM" || str(h["from"]) != to || ht.After(at.Add(time.Second)) || ht.Before(last) {
+			continue
+		}
+		to, _ = h["to"].(string)
+		last = ht
+	}
+	return to
+}
+
+// actorKind is the kind of who wrote a status-history row (SESSION, USER, SYSTEM), or "".
+func actorKind(h map[string]interface{}) string {
+	a, _ := h["actor"].(map[string]interface{})
+	k, _ := a["kind"].(string)
+	return k
 }
 
 // documentsSince is the task's document rounds published after the instant, oldest first.
