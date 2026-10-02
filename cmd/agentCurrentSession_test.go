@@ -30,15 +30,19 @@ func (w *sessWorld) setCurrent(repo string, s *sessServer, uuid, clientId string
 	}
 }
 
-// hook parses the words and runs the agent command's real pre-run (configuration, then the fallback); a refusal
-// exits, so callers use it only where the fallback finds an entry or needs none.
+// hook parses the words and runs the agent command's pre-run (configuration, then the fallback); a refusal fails
+// the test by name rather than exiting the test binary.
 func (w *sessWorld) hook(c *cobra.Command, words ...string) string {
 	w.t.Helper()
 	resetFlags(c)
 	if err := c.ParseFlags(words); err != nil {
 		w.t.Fatal(err)
 	}
-	agentCmd.PersistentPreRun(c, c.Flags().Args())
+	code := 0
+	errOut := stderrOf(w.t, func() { code = agentPreRun(c) })
+	if code != 0 {
+		w.t.Fatalf("%s: the pre-run refused with exit %d: %s", c.CommandPath(), code, errOut)
+	}
 	return c.Flags().Lookup("session").Value.String()
 }
 
@@ -47,8 +51,14 @@ func TestVerbWithoutSessionUsesTheCurrentSession(t *testing.T) {
 	w.on(w.b)
 	w.b.addSession(boardSess, "scully-coder-1", sAgent, "OPEN")
 	w.setCurrent(w.repoA, w.b, boardSess, "scully-coder-1")
-	// Through the hook cobra runs, then the verb itself: the server is sent the current session.
-	if got := w.hook(agentTaskAssignCmd, "t-1"); got != boardSess {
+	// Through the very hook cobra runs (rearm agent's PersistentPreRun), then the verb itself: the server is sent
+	// the current session.
+	resetFlags(agentTaskAssignCmd)
+	if err := agentTaskAssignCmd.ParseFlags([]string{"t-1"}); err != nil {
+		t.Fatal(err)
+	}
+	agentCmd.PersistentPreRun(agentTaskAssignCmd, []string{"t-1"})
+	if got := taskSessionUuid; got != boardSess {
 		t.Fatalf("the hook gave --session %q", got)
 	}
 	stdoutOf(t, func() { agentTaskAssignCmd.Run(agentTaskAssignCmd, []string{"t-1"}) })

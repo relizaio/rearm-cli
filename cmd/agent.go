@@ -50,11 +50,17 @@ the repository the command runs in, on the instance the credentials point at ('r
 	// Replaces the root's hook (cobra runs only the nearest), so the configuration is loaded here first: the
 	// fallback needs the instance the credentials resolve to, and must see a --session the environment set.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		initConfig(cmd)
-		if code := applySessionFallback(cmd); code != 0 {
+		if code := agentPreRun(cmd); code != 0 {
 			os.Exit(code)
 		}
 	},
+}
+
+// agentPreRun loads the configuration, then applies the --session fallback (task RD5-4); the exit code of a refusal,
+// or 0.
+func agentPreRun(cmd *cobra.Command) int {
+	initConfig(cmd)
+	return applySessionFallback(cmd)
 }
 
 var agentSessionCmd = &cobra.Command{
