@@ -32,7 +32,7 @@ var (
 	verifyBase        string
 	verifyNoCode      bool
 	verifyJson        bool
-	verifyCodeSession string
+	verifyCodeSession []string
 )
 
 // The eight checks, in the order they print.
@@ -77,21 +77,21 @@ func verifyFail(name, reason, remedy string) verifyCheck {
 
 // verifyHop is what the server checks read: the task, the hop's local record and the reports.
 type verifyHop struct {
-	task        map[string]interface{}
-	taskUuid    string
-	label       string
-	session     string // the session's uuid
-	sessionRef  string // as given on the command line, for the remedies
-	heldBy      string // the assignment's session, "" when unassigned
-	assignedAt  time.Time
-	outputs     []string
-	seen        []string
-	clientId    string // the state's client session id
-	role        string
-	pushesCode  bool
-	noCode      bool
-	reports     map[string]map[string]interface{} // newest version of an output -> its newest check report
-	codeSession string
+	task         map[string]interface{}
+	taskUuid     string
+	label        string
+	session      string // the session's uuid
+	sessionRef   string // as given on the command line, for the remedies
+	heldBy       string // the assignment's session, "" when unassigned
+	assignedAt   time.Time
+	outputs      []string
+	seen         []string
+	clientId     string // the state's client session id
+	role         string
+	pushesCode   bool
+	noCode       bool
+	reports      map[string]map[string]interface{} // newest version of an output -> its newest check report
+	codeSessions []string
 }
 
 // verifyTaskOperation is the task read with what the checks need and the pinned client does not select: each
@@ -189,7 +189,7 @@ func runTaskVerify(args []string) int {
 	st := peekAgentState(verifySession)
 	hop := &verifyHop{task: task, taskUuid: taskUuid, label: orElse(str(task["key"]), taskUuid),
 		session: sessionUuidOf(st, verifySession), sessionRef: verifySession, noCode: verifyNoCode,
-		reports: map[string]map[string]interface{}{}, codeSession: strings.TrimSpace(verifyCodeSession)}
+		reports: map[string]map[string]interface{}{}, codeSessions: cleanSessions(verifyCodeSession)}
 	if a, _ := task["assignment"].(map[string]interface{}); a != nil {
 		hop.heldBy = str(a["session"])
 		hop.role = str(a["role"])
@@ -714,6 +714,34 @@ func commitLabel(c verifyCommit) string {
 	return shortSha(c.sha)
 }
 
+// cleanSessions is the --code-session ids, trimmed, without empties or repeats.
+func cleanSessions(ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" && !containsString(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionsLabel names the session ids the trailers were compared with.
+func sessionsLabel(ids []string) string {
+	if len(ids) == 1 {
+		return "session " + ids[0]
+	}
+	return "sessions " + strings.Join(ids, ", ")
+}
+
 // parseTrailers is the final paragraph's trailers as git reads them: the same parser the server's
 // %(trailers) placeholder uses, so a blank line inside the block drops what precedes it here too.
 func parseTrailers(dir, message string) map[string][]string {
@@ -733,14 +761,17 @@ func parseTrailers(dir, message string) map[string][]string {
 }
 
 // verifyTrailersCheck (check 5): every commit since the merge base carries the three trailers in its final
-// paragraph, merges included; the session trailer is this session's client id (or --code-session), and the
+// paragraph, merges included; the session trailer is this session's client id (or one of the --code-session ids), and the
 // agent trailer is the same on every commit.
 func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	bases, missing := basesOf(prs)
 	if len(missing) > 0 {
 		return verifyFail(checkTrailers, noBaseReason(missing), noBaseRemedy)
 	}
-	want := orElse(h.codeSession, h.clientId)
+	wants := h.codeSessions
+	if len(wants) == 0 && h.clientId != "" {
+		wants = []string{h.clientId}
+	}
 	var problems []string
 	total, merges := 0, 0
 	agents := map[string]string{}
@@ -765,10 +796,10 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 				problems = append(problems, fmt.Sprintf("%s lacks %s in its final paragraph", commitLabel(c), strings.Join(lacks, ", ")))
 				continue
 			}
-			if got := tr["rearm-agentic-session"][0]; want == "" {
+			if got := tr["rearm-agentic-session"][0]; len(wants) == 0 {
 				problems = append(problems, fmt.Sprintf("%s carries ReARM-Agentic-Session %s, and this host knows no client id for the session to compare", commitLabel(c), got))
-			} else if got != want {
-				problems = append(problems, fmt.Sprintf("%s carries ReARM-Agentic-Session %s, not %s", commitLabel(c), got, want))
+			} else if !containsString(wants, got) {
+				problems = append(problems, fmt.Sprintf("%s carries ReARM-Agentic-Session %s, not %s", commitLabel(c), got, strings.Join(wants, " or ")))
 			}
 			agents[tr["rearm-agent"][0]] = commitLabel(c)
 		}
@@ -783,18 +814,20 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	if len(problems) > 0 {
 		remedy := "put ReARM-Agentic-Session, ReARM-Agent and Co-Authored-By in one final paragraph, no blank line between; " +
 			"amend a commit you have not pushed; a pushed one is replaced by a new PR from the base (task supersedepr), never force-pushed"
-		if want == "" {
+		if len(wants) == 0 {
 			remedy = "pass --code-session <client session id> when your code commits carry the session you opened on the controlling instance; " + remedy
-		} else if h.codeSession == "" {
+		} else if len(h.codeSessions) == 0 {
 			remedy += "; when your code commits carry a code session on another instance, pass --code-session <its client id>"
+		} else {
+			remedy += "; a returning task's earlier rounds carry their own code sessions: repeat --code-session for each"
 		}
 		return verifyFail(checkTrailers, capList(problems, 5)+".", remedy)
 	}
 	if total == 0 {
 		return verifyPass(checkTrailers, "no commit since the merge base with "+strings.Join(bases, ", ")+".")
 	}
-	return verifyPass(checkTrailers, fmt.Sprintf("%d commit(s) since the merge base with origin/%s (%d merge(s)) carry the three trailers, session %s.",
-		total, strings.Join(bases, ", origin/"), merges, want))
+	return verifyPass(checkTrailers, fmt.Sprintf("%d commit(s) since the merge base with origin/%s (%d merge(s)) carry the three trailers, %s.",
+		total, strings.Join(bases, ", origin/"), merges, sessionsLabel(wants)))
 }
 
 // verifySubjectsCheck (check 6): no commit message in the range carries a double quote, which breaks the
@@ -955,7 +988,7 @@ Server facts, from the task read and this CLI's record of the hop:
 Git facts, in the current repository when its origin is one a linked PR names (else skipped):
   trailers         every commit since the merge base with the PR's base, merges included, ends in
                    ReARM-Agentic-Session, ReARM-Agent and Co-Authored-By as one paragraph; the session
-                   is this session's client id (or --code-session); one agent throughout
+                   is this session's client id (or a --code-session id); one agent throughout
   subjects         no commit message carries a double quote
   head             each linked PR's head (as CI reported it, else origin's refs/pull/<n>/head) is HEAD
   base             origin's tip of the base branch (git ls-remote) is merged into HEAD
@@ -964,7 +997,8 @@ One line per check, PASS, FAIL or SKIP, with the reason and the remedy in the se
 Exit 0 when nothing fails, 1 when a check fails, 2 when a read failed. --json prints
 {task, checks: [{name, ok, skipped, reason, remedy}], ok}.
 
-  rearm agent task verify RD5-1 --session <board-session> --code-session <code session client id>`,
+  rearm agent task verify RD5-1 --session <board-session> --code-session <code session client id>
+  rearm agent task verify RD5-1 --session <board-session> --code-session <round 1 id> --code-session <round 2 id>`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		os.Exit(runTaskVerify(args))
@@ -977,6 +1011,6 @@ func init() {
 	f.StringVar(&verifyBase, "base", "", "the branch the PR merges into, when the PR row names none (unregistered here)")
 	f.BoolVar(&verifyNoCode, "no-code", false, "the sign-off will say this round changed no code (skips the moved-PR check, as the server does)")
 	f.BoolVar(&verifyJson, "json", false, "print the checks as JSON")
-	f.StringVar(&verifyCodeSession, "code-session", "", "the client session id your code commits carry, when it is not the board session's (a code session on another instance)")
+	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session the task's rounds used")
 	agentTaskCmd.AddCommand(agentTaskVerifyCmd)
 }

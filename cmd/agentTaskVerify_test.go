@@ -198,7 +198,7 @@ func newVerifyWorld(t *testing.T) *verifyWorld {
 	verifySession = vSession
 	t.Cleanup(func() {
 		apiClient, taskKeyLookup = nil, prevLookup
-		verifySession, verifyBase, verifyNoCode, verifyJson, verifyCodeSession = "", "", false, false, ""
+		verifySession, verifyBase, verifyNoCode, verifyJson, verifyCodeSession = "", "", false, false, nil
 	})
 	t.Chdir(w.repo)
 	return w
@@ -494,7 +494,7 @@ func TestVerifyTrailersComparesTheSession(t *testing.T) {
 	out, _ := w.run()
 	wantLine(t, out, checkTrailers, "FAIL", shortSha(sha)+" carries ReARM-Agentic-Session code-9, not c-1", "pass --code-session")
 
-	verifyCodeSession = "code-9"
+	verifyCodeSession = []string{"code-9"}
 	out, _ = w.run()
 	l := line(t, out, checkTrailers)
 	if !strings.Contains(l, shortSha(first)+" carries ReARM-Agentic-Session c-1, not code-9") || strings.Contains(l, shortSha(sha)) {
@@ -526,12 +526,35 @@ func TestVerifyTrailersPassWithTheCodeSession(t *testing.T) {
 	vGit(t, w.repo, "", "reset", "-q", "--hard", "main")
 	w.commit("code.txt", trailered("feat: code session", "code-9"))
 	w.publishPR()
-	verifyCodeSession = "code-9"
+	verifyCodeSession = []string{"code-9"}
 	out, code := w.run()
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 	wantLine(t, out, checkTrailers, "PASS", "1 commit(s)", "session code-9")
+}
+
+// A returning task opens a code session per round: --code-session repeats, one id for each.
+func TestVerifyTrailersAcceptEveryCodeSessionOfTheTask(t *testing.T) {
+	w := newVerifyWorld(t)
+	vGit(t, w.repo, "", "reset", "-q", "--hard", "main")
+	first := w.commit("r1.txt", trailered("feat: round 1", "code-1"))
+	w.commit("r2.txt", trailered("test: round 2", "code-2"))
+	w.publishPR()
+	verifyCodeSession = []string{"code-2"}
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", code, out)
+	}
+	wantLine(t, out, checkTrailers, "FAIL", shortSha(first)+" carries ReARM-Agentic-Session code-1, not code-2",
+		"repeat --code-session for each")
+
+	verifyCodeSession = []string{"code-1", " code-2 ", "code-1"}
+	out, code = w.run()
+	if code != 0 {
+		t.Fatalf("exit %d, want 0:\n%s", code, out)
+	}
+	wantLine(t, out, checkTrailers, "PASS", "2 commit(s)", "sessions code-1, code-2.")
 }
 
 func TestVerifySubjectsFailsOnADoubleQuote(t *testing.T) {
