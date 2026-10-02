@@ -465,6 +465,19 @@ func runGitCommit(paths []string) int {
 	return run.commitWithBlock(message, paths, merge)
 }
 
+// mergeFinishCommand is the commit helper call that finishes a merge left in progress by a conflict. It carries
+// --no-co-author when the merge ran with it, so following the printed command writes the block the merge would
+// have (tester run 2, T-8). The co-author line, the signing key and format are kept per agent, and the session's
+// client id and agent are kept on the first read, so the commit helper finds them without those flags.
+func mergeFinishCommand(subject string) string {
+	words := []string{"rearm agent git commit --session", shellWord(gitSession)}
+	if gitNoCoAuthor {
+		words = append(words, "--no-co-author")
+	}
+	words = append(words, "-m", shellWord(subject))
+	return strings.Join(words, " ")
+}
+
 // runGitMerge is `rearm agent git merge`; returns the exit code.
 func runGitMerge(ref string) int {
 	if mergeInProgress() {
@@ -507,7 +520,7 @@ func runGitMerge(ref string) int {
 			subject, _, _ := strings.Cut(message, "\n")
 			fmt.Fprintln(os.Stderr, out)
 			fmt.Fprintf(os.Stderr, "rearm: the merge stopped on a conflict and is left in progress. Resolve it, git add the files, then:\n"+
-				"  rearm agent git commit --session %s -m %s\n", shellWord(gitSession), shellWord(subject))
+				"  %s\n", mergeFinishCommand(subject))
 			if run.jsonOutput {
 				emitJson(map[string]interface{}{"committed": false, "conflict": true, "commands": run.commands, "gitOutput": out})
 			} else {
