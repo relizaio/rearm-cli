@@ -76,12 +76,15 @@ func runPublishCheck(st *agentSessionState, repoPath, file, spec string, board m
 		return err
 	}
 	if extra == nil {
-		fmt.Fprintln(os.Stderr, "check only: "+file+" has no element ids to check ("+summarise(ix)+"); a publish sends no element index")
+		sayPublishNote(os.Stderr, "check only: "+file+" has no element ids to check ("+summarise(ix)+"); a publish sends no element index")
+		if compactJson {
+			emitJson(checkOnlyObject(nil))
+		}
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, "elements: "+summarise(ix))
+	sayPublishNote(os.Stderr, "elements: "+summarise(ix))
 	for _, line := range definitionsAndReferences(ix) {
-		fmt.Fprintln(os.Stderr, line)
+		sayPublishNote(os.Stderr, line)
 	}
 	report, err := previewChecks(map[string]interface{}{
 		"sessionUuid":    sessionUuidOf(st, docSession),
@@ -94,15 +97,24 @@ func runPublishCheck(st *agentSessionState, repoPath, file, spec string, board m
 		printRefusal(err)
 		os.Exit(1)
 	}
-	if compactJson {
-		emitJson(report)
-	}
 	lines, blocking := previewSummary(report)
-	for _, line := range lines {
-		fmt.Fprintln(os.Stderr, line)
+	// --json: one object, {check: true, checks}, and nothing on stderr (task RD5-8); the exit code still says
+	// whether a check the board blocks on failed.
+	if compactJson {
+		emitJson(checkOnlyObject(checksObject(report, lines)))
+	} else {
+		for _, line := range lines {
+			fmt.Fprintln(os.Stderr, line)
+		}
 	}
 	if blocking {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// checkOnlyObject is what doc publish --check --json prints: nothing was published, here is what the checks found
+// (null for a document without element ids), and what the check said beside it.
+func checkOnlyObject(checks map[string]interface{}) map[string]interface{} {
+	return withNotices(map[string]interface{}{"check": true, "checks": checks})
 }

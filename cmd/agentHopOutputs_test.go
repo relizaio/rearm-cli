@@ -99,7 +99,7 @@ func hopPublish(t *testing.T, task, release string, advisory bool) {
 	docTask, docAdvisory = task, advisory
 	st := lookupAgentState("s-1")
 	stdoutOf(t, func() {
-		if err := sendDocPublish(st, map[string]any{"taskUuid": task, "digest": release}); err != nil {
+		if err := sendDocPublish(st, map[string]any{"taskUuid": task, "digest": release}, ""); err != nil {
 			t.Fatal(err)
 		}
 	})
