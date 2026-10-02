@@ -77,14 +77,18 @@ func TestSessionCurrentSetRefusesWhenTheCredentialsKeyIsUnknown(t *testing.T) {
 	}
 }
 
-// A session the server answers without the key that opened it cannot be told from another key's: refused.
+// A session the server answers without the key that opened it cannot be told from another key's: refused the same
+// way as credentials whose key is unknown, naming --session <uuid> as the way to go on (tester run 2, T-4).
 func TestSessionCurrentSetRefusesASessionAnsweredWithoutItsKey(t *testing.T) {
 	w := newSessWorld(t)
 	w.on(w.b)
 	w.b.addSessionOf("", boardSession, "scully-coder-1", sAgent, "OPEN")
 	_, errOut, code := w.run(agentSessionCurrentCmd, "--set", boardSession)
-	if code != 1 || !strings.Contains(errOut, "answered no API key for session "+boardSession) {
-		t.Fatalf("exit %d: %s", code, errOut)
+	for _, want := range []string{"answered no API key for session " + boardSession,
+		"pass --session " + boardSession + " to each verb instead", "nothing was recorded"} {
+		if code != 1 || !strings.Contains(errOut, want) {
+			t.Fatalf("exit %d, want %q in: %s", code, want, errOut)
+		}
 	}
 	if entryOf(t, w.repoA, w.b.url) != nil {
 		t.Fatalf("nothing recorded")
