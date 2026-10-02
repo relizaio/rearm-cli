@@ -82,6 +82,22 @@ type agentSessionState struct {
 	// The orientation sections a brief has already printed for this session (task RD3-10), so the
 	// once-a-session ones are not printed again.
 	OrientationShown []string `json:"orientationShown,omitempty"`
+	// The agent the session belongs to, as the server named it at init or on the first `agent git` read
+	// (task RD5-2): the ReARM-Agent trailer, so a commit never carries a retyped uuid. The session lives on
+	// whichever instance the CLI's credentials pointed at when it was read, and its uuid names it on every
+	// instance, so a code session on another instance resolves here by its uuid like the board session.
+	AgentUuid string `json:"agentUuid,omitempty"`
+}
+
+// agentIdentityState is what the `agent git` helpers keep per AGENT rather than per session (task RD5-2):
+// the co-author line and the signing key outlive a session, and a new code session for the same agent
+// each round must not need them again. Kept under $XDG_STATE_HOME/rearm/agents/<agentUuid>.json, so two
+// agents on one host -- a board agent and a code agent -- keep their own key and line.
+type agentIdentityState struct {
+	AgentUuid     string `json:"agentUuid"`
+	CoAuthor      string `json:"coAuthor,omitempty"`
+	SigningKey    string `json:"signingKey,omitempty"`
+	SigningFormat string `json:"signingFormat,omitempty"`
 }
 
 // hopOutputs is one hop's published documents on a task (task RD4-7).
@@ -105,6 +121,61 @@ func agentStateDir() (string, error) {
 		base = filepath.Join(home, ".local", "state")
 	}
 	return filepath.Join(base, "rearm", "agent-sessions"), nil
+}
+
+// agentIdentityPath is the per-agent file, beside the per-session directory.
+func agentIdentityPath(agentUuid string) (string, error) {
+	dir, err := agentStateDir()
+	if err != nil {
+		return "", err
+	}
+	key := sanitiseStateKey(agentUuid)
+	if key == "" {
+		return "", fmt.Errorf("empty agent uuid")
+	}
+	return filepath.Join(filepath.Dir(dir), "agents", key+".json"), nil
+}
+
+// readAgentIdentity returns what is kept for the agent, or an empty record naming it when nothing is.
+func readAgentIdentity(agentUuid string) (*agentIdentityState, error) {
+	path, err := agentIdentityPath(agentUuid)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &agentIdentityState{AgentUuid: agentUuid}, nil
+		}
+		return nil, err
+	}
+	var id agentIdentityState
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return nil, fmt.Errorf("agent file %s is not readable JSON: %w", path, err)
+	}
+	id.AgentUuid = agentUuid
+	return &id, nil
+}
+
+// writeAgentIdentity persists the agent's record, written to a temporary file and renamed as the session
+// state is.
+func writeAgentIdentity(id *agentIdentityState) error {
+	path, err := agentIdentityPath(id.AgentUuid)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(id, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // sanitiseStateKey keeps a session id from escaping the state directory. Client session ids are
