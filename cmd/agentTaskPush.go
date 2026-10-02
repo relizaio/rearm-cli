@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -20,7 +24,9 @@ import (
 // rules. The PR row carries the PR's url, head sha, state and declaration but not the head branch name, and the
 // operator wants the CLI alone touched on this board, so the branch is found from git: the remote head, other than
 // the PR's base, whose tip is the row's head sha (or origin's refs/pull/<n>/head when the row has none), then the
-// current branch's upstream where it cannot be the base, then --branch is required (pickBranch).
+// current branch's upstream where it cannot be the base, then --branch is required (pickBranch). The base must be
+// known before origin is read (ARCHITECTURE round 3): the row's targetBranch, else --base, which is kept for the
+// checkout (pushBaseOf).
 //
 // Thin, by the operator's decision of 2026-10-01: one task read, two git reads (ls-remote, merge-base) and one
 // push, each printed. It does not link, merge, rebase, fetch or open anything.
@@ -57,18 +63,21 @@ func redactRemote(s string) string {
 
 // pushResult is what the verb prints; --json prints it as is.
 type pushResult struct {
-	Task         string   `json:"task,omitempty"`
-	Ok           bool     `json:"ok"`
-	Outcome      string   `json:"outcome"` // pushed, already-pushed, refused, mismatch, error
-	Pr           string   `json:"pr,omitempty"`
-	Branch       string   `json:"branch,omitempty"`
-	BranchSource string   `json:"branchSource,omitempty"` // --branch, head sha, upstream
-	RemoteBefore string   `json:"remoteBefore,omitempty"`
-	Head         string   `json:"head,omitempty"`
-	RemoteAfter  string   `json:"remoteAfter,omitempty"`
-	Reason       string   `json:"reason,omitempty"`
-	Remedy       string   `json:"remedy,omitempty"`
-	Commands     []string `json:"commands"`
+	Task           string   `json:"task,omitempty"`
+	Ok             bool     `json:"ok"`
+	Outcome        string   `json:"outcome"` // pushed, already-pushed, refused, mismatch, error
+	Pr             string   `json:"pr,omitempty"`
+	Branch         string   `json:"branch,omitempty"`
+	BranchSource   string   `json:"branchSource,omitempty"` // --branch, head sha, pull ref head sha, upstream
+	Base           string   `json:"base,omitempty"`
+	BaseSource     string   `json:"baseSource,omitempty"`     // targetBranch, --base, kept --base
+	BaseOverridden string   `json:"baseOverridden,omitempty"` // a --base, given or kept, that targetBranch overrides
+	RemoteBefore   string   `json:"remoteBefore,omitempty"`
+	Head           string   `json:"head,omitempty"`
+	RemoteAfter    string   `json:"remoteAfter,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+	Remedy         string   `json:"remedy,omitempty"`
+	Commands       []string `json:"commands"`
 }
 
 // pushRun is one invocation: the repository, the task's PR rows and what has run so far.
@@ -240,42 +249,97 @@ type branchPick struct {
 }
 
 const sayBranch = "say --branch <the PR's head branch>"
-const sayBaseOrBranch = "pass --base <the PR's base branch> so task push can leave it out, or " + sayBranch
 
-// prBases is the PR's base branch: the row's targetBranch, and --base (needed on a row CI never registered, which
-// names none). Either is never pushed to.
-func prBases(pr map[string]interface{}) []string {
-	var out []string
-	for _, b := range []string{cleanBranch(str(pr["targetBranch"])), cleanBranch(pushBase)} {
-		if b != "" && !containsString(out, b) {
-			out = append(out, b)
-		}
-	}
-	return out
+// pushBaseState is the --base kept for one checkout (ARCHITECTURE round 3 §2), under
+// $XDG_STATE_HOME/rearm/repositories/<digest of the checkout's top-level path>.json. Per checkout rather than per
+// origin: a base kept from another board's worktree of the same repository would be a wrong base, and a wrong
+// base lets the real one back among the candidates.
+type pushBaseState struct {
+	Path string `json:"path"`
+	Base string `json:"base"`
 }
 
-// pickBranch finds the PR's head branch (task RD5-3 §3.1 step 2, as ARCHITECTURE round 2 amends it). The base (the
-// row's targetBranch, else --base) is never pushed to: --branch naming it is refused, and it is never a candidate.
-// The candidates are origin's branches whose tip is the PR's head sha (the row's head, else origin's
-// refs/pull/<n>/head), minus the base:
-//   - one: that branch;
-//   - several: the current branch's upstream when it is one of them, the base is known, and the base's tip is not
-//     the head sha (then every candidate carries the base's tip and none can be told from a copy of the base);
-//     else refused;
-//   - none: the upstream when the base is known, the upstream is not the base and its tip is not the base's tip;
-//     run's fast-forward check then requires HEAD to contain it; else refused.
-//
-// With no base known (an unregistered row, no --base) every tie and every fallback is refused with "pass --base or
-// --branch": any branch at the head sha, and the upstream, could be the base. So is a single candidate that is the
-// upstream of a local branch of another name (the worktree hazard, with the PR's branch gone). A worktree made with git worktree add
-// -b <name> origin/<base> tracks the base, and pushing there is the RD3-5 mistake this verb exists to prevent.
-func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string, pullHead string) branchPick {
-	bases := prBases(pr)
-	if b := cleanBranch(pushBranch); b != "" {
-		if containsString(bases, b) {
-			return branchPick{why: fmt.Sprintf("--branch %s is the PR's base branch, and task push never pushes to the base.", b), remedy: sayBranch}
+func pushBaseStatePath(top string) (string, error) {
+	dir, err := agentStateDir()
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(top)))
+	return filepath.Join(filepath.Dir(dir), "repositories", hex.EncodeToString(sum[:])[:32]+".json"), nil
+}
+
+// keptPushBase is the --base kept for the checkout at top, or "". A file for another path (a digest collision)
+// or one that does not read is no kept base.
+func keptPushBase(top string) string {
+	path, err := pushBaseStatePath(top)
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var st pushBaseState
+	if json.Unmarshal(raw, &st) != nil || st.Path != filepath.Clean(top) {
+		return ""
+	}
+	return cleanBranch(st.Base)
+}
+
+// keepPushBase records base as the checkout's --base, replacing any kept before; written to a temporary file and
+// renamed, as the session state is.
+func keepPushBase(top, base string) error {
+	path, err := pushBaseStatePath(top)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(pushBaseState{Path: filepath.Clean(top), Base: base}, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// pushBaseOf is the PR's base branch and where it came from (ARCHITECTURE round 3): the row's targetBranch when
+// it has one, which wins over any --base; else --base given now; else the --base kept for this checkout. Empty
+// when none is known, and then nothing is read from origin. overridden is a --base, given or kept, that
+// targetBranch beat.
+func pushBaseOf(pr map[string]interface{}, top string) (base, source, overridden string) {
+	flag, flagSource := cleanBranch(pushBase), "--base"
+	if flag == "" {
+		flag, flagSource = keptPushBase(top), "kept --base"
+	}
+	if target := cleanBranch(str(pr["targetBranch"])); target != "" {
+		if flag != "" && flag != target {
+			overridden = flag
 		}
-		return branchPick{branch: b, source: "--branch"}
+		return target, "targetBranch", overridden
+	}
+	if flag != "" {
+		return flag, flagSource, ""
+	}
+	return "", "", ""
+}
+
+// pickBranch finds the PR's head branch (task RD5-3 §3.1 step 2, as ARCHITECTURE rounds 2 and 3 amend it). The
+// base is known by the time it runs and is never pushed to: run refuses, before reading origin, when no base is
+// known or --branch names it, and here it is never a candidate. The candidates are origin's branches whose tip is
+// the PR's head sha (the row's head, else origin's refs/pull/<n>/head), minus the base:
+//   - one: that branch;
+//   - several: the current branch's upstream when it is one of them and the base's tip is not the head sha (then
+//     every candidate carries the base's tip and none can be told from a copy of the base); else refused;
+//   - none: the upstream when it is not the base and its tip is not the base's tip; run's fast-forward check then
+//     requires HEAD to contain it; else refused.
+func (p *pushRun) pickBranch(pr map[string]interface{}, base string, heads map[string]string, pullHead string) branchPick {
+	if b := cleanBranch(pushBranch); b != "" {
+		return branchPick{branch: b, source: "--branch"} // run refused it already when it names the base
 	}
 	url := str(pr["url"])
 	head, source := strings.ToLower(str(pr["head"])), "head sha"
@@ -283,31 +347,24 @@ func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string,
 		head, source = strings.ToLower(pullHead), "pull ref head sha"
 	}
 	var matches []string
-	baseAtHead := ""
+	baseAtHead := false
 	if head != "" {
 		for name, tip := range heads {
 			if !strings.EqualFold(tip, head) {
 				continue
 			}
-			if containsString(bases, name) {
-				baseAtHead = name
+			if name == base {
+				baseAtHead = true
 				continue
 			}
 			matches = append(matches, name)
 		}
 	}
 	matches = sortedStrings(matches)
-	cur, up := upstreamBranch(p.dir)
 	if len(matches) == 1 {
-		// With no base known, the one candidate is the base when the PR's branch is gone and the base was
-		// fast-forwarded onto its head. Its tell is the worktree hazard: the candidate is the upstream of a local
-		// branch of another name, as git worktree add -b <name> origin/<base> leaves it. Refused, not guessed.
-		if len(bases) == 0 && matches[0] == up && cur != up {
-			return branchPick{why: fmt.Sprintf("%s's head %s is the tip of %s alone on origin, which is the upstream of the current branch %s, not its name; the PR's row names no base branch, and a worktree cut from the base tracks the base, so %s could be the base, which task push never pushes to.",
-				url, shortSha(head), up, cur, up), remedy: sayBaseOrBranch}
-		}
 		return branchPick{branch: matches[0], source: source}
 	}
+	_, up := upstreamBranch(p.dir)
 	upIs := func() string {
 		if up == "" {
 			return ", and the current branch has no upstream on origin."
@@ -317,10 +374,8 @@ func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string,
 	if len(matches) > 1 {
 		why := fmt.Sprintf("%s's head %s is the tip of %d branches on origin (%s)", url, shortSha(head), len(matches), strings.Join(matches, ", "))
 		switch {
-		case len(bases) == 0:
-			return branchPick{why: why + "; the PR's row names no base branch, and any of them could be the base, which task push never pushes to" + upIs(), remedy: sayBaseOrBranch}
-		case baseAtHead != "":
-			return branchPick{why: why + fmt.Sprintf(", and the PR's base %s is at the same commit, so none of them can be told from a copy of the base%s", baseAtHead, upIs()), remedy: sayBranch}
+		case baseAtHead:
+			return branchPick{why: why + fmt.Sprintf(", and the PR's base %s is at the same commit, so none of them can be told from a copy of the base%s", base, upIs()), remedy: sayBranch}
 		case up != "" && containsString(matches, up):
 			return branchPick{branch: up, source: "upstream"}
 		case up == "":
@@ -332,21 +387,17 @@ func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string,
 	if head == "" {
 		why = url + " has no head on its row (CI never reported it), and origin names none for it"
 	}
-	if baseAtHead != "" {
-		why = fmt.Sprintf("%s's head %s is on origin only as the PR's base %s, which task push never pushes to", url, shortSha(head), baseAtHead)
+	if baseAtHead {
+		why = fmt.Sprintf("no branch on origin carries %s's head %s other than its base %s, which task push never pushes to", url, shortSha(head), base)
 	}
 	switch {
 	case up == "":
 		return branchPick{why: why + upIs(), remedy: sayBranch}
-	case len(bases) == 0:
-		return branchPick{why: why + "; the current branch's upstream is " + up + ", but the PR's row names no base branch, so it could be the base, which task push never pushes to.", remedy: sayBaseOrBranch}
-	case containsString(bases, up):
+	case up == base:
 		return branchPick{why: why + "; the current branch's upstream is " + up + ", the PR's base, and task push never pushes to the base.", remedy: sayBranch}
 	}
-	for _, b := range bases {
-		if tip, ok := heads[b]; ok && strings.EqualFold(tip, heads[up]) {
-			return branchPick{why: why + fmt.Sprintf("; the current branch's upstream %s is at the PR's base %s's tip, so it cannot be told from a copy of the base.", up, b), remedy: sayBranch}
-		}
+	if tip, ok := heads[base]; ok && strings.EqualFold(tip, heads[up]) {
+		return branchPick{why: why + fmt.Sprintf("; the current branch's upstream %s is at the PR's base %s's tip, so it cannot be told from a copy of the base.", up, base), remedy: sayBranch}
 	}
 	return branchPick{branch: up, source: "upstream", fallback: true}
 }
@@ -389,6 +440,12 @@ func (p *pushRun) run(args []string) int {
 		return readErr("not in a git repository: run task push from the PR's checkout")
 	}
 	p.dir = top
+	// Given once, --base is kept for this checkout; a later --base replaces it (ARCHITECTURE round 3 §2).
+	if b := cleanBranch(pushBase); b != "" {
+		if err := keepPushBase(top, b); err != nil {
+			fmt.Fprintf(os.Stderr, "rearm: warning: --base %s is used but not kept for this checkout: %v\n", b, err)
+		}
+	}
 	localHead, _, err := pushGit(top, "rev-parse", "HEAD")
 	if err != nil {
 		return readErr("this repository has no commit yet")
@@ -413,11 +470,23 @@ func (p *pushRun) run(args []string) int {
 	}
 	p.result.Pr = str(pr["url"])
 
+	// The base must be known before origin is read (ARCHITECTURE round 3 §1): with no base, a lone branch at the
+	// PR's head could be the base, and nothing git reads tells them apart.
+	base, baseSource, overridden := pushBaseOf(pr, top)
+	if base == "" {
+		return p.refuse("the PR row has no base branch (an unregistered PR), and no --base is given or kept for this checkout; task push reads nothing from origin until it knows the base, which it never pushes to.",
+			"pass --base <branch>, the PR's base branch; it is kept for this checkout")
+	}
+	p.result.Base, p.result.BaseSource, p.result.BaseOverridden = base, baseSource, overridden
+	if b := cleanBranch(pushBranch); b == base {
+		return p.refuse(fmt.Sprintf("--branch %s is the PR's base branch, and task push never pushes to the base.", b), sayBranch)
+	}
+
 	heads, pullHead, err := p.remoteHeads(pr)
 	if err != nil {
 		return readErr("%v", err)
 	}
-	pick := p.pickBranch(pr, heads, pullHead)
+	pick := p.pickBranch(pr, base, heads, pullHead)
 	if pick.branch == "" {
 		return p.refuse(pick.why, pick.remedy)
 	}
@@ -483,6 +552,9 @@ func printPushResult(r pushResult) {
 		emitJson(r)
 		return
 	}
+	if r.Base != "" {
+		fmt.Println("base: " + r.Base + " (" + baseFrom(r) + ")")
+	}
 	for _, c := range r.Commands {
 		fmt.Println("ran: " + c)
 	}
@@ -506,6 +578,20 @@ func printPushResult(r pushResult) {
 	}
 }
 
+// baseFrom says where the base came from, for the printed base line.
+func baseFrom(r pushResult) string {
+	switch r.BaseSource {
+	case "targetBranch":
+		if r.BaseOverridden != "" {
+			return "from the PR row's targetBranch, which wins over the --base " + r.BaseOverridden
+		}
+		return "from the PR row's targetBranch"
+	case "--base":
+		return "from --base, kept for this checkout"
+	}
+	return "from the --base kept for this checkout"
+}
+
 var agentTaskPushCmd = &cobra.Command{
 	Use:   "push <task>",
 	Short: "Push HEAD to the head branch of the task's linked PR for this repository, fast-forward only, and verify it landed",
@@ -514,25 +600,26 @@ repository, and verifies the remote head with git ls-remote (task RD5-3). Never 
 
   1. The PR: the linked PR whose repository is the origin remote's; --pr when several are open.
      A PR that is merged, or declared superseded or abandoned, is refused by name.
-  2. The branch. The PR's base (the row's targetBranch, else --base) is never pushed to: --branch
-     naming it is refused. --branch when given; else the branch on origin, other than the base, whose
-     tip is the PR row's head sha (git ls-remote --heads origin), or, when the row has no head yet,
-     origin's refs/pull/<n>/head. When several share it, the current branch's upstream if it is one
-     of them; when none does, the upstream if HEAD contains its tip. Neither when the upstream is the
-     base or at the base's tip, nor when the base's tip is the head sha, nor when no base is known
-     (a row CI never registered, without --base): then refused, say --base or --branch. With no
-     base known, a lone branch at the head sha that is the upstream of a local branch of another
-     name (a worktree cut from the base) is refused the same way: it could be the base.
-  3. Fast-forward only: origin's tip of that branch must be an ancestor of HEAD
+  2. The base: the PR row's targetBranch; else --base, which is kept for this checkout once given
+     (a later --base replaces it); else the kept --base. targetBranch wins over a --base, given or
+     kept. With no base known (a row CI never registered, and no --base given or kept) the push is
+     refused before anything is read from origin. The base line says which base and where from.
+  3. The branch. The base is never pushed to: --branch naming it is refused. --branch when given;
+     else the branch on origin, other than the base, whose tip is the PR row's head sha (git
+     ls-remote --heads origin), or, when the row has no head yet, origin's refs/pull/<n>/head. When
+     several share it, the current branch's upstream if it is one of them; when none does, the
+     upstream if HEAD contains its tip. Neither when the upstream is the base or at the base's tip,
+     nor when the base's tip is the head sha: then refused, say --branch.
+  4. Fast-forward only: origin's tip of that branch must be an ancestor of HEAD
      (git merge-base --is-ancestor); otherwise refused: merge origin/<branch> and retry.
      Equal: already pushed, exit 0.
-  4. git push origin HEAD:refs/heads/<branch>, then git ls-remote origin refs/heads/<branch> must
+  5. git push origin HEAD:refs/heads/<branch>, then git ls-remote origin refs/heads/<branch> must
      be HEAD; a mismatch prints both shas and exits 1.
 
 Prints the git commands it ran, the PR, the branch and the sha. Any git message it prints has the
 remote URL's credentials removed. Exit 0 when HEAD is on the branch, 1 when refused or not verified,
-2 when a read failed. --json prints {task, ok, outcome, pr, branch, branchSource, remoteBefore, head,
-remoteAfter, reason, remedy, commands}.
+2 when a read failed. --json prints {task, ok, outcome, pr, branch, branchSource, base, baseSource,
+baseOverridden, remoteBefore, head, remoteAfter, reason, remedy, commands}.
 
   rearm agent task push RD5-3 --session <board-session>
   rearm agent task push RD5-3 --session <board-session> --base 2026-10-agent-boards
@@ -548,7 +635,7 @@ func init() {
 	f.StringVar(&pushSession, "session", "", "the board session holding the task — required")
 	f.StringVar(&pushPr, "pr", "", "the linked PR to push to, when several linked PRs are open on this repository")
 	f.StringVar(&pushBranch, "branch", "", "the PR's head branch on origin, when it cannot be found from the PR's head sha or the upstream")
-	f.StringVar(&pushBase, "base", "", "the PR's base branch, never pushed to, when the PR row names none (a PR CI never registered)")
+	f.StringVar(&pushBase, "base", "", "the PR's base branch, never pushed to, when the PR row names none (a PR CI never registered); kept for this checkout")
 	f.BoolVar(&pushJson, "json", false, "print the result as JSON")
 	agentTaskCmd.AddCommand(agentTaskPushCmd)
 }

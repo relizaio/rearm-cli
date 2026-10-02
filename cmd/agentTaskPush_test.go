@@ -33,7 +33,8 @@ type pushWorld struct {
 
 // newPushWorld: acme/app's origin is a bare repository with main and a PR branch feature, one commit ahead of
 // main and reported as PR 7's head; the checkout is on a local branch work (no upstream) at feature's tip, with
-// one more commit to push. The task links PR 7, open.
+// one more commit to push. The task links PR 7, open, its row naming main as its targetBranch (a registered row;
+// the unregistered ones, with no base known, are refused before origin is read: agentTaskPushKnownBase_test.go).
 func newPushWorld(t *testing.T) *pushWorld {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -69,7 +70,7 @@ func newPushWorld(t *testing.T) *pushWorld {
 	w.srv.task = map[string]any{
 		"uuid": pTask, "key": "RD-1", "board": "b-1", "role": "coder",
 		"prUrls":       []any{pPR},
-		"pullRequests": []any{map[string]any{"url": pPR, "state": "OPEN", "head": head}},
+		"pullRequests": []any{map[string]any{"url": pPR, "state": "OPEN", "head": head, "targetBranch": "main"}},
 	}
 	srv := w.srv.serve()
 	t.Cleanup(srv.Close)
@@ -144,7 +145,8 @@ func TestPushLandsAndVerifies(t *testing.T) {
 	if got := w.remote("feature"); got != head {
 		t.Fatalf("origin/feature is %s, want HEAD %s", got, head)
 	}
-	want := "ran: git ls-remote --heads origin\n" +
+	want := "base: main (from the PR row's targetBranch)\n" +
+		"ran: git ls-remote --heads origin\n" +
 		"ran: git merge-base --is-ancestor " + before + " HEAD\n" +
 		"ran: git push origin HEAD:refs/heads/feature\n" +
 		"ran: git ls-remote origin refs/heads/feature\n" +
@@ -318,24 +320,6 @@ func TestPushRefusesWithoutHeadOrUpstream(t *testing.T) {
 	}
 }
 
-// With no base known, the upstream could be the base: a head no branch carries is refused, asking for --base.
-func TestPushRefusesAHeadNoBranchHasWithoutABase(t *testing.T) {
-	w := newPushWorld(t)
-	w.pr(0)["head"] = strings.Repeat("ab", 20)
-	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
-	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/feature")
-	before := w.remote("feature")
-	out, code := w.run()
-	if code != 1 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	wantIn(t, out, "no branch on origin has "+pPR+"'s head abababa at its tip: the row is stale or the branch moved; the current branch's upstream is feature, but the PR's row names no base branch",
-		"Remedy: pass --base <the PR's base branch> so task push can leave it out, or say --branch")
-	if w.remote("feature") != before {
-		t.Fatal("pushed anyway")
-	}
-}
-
 func TestPushBranchFlagComesFirst(t *testing.T) {
 	w := newPushWorld(t)
 	vGit(t, w.repo, "", "push", "-q", "origin", "main:refs/heads/other")
@@ -421,7 +405,7 @@ func TestPushSaysAlreadyPushed(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	want := "ran: git ls-remote --heads origin\nalready pushed: " + pPR + " (branch feature, found by head sha) is at HEAD " + w.head() + "\n"
+	want := "base: main (from the PR row's targetBranch)\nran: git ls-remote --heads origin\nalready pushed: " + pPR + " (branch feature, found by head sha) is at HEAD " + w.head() + "\n"
 	if out != want {
 		t.Fatalf("printed:\n%s\nwant:\n%s", out, want)
 	}
@@ -499,7 +483,7 @@ func (w *pushWorld) secondPR() {
 	vGit(w.t, w.repo, "", "push", "-q", "origin", "HEAD:refs/heads/second")
 	w.commit("after-second.txt")
 	w.srv.task["pullRequests"] = append(w.srv.task["pullRequests"].([]any),
-		map[string]any{"url": pPR2, "state": "OPEN", "head": w.remote("second")})
+		map[string]any{"url": pPR2, "state": "OPEN", "head": w.remote("second"), "targetBranch": "main"})
 }
 
 func TestPushTwoLinkedPRsNeedPr(t *testing.T) {
@@ -584,7 +568,7 @@ func TestPushJsonShape(t *testing.T) {
 		t.Fatalf("%v: %s", err, out)
 	}
 	want := map[string]any{"task": "RD-1", "ok": true, "outcome": "pushed", "pr": pPR, "branch": "feature",
-		"branchSource": "head sha", "remoteBefore": before, "head": head, "remoteAfter": head}
+		"branchSource": "head sha", "base": "main", "baseSource": "targetBranch", "remoteBefore": before, "head": head, "remoteAfter": head}
 	for k, v := range want {
 		if m[k] != v {
 			t.Fatalf("%s = %v, want %v\n%s", k, m[k], v, out)
@@ -688,7 +672,7 @@ func TestPushPrintsNoCredentialOfTheOrigin(t *testing.T) {
 		t.Fatalf("json printed the token:\n%s", out)
 	}
 	pushJson = false
-	w.srv.task["pullRequests"] = []any{map[string]any{"url": pPR, "state": "OPEN", "head": w.remote("feature")}}
+	w.srv.task["pullRequests"] = []any{map[string]any{"url": pPR, "state": "OPEN", "head": w.remote("feature"), "targetBranch": "main"}}
 
 	// The remote refuses the push and echoes the credentialed URL: printed redacted.
 	w.commit("again.txt")

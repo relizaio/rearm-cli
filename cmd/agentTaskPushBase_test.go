@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// rearm agent task push never pushes to the PR's base (task RD5-3 round 2, ARCHITECTURE round 2): the base is the
-// row's targetBranch, else --base; it is never a candidate, --branch naming it is refused, and with no base known a
-// tie or a fallback is refused rather than guessed. Also the flag spellings the note promises (--pr in any case,
+// rearm agent task push never pushes to the PR's base (task RD5-3 round 2, ARCHITECTURE round 2): it is never a
+// candidate and --branch naming it is refused. Where the base comes from, and the refusal before origin is read
+// when none is known (round 3), are in agentTaskPushKnownBase_test.go. Also the flag spellings the note promises (--pr in any case,
 // --branch refs/heads/<name>) and the prUrls fallback, which no test covered in round 1 (tester run 1, T-3 to T-5).
 
 // upstream sets the work branch's upstream to origin/<branch>, as git worktree add -b work origin/<branch> does.
@@ -49,20 +49,22 @@ func TestPushHeadAtTheTargetBranchTipGoesToThePRBranch(t *testing.T) {
 }
 
 // Tester run 1, T-2, this board's rows: unregistered (no head, no targetBranch), refs/pull/7/head is the PR's branch
-// and the base's tip, the upstream is the base. Refused, asking for --base or --branch; with --base, the PR's branch.
+// and the base's tip, the upstream is the base. Refused before origin is read (round 3); with --base, the PR's branch.
 func TestPushUnregisteredRowWithThePullHeadAtTheBaseTip(t *testing.T) {
 	w := newPushWorld(t)
 	feature := w.pr(0)["head"].(string)
 	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head", feature+":refs/heads/main")
-	w.pr(0)["head"] = ""
+	w.pr(0)["head"], w.pr(0)["targetBranch"] = "", ""
 	w.upstream("main")
 	before := map[string]string{"main": feature, "feature": feature}
 	out, code := w.run()
 	if code != 1 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	wantIn(t, out, "refused: "+pPR+"'s head "+shortSha(feature)+" is the tip of 2 branches on origin (feature, main); the PR's row names no base branch, and any of them could be the base, which task push never pushes to, and the current branch's upstream is main.",
-		"Remedy: pass --base <the PR's base branch> so task push can leave it out, or say --branch <the PR's head branch>")
+	wantIn(t, out, "refused: the PR row has no base branch (an unregistered PR)", "Remedy: pass --base <branch>")
+	if strings.Contains(out, "ran: ") {
+		t.Fatalf("read origin without a base:\n%s", out)
+	}
 	w.pushedNothing(out, before)
 
 	pushBase = "origin/main"
@@ -82,16 +84,24 @@ func TestPushBranchNamingTheBaseIsRefused(t *testing.T) {
 		{"targetBranch", "main", "", "main"},
 		{"targetBranch, refs/heads/", "refs/heads/main", "", "refs/heads/main"},
 		{"--base", "", "main", "origin/main"},
+		{"kept --base", "", "kept:main", "main"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := newPushWorld(t)
 			w.pr(0)["targetBranch"], pushBase, pushBranch = c.target, c.base, c.branch
+			if kept, ok := strings.CutPrefix(c.base, "kept:"); ok {
+				w.keepBase(kept)
+				pushBase = ""
+			}
 			before := map[string]string{"main": w.remote("main"), "feature": w.remote("feature")}
 			out, code := w.run()
 			if code != 1 {
 				t.Fatalf("exit %d:\n%s", code, out)
 			}
 			wantIn(t, out, "refused: --branch main is the PR's base branch, and task push never pushes to the base.", "Remedy: say --branch <the PR's head branch>")
+			if strings.Contains(out, "ran: ") {
+				t.Fatalf("read origin:\n%s", out)
+			}
 			w.pushedNothing(out, before)
 		})
 	}
@@ -178,7 +188,7 @@ func TestPushOnlyTheBaseCarriesTheHead(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	wantIn(t, out, "refused: "+pPR+"'s head "+shortSha(feature)+" is on origin only as the PR's base main, which task push never pushes to; the current branch's upstream is main, the PR's base, and task push never pushes to the base.",
+	wantIn(t, out, "refused: no branch on origin carries "+pPR+"'s head "+shortSha(feature)+" other than its base main, which task push never pushes to; the current branch's upstream is main, the PR's base, and task push never pushes to the base.",
 		"Remedy: say --branch")
 	w.pushedNothing(out, map[string]string{"main": feature})
 }
@@ -220,57 +230,12 @@ func TestPushFallsBackToPrUrls(t *testing.T) {
 	feature := w.pr(0)["head"].(string)
 	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head")
 	w.srv.task["pullRequests"] = []any{}
+	pushBase = "main" // a prUrls row names no base
 	out, code := w.run()
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 	wantIn(t, out, "ran: git ls-remote origin refs/heads/* refs/pull/7/head\n", "to "+pPR+" (branch feature, found by pull ref head sha)")
-	if w.remote("feature") != w.head() {
-		t.Fatal("not pushed")
-	}
-}
-
-// An unregistered row whose PR branch is gone, the base fast-forwarded onto its head, in a worktree cut from the base:
-// the one branch at the pull ref head is the base, the upstream of a local branch of another name. Refused; with
-// --base it is no candidate, and the upstream on the base is refused too.
-func TestPushUnregisteredRowWithOnlyTheBaseAtThePullHead(t *testing.T) {
-	w := newPushWorld(t)
-	feature := w.pr(0)["head"].(string)
-	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head", feature+":refs/heads/main", ":refs/heads/feature")
-	w.pr(0)["head"] = ""
-	w.upstream("main")
-	before := map[string]string{"main": feature}
-	out, code := w.run()
-	if code != 1 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	wantIn(t, out, "refused: "+pPR+"'s head "+shortSha(feature)+" is the tip of main alone on origin, which is the upstream of the current branch work, not its name;",
-		"so main could be the base, which task push never pushes to.", "Remedy: pass --base <the PR's base branch>")
-	w.pushedNothing(out, before)
-
-	pushBase = "main"
-	out, code = w.run()
-	if code != 1 {
-		t.Fatalf("--base: exit %d:\n%s", code, out)
-	}
-	wantIn(t, out, "is on origin only as the PR's base main, which task push never pushes to; the current branch's upstream is main, the PR's base")
-	w.pushedNothing(out, before)
-}
-
-// The same unregistered row with the checkout on a branch named after the one it tracks, the PR's branch: pushed.
-func TestPushUnregisteredRowOnTheBranchItTracks(t *testing.T) {
-	w := newPushWorld(t)
-	feature := w.pr(0)["head"].(string)
-	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head")
-	w.pr(0)["head"] = ""
-	vGit(t, w.repo, "", "branch", "-m", "work", "feature")
-	vGit(t, w.repo, "", "config", "branch.feature.remote", "origin")
-	vGit(t, w.repo, "", "config", "branch.feature.merge", "refs/heads/feature")
-	out, code := w.run()
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	wantIn(t, out, "branch feature, found by pull ref head sha")
 	if w.remote("feature") != w.head() {
 		t.Fatal("not pushed")
 	}
