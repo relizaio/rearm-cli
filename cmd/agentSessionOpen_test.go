@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -103,6 +104,17 @@ func (s *sessServer) last(name string) sessOp {
 	return sessOp{}
 }
 
+// selected is the session as a server answers the query: only the fields its selection names.
+func selected(sess map[string]any, query string) map[string]any {
+	out := map[string]any{}
+	for k, v := range sess {
+		if regexp.MustCompile(`\b` + k + `\b`).MatchString(query) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 func gqlFail(w http.ResponseWriter, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"message": msg}}})
 }
@@ -188,7 +200,7 @@ func (s *sessServer) handle(w http.ResponseWriter, r *http.Request) {
 			gqlFail(w, "Session not found")
 			return
 		}
-		data["sessionProgrammatic"] = sess
+		data["sessionProgrammatic"] = selected(sess, req.Query)
 	case "AgentTaskAssignProgrammatic":
 		uuid := str(req.Variables["sessionUuid"])
 		if str(req.Variables["taskUuid"]) == "t-held" {
