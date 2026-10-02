@@ -183,7 +183,7 @@ func TestEveryAgentVerbIsClassifiedForJson(t *testing.T) {
 	}
 	// Text by default, JSON with the flag: their own --json.
 	for _, c := range []*cobra.Command{agentTaskBriefCmd, agentBoardEventsCmd, agentBoardAgentsCmd, agentTaskMergeplanCmd,
-		agentDocElementCheckCmd, agentTaskVerifyCmd, agentTaskPushCmd} {
+		agentDocElementCheckCmd, agentTaskVerifyCmd, agentTaskPushCmd, agentGitCommitCmd, agentGitMergeCmd} {
 		takesJson[c] = "own"
 	}
 	without := map[string]bool{
