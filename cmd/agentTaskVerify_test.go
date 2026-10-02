@@ -291,6 +291,42 @@ func TestVerifyOutputsFailsForAnOutputFromAnEarlierHop(t *testing.T) {
 	wantLine(t, out, checkOutputs, "FAIL", "Release "+vOut+" was published before this hop began, so it is not an output of it")
 }
 
+// T-1 (design 3.2.1): an advisory round is never a hop's output, even a DRAFT this session published in this hop.
+func TestVerifyOutputsRefusesAnAdvisoryRound(t *testing.T) {
+	w := newVerifyWorld(t)
+	w.srv.task["documents"].([]any)[0].(map[string]any)["document"].(map[string]any)["advisory"] = true
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", code, out)
+	}
+	wantLine(t, out, checkOutputs, "FAIL", "DETAILED_DESIGN round 1 (advisory) ("+vOut+") is an advisory round, never a hop's output",
+		"Remedy: publish this hop's document again")
+}
+
+// A hop that published three versions of one round recorded all three; the line names the newest once.
+func TestVerifyOutputsNamesARepublishedRoundOnce(t *testing.T) {
+	w := newVerifyWorld(t)
+	v2, v3 := "99999999-9999-4999-8999-999999999992", "99999999-9999-4999-8999-999999999993"
+	docs := w.srv.task["documents"].([]any)
+	docs[0].(map[string]any)["document"].(map[string]any)["supersededBy"] = v2
+	second := vDoc(v2, "DETAILED_DESIGN", 1, vSession, "DRAFT", "2021-02-01T00:00:00Z")
+	second["document"].(map[string]any)["supersededBy"] = v3
+	w.srv.task["documents"] = append([]any{vDoc(v3, "DETAILED_DESIGN", 1, vSession, "DRAFT", "2021-03-01T00:00:00Z"), second}, docs...)
+	if err := writeAgentState(&agentSessionState{SessionUuid: vSession, ClientSessionId: "c-1",
+		HopOutputs: map[string]*hopOutputs{vTask: {AssignedAt: "2020-01-01T00:00:00Z", Outputs: []string{vOut, v2, v3}}},
+		SeenInputs: map[string][]string{vTask: {vArch}}}); err != nil {
+		t.Fatal(err)
+	}
+	out, code := w.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantLine(t, out, checkOutputs, "PASS", "recorded and DRAFT: DETAILED_DESIGN round 1 ("+v3+").")
+	if l := line(t, out, checkOutputs); strings.Count(l, "DETAILED_DESIGN") != 1 {
+		t.Fatalf("the round is named once: %s", l)
+	}
+}
+
 func TestVerifyServerChecksFailForASessionThatDoesNotHoldTheTask(t *testing.T) {
 	w := newVerifyWorld(t)
 	w.assignment()["session"] = vOther
@@ -326,6 +362,26 @@ func TestVerifyInputsNamesARoundPublishedSinceTheAssignment(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _ = w.run()
+	wantLine(t, out, checkInputs, "PASS", "the 1 round(s) published since your assignment are recorded as read")
+}
+
+// T-2 (design 3.2.2): only rounds published after the assignment are inputs the sign-off must acknowledge; another
+// session's round from before it is left out, read or not, as the server's RD2-34 guard leaves it out.
+func TestVerifyInputsLeavesOutRoundsFromBeforeTheAssignment(t *testing.T) {
+	w := newVerifyWorld(t)
+	after := "66666666-6666-4666-8666-666666666666"
+	w.srv.task["documents"] = append([]any{vDoc(after, "ARCHITECTURE", 2, vOther, "ASSEMBLED", "2022-01-01T00:00:00Z")},
+		w.srv.task["documents"].([]any)...)
+	// The 2019 architecture round (vArch) predates the 2020 assignment and is not recorded as read; round 2 is.
+	if err := writeAgentState(&agentSessionState{SessionUuid: vSession, ClientSessionId: "c-1",
+		HopOutputs: map[string]*hopOutputs{vTask: {AssignedAt: "2020-01-01T00:00:00Z", Outputs: []string{vOut}}},
+		SeenInputs: map[string][]string{vTask: {after}}}); err != nil {
+		t.Fatal(err)
+	}
+	out, code := w.run()
+	if code != 0 {
+		t.Fatalf("exit %d, want 0:\n%s", code, out)
+	}
 	wantLine(t, out, checkInputs, "PASS", "the 1 round(s) published since your assignment are recorded as read")
 }
 
@@ -446,6 +502,24 @@ func TestVerifyTrailersComparesTheSession(t *testing.T) {
 	}
 }
 
+// T-3 (design 3.2.5): ReARM-Agent is the same on every commit; two commits with different agents fail, naming both.
+func TestVerifyTrailersFailsWhenTheAgentDiffers(t *testing.T) {
+	w := newVerifyWorld(t)
+	first := shortSha(w.pr()["head"].(string))
+	otherAgent := "00000000-0000-4000-8000-000000000000"
+	sha := w.commit("agent.txt", "feat: another agent\n\nWhat changed.\n\nReARM-Agentic-Session: c-1\nReARM-Agent: "+otherAgent+
+		"\nCo-Authored-By: Claude <noreply@anthropic.com>\n")
+	w.publishPR()
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", code, out)
+	}
+	wantLine(t, out, checkTrailers, "FAIL", "ReARM-Agent differs between commits: ", first+" has "+vAgent, shortSha(sha)+" has "+otherAgent)
+	if l := line(t, out, checkTrailers); strings.Contains(l, "lacks") || strings.Contains(l, "carries") {
+		t.Fatalf("the agent is the only problem: %s", l)
+	}
+}
+
 func TestVerifyTrailersPassWithTheCodeSession(t *testing.T) {
 	w := newVerifyWorld(t)
 	// The two sessions of a board hop: the code commits carry the code session's id, not the board session's.
@@ -469,6 +543,20 @@ func TestVerifySubjectsFailsOnADoubleQuote(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 	wantLine(t, out, checkSubjects, "FAIL", shortSha(sha)+` has a double quote in its subject: fix: say "hello"`, "rearm-actions templates")
+	wantLine(t, out, checkTrailers, "PASS")
+}
+
+// T-4 (design 3.2.6): the quote check reads the body too, not only the subject.
+func TestVerifySubjectsFailsOnADoubleQuoteInTheBody(t *testing.T) {
+	w := newVerifyWorld(t)
+	sha := w.commit("b.txt", "fix: a plain subject\n\nThe page said \"hello\".\n\nReARM-Agentic-Session: c-1\nReARM-Agent: "+vAgent+
+		"\nCo-Authored-By: Claude <noreply@anthropic.com>\n")
+	w.publishPR()
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", code, out)
+	}
+	wantLine(t, out, checkSubjects, "FAIL", shortSha(sha)+" has a double quote in its body: fix: a plain subject", "rearm-actions templates")
 	wantLine(t, out, checkTrailers, "PASS")
 }
 

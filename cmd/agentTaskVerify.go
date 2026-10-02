@@ -350,8 +350,14 @@ func verifyOutputsCheck(h *verifyHop) verifyCheck {
 	}
 	docs := verifyDocuments(h.task)
 	var problems, ok []string
+	// Each version a hop republishes is recorded; they all resolve to the newest, which is named once.
+	done := map[string]bool{}
 	for _, out := range h.outputs {
 		r := newestVersion(docs, out)
+		if done[r] {
+			continue
+		}
+		done[r] = true
 		rd, found := docs[r]
 		if !found {
 			problems = append(problems, fmt.Sprintf("release %s is not among %s's documents", r, h.label))
