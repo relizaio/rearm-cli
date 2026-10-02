@@ -61,10 +61,10 @@ func versionPathLine(n briefNextRound) string {
 	return fmt.Sprintf("republishing %s as a new version of round %d, published in this hop", n.Path, n.Round)
 }
 
-// publishNoteOut is where a publish's own lines go: stdout beside the compact line, stderr when stdout carries
-// JSON (--json, --dry-run) that a script parses.
+// publishNoteOut is where a publish's own lines go without --json: stdout beside the compact line, stderr under
+// --dry-run, whose stdout is the input a script parses. Under --json sayPublishNote keeps them as notices.
 func publishNoteOut() io.Writer {
-	if compactJson || docDryRun {
+	if docDryRun {
 		return os.Stderr
 	}
 	return os.Stdout
