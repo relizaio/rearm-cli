@@ -133,6 +133,33 @@ func TestTheRepositoryKey(t *testing.T) {
 	}
 }
 
+// Outside a repository the working directory is the key with its symlinks resolved (tester run 1 T-3): the same
+// directory reached through a symlink and by its real path is one key, so one entry, and a close clears it.
+func TestTheRepositoryKeyResolvesSymlinksOutsideARepository(t *testing.T) {
+	w := newSessWorld(t)
+	w.on(w.b)
+	real, err := filepath.EvalSymlinks(w.plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "plain-link")
+	if err := os.Symlink(w.plain, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(link)
+	if cwd, _ := os.Getwd(); cwd != link {
+		t.Fatalf("the working directory reads as the link: %q", cwd)
+	}
+	key, err := repositoryKey()
+	if err != nil || key != real {
+		t.Fatalf("through the link the key is the real path %q: %q %v", real, key, err)
+	}
+	w.setCurrent(real, w.b, otherSession, "s-plain")
+	if got := w.hook(agentTaskAssignCmd, "t-1"); got != otherSession {
+		t.Fatalf("the entry recorded under the real path answers through the link: %q", got)
+	}
+}
+
 // applyFallbackQuietly parses and runs the fallback alone, returning its exit code.
 func applyFallbackQuietly(t *testing.T, c *cobra.Command, words ...string) int {
 	t.Helper()

@@ -19,6 +19,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -43,9 +44,9 @@ var (
 	currentJson         bool
 )
 
-// The read session current --set makes: the session's client id, agent and status, and nothing a server of another
-// version may lack.
-const sessionCurrentRead = `query AgentSessionCurrentProgrammatic($sessionUuid: ID!) { sessionProgrammatic(sessionUuid: $sessionUuid) { uuid clientSessionId agent status } }`
+// The read session current --set makes: the session's client id, agent, the API key that opened it and its status,
+// and nothing a server of another version may lack.
+const sessionCurrentRead = `query AgentSessionCurrentProgrammatic($sessionUuid: ID!) { sessionProgrammatic(sessionUuid: $sessionUuid) { uuid clientSessionId agent apiKey status } }`
 
 // The report phases and their display ids, as orientation §2.6 names them.
 const (
@@ -91,8 +92,11 @@ session, its client id and agent, the instance, and when and how it was recorded
 
 --set <session-uuid> records an existing session as current here, on the instance the credentials point at:
 how a long-lived board session becomes current in a new worktree. The session is read once from that
-instance; one that is not open, or that these credentials cannot read (another key's), is refused. Its client
-id and agent are kept with the entry, as session open keeps them. 'task assign' records nothing.`,
+instance, and only a session these credentials' API key opened is taken: the key that opened it is compared
+with the key the credentials act as (the subject of their access token), so another key's session is refused
+even when these credentials can read it (an admin key, a board's coordinator seat, a reader of a board the
+session worked). A session that is not open is refused too. Its client id and agent are kept with the entry,
+as session open keeps them. 'task assign' records nothing.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		os.Exit(runSessionCurrent())
@@ -248,7 +252,7 @@ func runSessionClose(args []string) int {
 		instance := currentInstance()
 		e := currentSessionFor(repo, instance)
 		if e == nil || e.SessionUuid == "" {
-			fmt.Fprintln(os.Stderr, "rearm: no session uuid given, and "+strings.TrimPrefix(noCurrentSessionRefusal(repo, instance), "--session is required: "))
+			fmt.Fprintln(os.Stderr, "rearm: no session uuid given, and "+noCurrentSessionRefusal(repo, instance, sessionByPositional))
 			return 1
 		}
 		uuid = e.SessionUuid
@@ -317,7 +321,8 @@ func runSessionCurrent() int {
 	return 0
 }
 
-// runSessionCurrentSet records an existing open session of these credentials as current (round 2 §3).
+// runSessionCurrentSet records an existing open session these credentials' key opened as current (round 2 §3, round 3
+// §1).
 func runSessionCurrentSet(repo, instance, ref string) int {
 	refuse := func(format string, a ...interface{}) int {
 		fmt.Fprintf(os.Stderr, "rearm: session current --set: "+format+"; nothing was recorded\n", a...)
@@ -343,6 +348,20 @@ func runSessionCurrentSet(repo, instance, ref string) int {
 	if s == nil {
 		return refuse("%s answered no session %s for these credentials", instance, uuid)
 	}
+	// Only this key's own session (ARCHITECTURE round 3 §1): the server answers the read to more readers than the
+	// key that opened the session, so the read succeeding proves nothing; the key is compared here.
+	owner, caller := str(s["apiKey"]), callerKeyUuid()
+	switch {
+	case caller == "":
+		return refuse("these credentials hold no access token for %s (a server without the token endpoint), so the key "+
+			"that opened session %s cannot be compared with theirs; pass --session %s to each verb instead", instance, uuid, uuid)
+	case owner == "":
+		return refuse("%s answered no API key for session %s, so it cannot be told from another key's session; pass "+
+			"--session %s to each verb instead", instance, uuid, uuid)
+	case !strings.EqualFold(owner, caller):
+		return refuse("session %s belongs to agent %s and was opened by API key %s, not by these credentials' key %s; "+
+			"only a session this key opened can be current", uuid, orElse(str(s["agent"]), "(none answered)"), owner, caller)
+	}
 	if status := str(s["status"]); status != "OPEN" {
 		return refuse("session %s is %s on %s; only an open session can be current", uuid, orElse(status, "of unknown status"), instance)
 	}
@@ -357,6 +376,31 @@ func runSessionCurrentSet(repo, instance, ref string) int {
 	keepSessionIdentity(uuid, clientId, agent)
 	fmt.Printf("session %s (client id %s) is the current session for %s on %s\n", uuid, clientId, repo, instance)
 	return 0
+}
+
+// callerKeyUuid is the API key these credentials act as: the subject of the access token the client holds, since
+// the server issues every programmatic token, a key's or a browser login's, with its key's uuid as the subject.
+// Empty when the client holds none: a server without the token endpoint, which is sent the key itself.
+func callerKeyUuid() string { return tokenSubject(rearmClient().Tokens().AccessToken) }
+
+// tokenSubject is the sub claim of a JWT, read without verifying it: the token is these credentials' own, as the
+// server issued it, and is only read to learn which key they are.
+func tokenSubject(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		Sub string `json:"sub"`
+	}
+	if json.Unmarshal(payload, &claims) != nil {
+		return ""
+	}
+	return strings.TrimSpace(claims.Sub)
 }
 
 // keepSessionIdentity keeps the client id and agent in local state for a session this host has no state for, as

@@ -297,20 +297,27 @@ func otherInstanceSessions(repo, instance string) []currentSessionEntry {
 	return out
 }
 
-// noCurrentSessionRefusal is the words a verb that needs a session says when it has neither --session nor an
-// entry for this repository on the instance it calls.
-func noCurrentSessionRefusal(repo, instance string) string {
+// The two ways a verb takes its session, as the refusal for a missing one names them (ARCHITECTURE round 3 §2): the
+// --session flag, or the positional uuid of session close.
+const (
+	sessionByFlag       = "pass --session <session-uuid>"
+	sessionByPositional = "pass its uuid: rearm agent session close <session-uuid> --final <file>"
+)
+
+// noCurrentSessionRefusal is the words a verb that needs a session says when it has neither its session nor an
+// entry for this repository on the instance it calls; remedy is how the verb takes its session.
+func noCurrentSessionRefusal(repo, instance, remedy string) string {
 	where := "this repository"
 	if repo != "" {
 		where = repo
 	}
-	msg := "--session is required: no current session is recorded for " + where
+	msg := "no current session is recorded for " + where
 	if instance != "" {
 		msg += " on " + instance
 	} else {
 		msg += " (the credentials name no instance)"
 	}
-	msg += "; pass --session <session-uuid>, or record one for this repository with: rearm agent session current --set <session-uuid>"
+	msg += "; " + remedy + ", or record one for this repository with: rearm agent session current --set <session-uuid>"
 	if others := otherInstanceSessions(repo, instance); repo != "" && len(others) > 0 {
 		var names []string
 		for _, o := range others {
@@ -353,7 +360,7 @@ func applySessionFallback(cmd *cobra.Command) int {
 		return 0
 	}
 	if code := sessionRequiredExit(cmd, f); code != 0 {
-		fmt.Fprintln(os.Stderr, "rearm: "+noCurrentSessionRefusal(repo, instance))
+		fmt.Fprintln(os.Stderr, "rearm: --session is required: "+noCurrentSessionRefusal(repo, instance, sessionByFlag))
 		return code
 	}
 	return 0

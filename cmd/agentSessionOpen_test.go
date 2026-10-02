@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,16 @@ import (
 
 const sAgent = "62df357e-a3a4-4df5-82d4-049e629d1c6b"
 
+// sKey is the API key the world's credentials act as: the subject of every access token the scripted instances
+// issue to them, and the key every session opened or added on them is recorded with unless a test says otherwise.
+const sKey = "4b1d7a2e-5c3f-4e8a-9d61-0f2b3c4d5e6f"
+
+// testToken is an unsigned JWT whose subject is the key, as the token endpoint issues one.
+func testToken(key string) string {
+	enc := base64.RawURLEncoding.EncodeToString
+	return enc([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." + enc([]byte(`{"sub":"`+key+`","aud":"programmatic"}`)) + ".c2ln"
+}
+
 // sessOp is one request a scripted instance received.
 type sessOp struct {
 	name     string
@@ -42,6 +53,7 @@ type sessServer struct {
 	url        string
 	ops        []sessOp
 	sessions   map[string]map[string]any
+	tokens     int
 	n          int
 	failInit   bool
 	failUpload bool
@@ -56,11 +68,17 @@ func newSessServer(t *testing.T, prefix string) *sessServer {
 	return s
 }
 
-// addSession puts a session on the instance, as one opened elsewhere.
+// addSession puts a session on the instance, as one these credentials' key opened elsewhere.
 func (s *sessServer) addSession(uuid, clientId, agent, status string) {
+	s.addSessionOf(sKey, uuid, clientId, agent, status)
+}
+
+// addSessionOf puts a session the key opened on the instance; the read answers it to every caller, as the server
+// answers it to an admin key, a board's seat and a reader of a board the session worked.
+func (s *sessServer) addSessionOf(key, uuid, clientId, agent, status string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[uuid] = map[string]any{"uuid": uuid, "clientSessionId": clientId, "agent": agent, "status": status}
+	s.sessions[uuid] = map[string]any{"uuid": uuid, "clientSessionId": clientId, "agent": agent, "apiKey": key, "status": status}
 }
 
 func (s *sessServer) names() []string {
@@ -90,6 +108,15 @@ func gqlFail(w http.ResponseWriter, msg string) {
 }
 
 func (s *sessServer) handle(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == rearm.TokenPath {
+		// The client-credentials exchange: the key id is the key's uuid here, and the token names it as its subject.
+		key, _, _ := r.BasicAuth()
+		s.mu.Lock()
+		s.tokens++
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": testToken(key), "token_type": "Bearer", "expires_in": 3600})
+		return
+	}
 	var req struct {
 		Query     string         `json:"query"`
 		Variables map[string]any `json:"variables"`
@@ -129,7 +156,7 @@ func (s *sessServer) handle(w http.ResponseWriter, r *http.Request) {
 		if clientId == "" {
 			clientId = uuid
 		}
-		sess := map[string]any{"uuid": uuid, "clientSessionId": clientId, "agent": sAgent, "status": "OPEN"}
+		sess := map[string]any{"uuid": uuid, "clientSessionId": clientId, "agent": sAgent, "apiKey": sKey, "status": "OPEN"}
 		s.sessions[uuid] = sess
 		data["sessionInitializeProgrammatic"] = map[string]any{"uuid": uuid, "clientSessionId": clientId, "agent": sAgent,
 			"status": "OPEN", "policyEvents": []any{}}
@@ -221,10 +248,23 @@ func newSessWorld(t *testing.T) *sessWorld {
 	return w
 }
 
-// on points the credentials at an instance.
-func (w *sessWorld) on(s *sessServer) {
+// on points the credentials at an instance, as the key sKey.
+func (w *sessWorld) on(s *sessServer) { w.onAs(s, sKey) }
+
+// onAs points the credentials at an instance as another key: the instance issues them tokens naming that key.
+func (w *sessWorld) onAs(s *sessServer, key string) {
 	w.t.Helper()
-	c, err := rearm.New(s.url, "id", "secret", rearm.WithoutTokenExchange())
+	c, err := rearm.New(s.url, key, "secret")
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	apiClient, rearmUri = c, s.url
+}
+
+// onWithoutToken points the credentials at an instance that has no token endpoint: the key is sent itself.
+func (w *sessWorld) onWithoutToken(s *sessServer) {
+	w.t.Helper()
+	c, err := rearm.New(s.url, sKey, "secret", rearm.WithoutTokenExchange())
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -601,6 +641,28 @@ func TestSessionCloseWithoutFinalNeedsTheUuid(t *testing.T) {
 	}
 }
 
+// The refusal for a missing session names the way the verb takes its session (ARCHITECTURE round 3 §2, tester run 1
+// T-2): close takes the positional uuid and has no --session flag, so its refusal names the uuid; a verb that takes
+// the flag names the flag.
+func TestNoSessionRefusalNamesHowTheVerbTakesItsSession(t *testing.T) {
+	w := newSessWorld(t)
+	w.on(w.a)
+	_, errOut, code := w.run(agentSessionCloseCmd, "--final", writeFile(t, t.TempDir(), "f.md", "x"))
+	if code != 1 || !strings.Contains(errOut, "rearm: no session uuid given, and no current session is recorded for "+w.repoA) ||
+		!strings.Contains(errOut, "pass its uuid: rearm agent session close <session-uuid> --final <file>") ||
+		strings.Contains(errOut, "--session") {
+		t.Fatalf("close: exit %d %s", code, errOut)
+	}
+	_, errOut, code = w.run(agentTaskAssignCmd, "t-1")
+	if code != 1 || !strings.Contains(errOut, "rearm: --session is required: no current session is recorded for "+w.repoA) ||
+		!strings.Contains(errOut, "pass --session <session-uuid>, or record one") || strings.Contains(errOut, "session close <session-uuid>") {
+		t.Fatalf("a verb with the flag: exit %d %s", code, errOut)
+	}
+	if len(w.a.names()) != 0 {
+		t.Fatalf("nothing sent: %v", w.a.names())
+	}
+}
+
 func TestSessionCloseClearsOnlyThatSession(t *testing.T) {
 	w := newSessWorld(t)
 	w.on(w.a)
@@ -683,8 +745,9 @@ func TestSessionCurrentSetRefusesAClosedSession(t *testing.T) {
 	}
 }
 
-// Another key's session is not answered to these credentials (the server scopes the read to the caller's sessions);
-// the refusal records nothing, and a session the server answers without an agent is refused too.
+// A session the server does not answer to these credentials (a key with no read on it) is refused at the read; the
+// refusal records nothing, and a session the server answers without an agent is refused too. A session another key
+// opened that these credentials CAN read is refused by the key comparison (agentSessionCurrentSetOwner_test.go).
 func TestSessionCurrentSetRefusesAnotherKeysSession(t *testing.T) {
 	w := newSessWorld(t)
 	w.on(w.b)
