@@ -8,8 +8,8 @@ import (
 
 // The words of session open, close --final and current [--set] when they refuse or stop (task RD5-4, tester run 2
 // T-4 and the coder's wording scan): every refusal whose wording notes-1 or notes-2 states is asserted here, so a
-// change that drops the remedy or the reason fails a test by name. The scan's mutants are W1 to W13 in
-// impl/RD5-4/mutate-3.py.
+// change that drops the remedy or the reason fails a test by name. The scan's mutants are W1 to W16 in
+// impl/RD5-4/mutate-3.py; the ones that survived before this file (W1, W2, W5, W7, W8, W10 to W13) are pinned here.
 
 // wantAll fails unless the exit is want and every phrase is in the output.
 func wantAll(t *testing.T, what string, code, want int, out string, phrases ...string) {
