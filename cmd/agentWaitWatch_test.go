@@ -101,8 +101,8 @@ func taskDetail(key, status, role string, signOffs, docs []map[string]interface{
 	d := map[string]interface{}{"key": key, "uuid": "u-" + key, "status": status, "role": role,
 		"signOffs": toList(signOffs), "documents": toList(docs),
 		"statusHistory": []interface{}{
-			map[string]interface{}{"from": "QUEUED", "to": "ASSIGNED", "at": "2026-09-27T10:00:00Z", "trigger": "ASSIGN"},
-			map[string]interface{}{"from": "ASSIGNED", "to": "AWAITING_COORDINATOR", "at": "2026-09-27T11:30:00.100Z", "trigger": "SIGNOFF"},
+			histRow("QUEUED", "ASSIGNED", "2026-09-27T10:00:00Z", "ASSIGN", "SESSION"),
+			histRow("ASSIGNED", "AWAITING_COORDINATOR", "2026-09-27T11:30:00.030Z", "SIGNOFF", "SESSION"),
 		}}
 	for k, v := range extra {
 		d[k] = v
@@ -131,7 +131,20 @@ func rejected() map[string]interface{} {
 			doc("rel-test", "BOARD_TEST_REPORT", 1, "2026-09-27T11:29:00Z", "REJECTED"),
 			doc("rel-notes", "DETAILED_DESIGN", 1, "2026-09-27T09:55:00Z", ""),
 			doc("rel-arch", "ARCHITECTURE", 1, "2026-09-27T08:59:00Z", ""),
-		}, nil)
+		}, map[string]interface{}{"statusHistory": []interface{}{
+			histRow("QUEUED", "ASSIGNED", "2026-09-27T10:00:00Z", "ASSIGN", "SESSION"),
+			// The tester's rejection, as the server writes it in one transaction (task RD5-7): the SIGNOFF
+			// row, then the routing row that queues the task for the coder, ms later.
+			histRow("ASSIGNED", "AWAITING_COORDINATOR", "2026-09-27T11:30:00.030Z", "SIGNOFF", "SESSION"),
+			histRow("AWAITING_COORDINATOR", "QUEUED", "2026-09-27T11:30:00.037Z", "AUTHORIZE", "SYSTEM"),
+		}})
+}
+
+// histRow is a status-history row as the watch reads it: who wrote it is actor.kind (SESSION, USER or
+// SYSTEM, the board's routing).
+func histRow(from, to, at, trigger, actor string) map[string]interface{} {
+	return map[string]interface{}{"from": from, "to": to, "at": at, "trigger": trigger,
+		"actor": map[string]interface{}{"kind": actor}}
 }
 
 func runWatch(t *testing.T, o waitOpts, f *fakeWatch) (int, map[string]interface{}) {
