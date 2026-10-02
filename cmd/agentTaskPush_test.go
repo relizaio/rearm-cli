@@ -223,6 +223,58 @@ func TestPushUsesTheUpstreamWhenTheHeadShaIsAmbiguous(t *testing.T) {
 	}
 }
 
+// The worktree hazard: git worktree add -b <name> origin/<base> tracks the base. With no head on the row, origin's
+// refs/pull/<n>/head names the PR's branch, and the upstream (the base) is not used.
+func TestPushReadsThePullRefWhenTheRowHasNoHead(t *testing.T) {
+	w := newPushWorld(t)
+	feature, mainBefore := w.pr(0)["head"].(string), w.remote("main")
+	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head")
+	w.pr(0)["head"] = ""
+	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
+	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/main")
+	out, code := w.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "ran: git ls-remote origin refs/heads/* refs/pull/7/head\n", "branch feature, found by pull ref head sha")
+	if w.remote("feature") != w.head() || w.remote("main") != mainBefore {
+		t.Fatalf("pushed to the wrong branch:\n%s", out)
+	}
+}
+
+func TestPushNeverTakesTheBaseAsTheUpstream(t *testing.T) {
+	w := newPushWorld(t)
+	mainBefore := w.remote("main")
+	w.pr(0)["head"], w.pr(0)["targetBranch"] = "", "main"
+	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
+	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/main")
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "refused: "+pPR+" has no head on its row (CI never reported it), and origin names none for it; the current branch's upstream is main, the PR's base, and task push never pushes to the base.",
+		"Remedy: say --branch")
+	if w.remote("main") != mainBefore || strings.Contains(out, "ran: git push") {
+		t.Fatalf("pushed to the base:\n%s", out)
+	}
+}
+
+func TestPushTakesAnUpstreamOnlyFromTheBranchesAtTheHead(t *testing.T) {
+	w := newPushWorld(t)
+	vGit(t, w.repo, "", "push", "-q", "origin", w.pr(0)["head"].(string)+":refs/heads/twin")
+	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
+	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/main")
+	mainBefore := w.remote("main")
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "is the tip of 2 branches on origin (feature, twin), and the current branch's upstream main is not one of them.")
+	if w.remote("main") != mainBefore {
+		t.Fatal("pushed to the upstream")
+	}
+}
+
 func TestPushRefusesAnAmbiguousHeadWithoutAnUpstream(t *testing.T) {
 	w := newPushWorld(t)
 	vGit(t, w.repo, "", "push", "-q", "origin", w.pr(0)["head"].(string)+":refs/heads/twin")
@@ -247,7 +299,7 @@ func TestPushUpstreamMustBeOnOrigin(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	wantIn(t, out, "has no head on its row (CI never reported it), and the current branch has no upstream on origin.", "Remedy: say --branch")
+	wantIn(t, out, "has no head on its row (CI never reported it), and origin names none for it, and the current branch has no upstream on origin.", "Remedy: say --branch")
 }
 
 func TestPushRefusesWithoutHeadOrUpstream(t *testing.T) {
