@@ -78,6 +78,7 @@ type pushResult struct {
 	Reason         string   `json:"reason,omitempty"`
 	Remedy         string   `json:"remedy,omitempty"`
 	Commands       []string `json:"commands"`
+	baseNotKept    bool     // a --base given now that could not be written to the state directory (warned on stderr)
 }
 
 // pushRun is one invocation: the repository, the task's PR rows and what has run so far.
@@ -443,6 +444,7 @@ func (p *pushRun) run(args []string) int {
 	// Given once, --base is kept for this checkout; a later --base replaces it (ARCHITECTURE round 3 §2).
 	if b := cleanBranch(pushBase); b != "" {
 		if err := keepPushBase(top, b); err != nil {
+			p.result.baseNotKept = true
 			fmt.Fprintf(os.Stderr, "rearm: warning: --base %s is used but not kept for this checkout: %v\n", b, err)
 		}
 	}
@@ -587,6 +589,9 @@ func baseFrom(r pushResult) string {
 		}
 		return "from the PR row's targetBranch"
 	case "--base":
+		if r.baseNotKept {
+			return "from --base, not kept for this checkout: see the warning"
+		}
 		return "from --base, kept for this checkout"
 	}
 	return "from the --base kept for this checkout"
