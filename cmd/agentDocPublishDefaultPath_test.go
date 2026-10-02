@@ -19,6 +19,8 @@ import (
 const (
 	dpNotes1 = "boards/x/impl/RD-1/notes-1.md"
 	dpNotes2 = "boards/x/impl/RD-1/notes-2.md"
+	dpArch1  = "boards/x/design/RD-1/architecture-1.md"
+	dpQuest1 = "boards/x/questions/RD-1/round-1.md"
 )
 
 // dpBoard answers the reads and the publish a doc publish makes, and records the documentPath asks and the path
@@ -30,6 +32,8 @@ type dpBoard struct {
 	pathAsks  int
 	taskReads int
 	published []string
+	// taskFails makes the task read fail: "error" answers a GraphQL error, "missing" answers no task.
+	taskFails string
 }
 
 func (b *dpBoard) serve() *httptest.Server {
@@ -45,6 +49,14 @@ func (b *dpBoard) serve() *httptest.Server {
 		switch q := req.Query; {
 		case strings.Contains(q, "query AgentDocumentPath "):
 			b.pathAsks++
+			if spec := str(req.Variables["specification"]); spec != "DETAILED_DESIGN" {
+				// Only ARCHITECTURE is published as another type here, always as its first round.
+				if spec != "ARCHITECTURE" {
+					panic("documentPath asked for " + spec)
+				}
+				data["agentBoardProgrammatic"] = map[string]any{"uuid": "b-1", "documentPath": dpArch1}
+				break
+			}
 			// The server's answer: the next round, one more than the task's rounds of the type.
 			n := 0
 			for _, d := range b.docs {
@@ -57,12 +69,20 @@ func (b *dpBoard) serve() *httptest.Server {
 				"documentPath": "boards/x/impl/RD-1/notes-" + string(rune('1'+n)) + ".md"}
 		case strings.Contains(q, "query AgentTaskProgrammatic "):
 			b.taskReads++
+			if b.taskFails == "error" {
+				_ = json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"message": "boom"}}})
+				return
+			}
+			if b.taskFails == "missing" {
+				break
+			}
 			data["agentTaskProgrammatic"] = map[string]any{"uuid": "t-1", "key": "RD-1", "board": "b-1",
 				"status": "ASSIGNED", "role": "coder", "documents": b.docs}
 		case strings.Contains(q, "query AgentBoardProgrammatic "):
 			data["agentBoardProgrammatic"] = map[string]any{"uuid": "b-1", "documentsRoot": "boards/x/",
 				"documentsRepo": map[string]any{"uri": b.repo},
-				"documentPaths": map[string]any{"DETAILED_DESIGN": "impl/{task}/notes-{round}.md"}}
+				"documentPaths": map[string]any{"DETAILED_DESIGN": "impl/{key}/notes-{round}.md",
+					"ARCHITECTURE": "design/{key}/architecture-{round}.md"}}
 		case strings.Contains(q, "agentDocumentPublishProgrammatic("):
 			in, _ := req.Variables["input"].(map[string]any)
 			b.published = append(b.published, str(in["path"]))
@@ -79,7 +99,7 @@ func dpDoc(uuid string, round int, path string, advisory bool) map[string]any {
 			"advisory": advisory}}
 }
 
-// dpWorld is a pushed documents checkout holding both notes files, a session whose current hop on t-1 published
+// dpWorld is a pushed documents checkout holding both notes files and the first architecture round, a session whose current hop on t-1 published
 // hopPublished, and a board whose task carries docs.
 func dpWorld(t *testing.T, docs []any, hopPublished ...string) *dpBoard {
 	t.Helper()
@@ -96,6 +116,7 @@ func dpWorld(t *testing.T, docs []any, hopPublished ...string) *dpBoard {
 	dir := newRepo(t, bare)
 	commitFile(t, dir, dpNotes1, "# notes 1\n")
 	commitFile(t, dir, dpNotes2, "# notes 2\n")
+	commitFile(t, dir, dpArch1, "# architecture 1\n")
 	for _, args := range [][]string{
 		{"config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"},
 		{"push", "-q", "origin", "HEAD:refs/heads/main"},
@@ -113,7 +134,7 @@ func dpWorld(t *testing.T, docs []any, hopPublished ...string) *dpBoard {
 	useFake(t, srv)
 	docSession, docType, docTask, docRepoPath = "s-1", "DETAILED_DESIGN", "t-1", dir
 	t.Cleanup(func() {
-		docSession, docType, docTask, docFile, docRepoPath, compactJson = "", "", "", "", "", false
+		docSession, docType, docTask, docFile, docRepoPath, compactJson, docDryRun = "", "", "", "", "", false, false
 	})
 	return b
 }
@@ -188,16 +209,64 @@ func TestTheVersionLineKeepsJsonOnStdout(t *testing.T) {
 	}
 }
 
-// A first publish of the type in the hop asks the board, even when the hop published another type already.
+// With --dry-run the line goes to stderr too, so stdout stays the input JSON a script parses, naming the hop's
+// path; nothing is published (T-1 of RD5-6 run 1).
+func TestTheVersionLineKeepsDryRunStdoutToTheInput(t *testing.T) {
+	b := dpWorld(t, []any{dpDoc("r-n1", 1, dpNotes1, false)}, "r-n1")
+	docDryRun = true
+	out, errOut := dpPublish(t)
+	var in map[string]any
+	if err := json.Unmarshal([]byte(out), &in); err != nil || in["path"] != dpNotes1 {
+		t.Errorf("stdout is the input JSON with path %s, got %q (%v)", dpNotes1, out, err)
+	}
+	if !strings.Contains(errOut, "republishing "+dpNotes1+" as a new version of round 1") {
+		t.Errorf("the line goes to stderr, got %q", errOut)
+	}
+	if len(b.published) != 0 || b.pathAsks != 0 {
+		t.Errorf("a dry run publishes nothing and asks no path, got %v and %d asks", b.published, b.pathAsks)
+	}
+}
+
+// A first publish of the type in the hop asks the board, even when the hop published another type already. The
+// other type's round has a path, so taking it as the version case would publish there.
 func TestAFirstPublishOfATypeAsksTheBoard(t *testing.T) {
 	for name, hop := range map[string][]string{"nothing published": nil, "another type published": {"r-q1"}} {
 		t.Run(name, func(t *testing.T) {
 			b := dpWorld(t, []any{map[string]any{"uuid": "r-q1", "version": "1", "lifecycle": "DRAFT",
-				"document": map[string]any{"specification": "BOARD_QUESTIONS", "round": 1, "task": "t-1"}}}, hop...)
+				"document": map[string]any{"specification": "BOARD_QUESTIONS", "round": 1, "task": "t-1",
+					"path": dpQuest1}}}, hop...)
 			out, _ := dpPublish(t)
 			b.only(t, dpNotes1, 1)
 			if strings.Contains(out, "republishing") {
 				t.Errorf("a new round says nothing extra, got:\n%s", out)
+			}
+		})
+	}
+}
+
+// The other direction (T-2 of RD5-6 run 1): the hop published DETAILED_DESIGN round 1, and the publish is of
+// another type. The requested type has no round this hop published, so the board names the file; the note's path
+// is never taken for it.
+func TestARoundOfAnotherTypeIsNotTheVersionCase(t *testing.T) {
+	b := dpWorld(t, []any{dpDoc("r-n1", 1, dpNotes1, false)}, "r-n1")
+	docType = "ARCHITECTURE"
+	out, errOut := dpPublish(t)
+	b.only(t, dpArch1, 1)
+	if strings.Contains(out+errOut, "republishing") {
+		t.Errorf("a first round of the type says nothing extra, got:\n%s%s", out, errOut)
+	}
+}
+
+// A task read that fails, or finds no task, stops the publish with the way round it, rather than falling back to
+// the board's next round, which would quietly name the wrong file in the version case.
+func TestAFailedTaskReadAsksForAFile(t *testing.T) {
+	for _, mode := range []string{"error", "missing"} {
+		t.Run(mode, func(t *testing.T) {
+			b := dpWorld(t, []any{dpDoc("r-n1", 1, dpNotes1, false)}, "r-n1")
+			b.taskFails = mode
+			_, ok, err := hopVersionRound(map[string]any{"uuid": "b-1"}, "DETAILED_DESIGN")
+			if ok || err == nil || !strings.HasSuffix(err.Error(), "pass --file") {
+				t.Errorf("want an error naming --file, got %v %v", ok, err)
 			}
 		})
 	}
