@@ -159,6 +159,10 @@ The documents repository is usually NOT the repository you are working in. It is
 resolved from --repo, else the current directory when its origin matches the
 board's documents repository, else the path remembered from an earlier --repo.
 
+Without --file the path is the board's for the type's next round, except when this hop
+already published the newest round of the type on the task: the publish then defaults to
+that round's path and lands as a new version of it, and says so. --file always wins.
+
 For BOARD_REVIEW_ITEMS and BOARD_TEST_REPORT the index is read alongside the markdown and
 checked against it: every id in one must appear in the other.
 
@@ -463,10 +467,18 @@ func pathFromResponse(data map[string]interface{}, err error, spec string) (stri
 	return p, nil
 }
 
-// documentFile is --file when given, else the path the board gives for this type.
+// documentFile is --file when given; else, when this hop published the newest round of the type on the task,
+// that round's path, a republish there being a new version of it (task RD5-6); else the path the board gives
+// for this type.
 func documentFile(board map[string]interface{}, spec string) (string, error) {
 	if docFile != "" {
 		return docFile, nil
+	}
+	if n, ok, err := hopVersionRound(board, spec); err != nil {
+		return "", err
+	} else if ok {
+		fmt.Fprintln(publishNoteOut(), versionPathLine(n))
+		return n.Path, nil
 	}
 	boardUuid, _ := board["uuid"].(string)
 	return queryDocumentPath(boardUuid, spec, docTask, docComponent)
@@ -478,7 +490,7 @@ func init() {
 	f.StringVar(&docType, "type", "", "specification type, e.g. BOARD_REVIEW_ITEMS")
 	f.StringVar(&docTask, "task", "", "task this round belongs to (task-scoped types)")
 	f.StringVar(&docComponent, "component", "", "document series (component-scoped types)")
-	f.StringVar(&docFile, "file", "", "repo-relative path; asked of the board (its template, placeholders filled) when omitted")
+	f.StringVar(&docFile, "file", "", "repo-relative path; when omitted, the round this hop published of the type (a new version of it), else asked of the board (its template, placeholders filled)")
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
 	f.BoolVar(&docIndexOnlyFlag, "index-only", false,
 		"publish the index alone, with no file: the items ARE the document, which is the usual"+
