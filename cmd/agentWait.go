@@ -624,8 +624,16 @@ and the session has published no round of the answering role's specification on 
 question was asked (task RD4-14); an ALERT, PAUSED or RESUMED event. It prints {"offer": null, "changes": [...],
 "questions": [...], "events": [...], "nextAfter": N}: each change names the task, the transition
 (from, to, trigger, by, at) and the document rounds published since the session's last sign-off
-on it, so the rejection can be read without a 'task show'. It wakes only on what it has not
-reported: the changes and questions each poll saw, and the event cursor, are kept in --state
+on it, so the rejection can be read without a 'task show'. from and to are read from the task's
+status history, never from the task's current status, which prints as "status" (task RD5-7): from
+is the status the hop end's own row left, and to is where that transaction left the task, the row's
+to followed through the routing rows the system wrote with it. A rejection prints from ASSIGNED, to
+QUEUED; one the board parks, to ON_HOLD; a sign-off that waits on the coordinator, to
+AWAITING_COORDINATOR. A rejected task the coder picked up again prints from ASSIGNED, to QUEUED,
+status ASSIGNED. Every change prints "new": true or false; false marks a standing change, one an
+earlier wake reported, printed again because it still stands. A wake's reason is, in that order of
+reading: the offer, a change marked new, a question marked new, an event. It wakes only on what it
+has not reported: the changes and questions each poll saw, and the event cursor, are kept in --state
 (default ~/.rearm/wait-<board>-watch-<session>.json); a first run, with no state file, lists a
 question asked before the session's last sign-off on its task without waking on it. A question
 names its roles (askingRole, answeringRole), with the role config uuids beside them
