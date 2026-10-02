@@ -172,7 +172,12 @@ opening a new round.
 
 --advisory puts a round on a task another role holds, for example an architect's
 amendment answering a review item while the coder works the task. Only a prose type a
-role you have held on the board produces, on an active task; never an index type.`,
+role you have held on the board produces, on an active task; never an index type.
+
+--json prints one JSON value on stdout and nothing on stderr on success: the release, plus
+checks {verdict, counts, blocking, lines} (null for a document without elements) and, when
+the publish said anything beside it, notices. With --check it prints {check: true, checks}.
+A refusal or local error still goes to stderr with exit 1 and nothing on stdout.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocPublish(); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
@@ -193,6 +198,7 @@ role you have held on the board produces, on an active task; never an index type
 // could not offer it would lose the questions it just asked.
 func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	if docDryRun {
+		flushPublishNotices()
 		out, _ := json.MarshalIndent(input, "", "  ")
 		fmt.Println(string(out))
 		return nil
@@ -211,16 +217,28 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	if releaseUuid != "" && docTask != "" && remembersAsOutput() {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
-	// Compact by default (task RD3-9): what was published and its release; --json for the whole response.
-	if compactJson {
-		emitJson(release)
-	} else {
-		fmt.Println(compactDocument(release, strings.ToUpper(strings.ReplaceAll(docType, "-", "_")), docAdvisory))
-	}
 	// The board checked the elements as it took the document (elements.md §7): say what it found
 	// now, while the author can still fix it, rather than at the sign-off it would refuse.
-	if _, withElements := input["elements"]; withElements && releaseUuid != "" && input["taskUuid"] != nil {
-		printElementCheckReport(releaseUuid)
+	_, withElements := input["elements"]
+	withChecks := withElements && releaseUuid != "" && input["taskUuid"] != nil
+	// --json: one object, the release with the report folded in as checks, and nothing on stderr (task RD5-8).
+	// A report that could not be read is said in checks too: the publish itself succeeded.
+	if compactJson {
+		var checks interface{}
+		if withChecks {
+			if rel, err := readElementCheckReport(releaseUuid); err != nil {
+				checks = map[string]interface{}{"verdict": nil, "error": err.Error()}
+			} else {
+				checks = releaseChecks(rel)
+			}
+		}
+		emitJson(publishObject(release, checks))
+		return nil
+	}
+	// Compact by default (task RD3-9): what was published and its release, then the report on stderr.
+	fmt.Println(compactDocument(release, strings.ToUpper(strings.ReplaceAll(docType, "-", "_")), docAdvisory))
+	if withChecks {
+		printElementCheckReport(readElementCheckReport(releaseUuid))
 	}
 	return nil
 }
@@ -282,6 +300,7 @@ func indexOnlyInput(session, spec string, idx map[string]interface{}) map[string
 }
 
 func runDocPublish() error {
+	publishNotices = nil
 	if docSession == "" {
 		return fmt.Errorf("--session is required")
 	}
@@ -395,7 +414,7 @@ func runDocPublish() error {
 		input[k] = v
 	}
 	if extra != nil {
-		fmt.Fprintln(os.Stderr, "elements: "+summarise(ix))
+		sayPublishNote(os.Stderr, "elements: "+summarise(ix))
 	}
 	if head.Message != "" {
 		input["commitMessage"] = head.Message
@@ -477,7 +496,7 @@ func documentFile(board map[string]interface{}, spec string) (string, error) {
 	if n, ok, err := hopVersionRound(board, spec); err != nil {
 		return "", err
 	} else if ok {
-		fmt.Fprintln(publishNoteOut(), versionPathLine(n))
+		sayPublishNote(publishNoteOut(), versionPathLine(n))
 		return n.Path, nil
 	}
 	boardUuid, _ := board["uuid"].(string)

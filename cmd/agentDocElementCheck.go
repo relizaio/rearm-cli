@@ -89,16 +89,24 @@ func elementCheckSummary(release map[string]interface{}) []string {
 	return out
 }
 
-// printElementCheckReport reads the report the board cut for a document just published, and prints it on
-// stderr so the publish's JSON on stdout stays what scripts parse.
-func printElementCheckReport(releaseUuid string) {
+// readElementCheckReport reads the report the board cut for a document just published (task RD5-8 split the
+// read from its printing, so --json can fold it into the publish's object).
+func readElementCheckReport(releaseUuid string) (map[string]interface{}, error) {
 	data, err := sendGraphQLRequest(rearm.AgentElementCheckReportProgrammatic_Operation,
 		map[string]interface{}{"releaseUuid": releaseUuid})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "element checks: could not read the report: "+describeError(err))
-		return
+		return nil, fmt.Errorf("could not read the report: %s", describeError(err))
 	}
 	release, _ := data["agentElementCheckReportProgrammatic"].(map[string]interface{})
+	return release, nil
+}
+
+// printElementCheckReport prints the report on stderr, beside the compact line on stdout.
+func printElementCheckReport(release map[string]interface{}, err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "element checks: "+err.Error())
+		return
+	}
 	for _, line := range elementCheckSummary(release) {
 		fmt.Fprintln(os.Stderr, line)
 	}
@@ -169,6 +177,11 @@ func runDocElementCheck() error {
 		}
 		release, _ := data["agentElementCheckRunProgrammatic"].(map[string]interface{})
 		if checkJson {
+			// The release as the server returned it, plus the same checks object doc publish --json carries
+			// (task RD5-8).
+			if release != nil {
+				release["checks"] = releaseChecks(release)
+			}
 			results = append(results, release)
 			continue
 		}
@@ -204,7 +217,9 @@ A failure on a check the board blocks on refuses the sign-off that hands the doc
 
   --release <uuid>   one document
   --task <uuid>      the newest release of each of the task's documents that has elements
-  --json             the report releases as the server returned them`,
+  --json             the report releases as the server returned them, each with checks:
+                     {verdict, counts, blocking, lines}; one JSON value on stdout, nothing on
+                     stderr unless the command fails`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocElementCheck(); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)

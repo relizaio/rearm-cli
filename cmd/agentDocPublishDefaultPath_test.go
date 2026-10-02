@@ -195,7 +195,8 @@ func TestTheVersionCaseSaysWhichPathAndWhy(t *testing.T) {
 	}
 }
 
-// With --json the line goes to stderr, so stdout stays the release JSON a script parses.
+// With --json the line goes into the object's notices, so stdout stays the one release JSON a script parses and
+// stderr stays empty (task RD5-8 moved it there from stderr).
 func TestTheVersionLineKeepsJsonOnStdout(t *testing.T) {
 	dpWorld(t, []any{dpDoc("r-n1", 1, dpNotes1, false)}, "r-n1")
 	compactJson = true
@@ -204,8 +205,12 @@ func TestTheVersionLineKeepsJsonOnStdout(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &rel); err != nil || rel["uuid"] != "r-new" {
 		t.Errorf("stdout is the release JSON, got %q (%v)", out, err)
 	}
-	if !strings.Contains(errOut, "republishing "+dpNotes1+" as a new version of round 1") {
-		t.Errorf("the line goes to stderr, got %q", errOut)
+	notices, _ := rel["notices"].([]any)
+	if len(notices) != 1 || !strings.Contains(str(notices[0]), "republishing "+dpNotes1+" as a new version of round 1") {
+		t.Errorf("the line is the object's notice, got %v", rel["notices"])
+	}
+	if errOut != "" {
+		t.Errorf("nothing on stderr with --json, got %q", errOut)
 	}
 }
 
