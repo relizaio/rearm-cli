@@ -116,6 +116,7 @@ func newGitWorld(t *testing.T) *gitWorld {
 	gitSession = gSession
 	t.Cleanup(func() {
 		gitSession, gitMessages, gitCoAuthor, gitSigningKey, gitSigningFormat, gitJson = "", nil, "", "", "", false
+		gitNoCoAuthor = false
 		apiClient = nil
 	})
 	t.Chdir(w.repo)
@@ -142,7 +143,7 @@ func (w *gitWorld) staged() string {
 // parsed is HEAD's trailer block as git parses it.
 func (w *gitWorld) parsed() []string {
 	body := gRun(w.t, w.repo, "", "log", "-1", "--format=%B")
-	out := gRun(w.t, w.repo, body+"\n", "interpret-trailers", "--parse")
+	out := gRun(w.t, w.repo, body+"\n", "interpret-trailers", "--no-divider", "--parse")
 	return strings.Split(out, "\n")
 }
 
@@ -215,8 +216,8 @@ func TestGitCommitWritesTheBlockFromStateAndSigns(t *testing.T) {
 		t.Fatalf("signature %s %s, want G by the repository's key", state, fp)
 	}
 	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) != 3 || lines[0] != "ran: git add -- a.txt" ||
-		lines[1] != "ran: git commit -q -S --cleanup=verbatim -F - -- a.txt" ||
+	if len(lines) != 3 || lines[0] != "ran: git --literal-pathspecs add -- a.txt" ||
+		lines[1] != "ran: git --literal-pathspecs commit -q -S --cleanup=verbatim -F - -- a.txt" ||
 		lines[2] != w.head()+" feat: the thing" {
 		t.Fatalf("printed:\n%s", out)
 	}
@@ -368,7 +369,7 @@ func TestGitCommitSigningFlagsArePassedAndKept(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\n%s\n%s", code, out, errOut)
 	}
-	wantCmd := "ran: git -c gpg.format=ssh -c user.signingkey=" + w.keyB + " commit -q -S --cleanup=verbatim -F - -- a.txt"
+	wantCmd := "ran: git -c gpg.format=ssh -c user.signingkey=" + w.keyB + " --literal-pathspecs commit -q -S --cleanup=verbatim -F - -- a.txt"
 	if !strings.Contains(out, wantCmd+"\n") {
 		t.Fatalf("printed:\n%s\nwant %s", out, wantCmd)
 	}
@@ -433,7 +434,7 @@ func TestGitCommitParseCheckCatchesABrokenBlock(t *testing.T) {
 			w.write("a.txt", "a\n")
 			before := w.head()
 			code, _, errOut := w.commit("a.txt")
-			if code != 1 || !strings.Contains(errOut, "is not the three lines") || !strings.Contains(errOut, "Amend it by hand") {
+			if code != 1 || !strings.Contains(errOut, "is not the 3 lines written") || !strings.Contains(errOut, "Amend it by hand") {
 				t.Fatalf("exit %d\n%s", code, errOut)
 			}
 			if w.head() == before {
@@ -513,7 +514,7 @@ func TestGitMergeCommitCarriesTheBlock(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 3 || lines[0] != "ran: git merge --no-ff --no-commit main" ||
-		lines[1] != "ran: git commit -q -S --cleanup=verbatim -F -" || lines[2] != w.head()+" "+subject {
+		lines[1] != "ran: git --literal-pathspecs commit -q -S --cleanup=verbatim -F -" || lines[2] != w.head()+" "+subject {
 		t.Fatalf("printed:\n%s", out)
 	}
 }

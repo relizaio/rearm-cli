@@ -56,6 +56,7 @@ var (
 	gitCoAuthor      string
 	gitSigningKey    string
 	gitSigningFormat string
+	gitNoCoAuthor    bool
 	gitJson          bool
 )
 
@@ -66,13 +67,18 @@ var (
 	coAuthorShape = regexp.MustCompile(`^[^<>\n]*[^<>\s][^<>\n]* <[^<>\s@]+@[^<>\s]+>$`)
 )
 
-// gitTrailers is the block a helper writes, in order.
+// gitTrailers is the block a helper writes, in order. An empty coAuthor (--no-co-author) writes the two ReARM
+// trailers alone; ARCHITECTURE round 2 s3: the co-author line is the operator's policy, which differs by repository.
 type gitTrailers struct {
 	session, agent, coAuthor string
 }
 
 func (t gitTrailers) lines() []string {
-	return []string{trailerSession + ": " + t.session, trailerAgent + ": " + t.agent, trailerCoAuthor + ": " + t.coAuthor}
+	lines := []string{trailerSession + ": " + t.session, trailerAgent + ": " + t.agent}
+	if t.coAuthor != "" {
+		lines = append(lines, trailerCoAuthor+": "+t.coAuthor)
+	}
+	return lines
 }
 
 // gitHelperRun is one helper invocation's resolved inputs and what it did.
@@ -80,7 +86,14 @@ type gitHelperRun struct {
 	trailers   gitTrailers
 	signing    []string // the -c pairs, already as "-c", "k=v"
 	commands   []string
+	staged     []dirStaged // what each directory argument staged, so the widening is visible
 	jsonOutput bool
+}
+
+// dirStaged is a directory argument and the files it staged.
+type dirStaged struct {
+	dir   string
+	files []string
 }
 
 // gitRefusal is a refusal before any git write: printed on stderr, exit 1.
@@ -131,6 +144,9 @@ func resolveGitIdentity() (*gitHelperRun, string) {
 		return nil, err.Error()
 	}
 	changed := false
+	if gitNoCoAuthor && strings.TrimSpace(gitCoAuthor) != "" {
+		return nil, "--co-author and --no-co-author together: give one"
+	}
 	if c := strings.TrimSpace(gitCoAuthor); c != "" {
 		if !coAuthorShape.MatchString(c) || strings.Contains(c, `"`) {
 			return nil, fmt.Sprintf("--co-author must read '<name> <email>' with no double quote, got: %s", c)
@@ -164,7 +180,7 @@ func resolveGitIdentity() (*gitHelperRun, string) {
 			id.SigningKey, changed = k, true
 		}
 	}
-	if id.CoAuthor == "" {
+	if id.CoAuthor == "" && !gitNoCoAuthor {
 		return nil, fmt.Sprintf("no co-author line is kept for agent %s: pass --co-author '<name> <email>' once, and it is kept for the agent", st.AgentUuid)
 	}
 	if changed {
@@ -172,8 +188,12 @@ func resolveGitIdentity() (*gitHelperRun, string) {
 			return nil, fmt.Sprintf("could not keep the agent's co-author line and signing key: %v", err)
 		}
 	}
+	coAuthor := id.CoAuthor
+	if gitNoCoAuthor {
+		coAuthor = ""
+	}
 	run := &gitHelperRun{
-		trailers:   gitTrailers{session: st.ClientSessionId, agent: st.AgentUuid, coAuthor: id.CoAuthor},
+		trailers:   gitTrailers{session: st.ClientSessionId, agent: st.AgentUuid, coAuthor: coAuthor},
 		jsonOutput: gitJson,
 	}
 	if id.SigningFormat != "" {
@@ -261,24 +281,57 @@ func mergeInProgress() bool {
 	return err == nil && out != ""
 }
 
-// checkStagingPaths refuses what would stage more than the agent named.
+// literalPathspecs is the git option that makes every path a file name, never a pattern (ARCHITECTURE round 2
+// s1): with it, '*', '?', '[', ':(top)', ':/' and ':!x' name files, not matches. It goes on git add and git
+// commit, and shows in the printed command.
+const literalPathspecs = "--literal-pathspecs"
+
+// checkStagingPaths refuses what would stage more than the agent named: every argument must name a file or a
+// directory that exists in the worktree or the index. The repository root, '.' and anything beginning with '-'
+// (-A, --all, -u, --update, and a file so named) are refused too.
 func checkStagingPaths(paths []string) string {
 	top, _ := helperGit("", "rev-parse", "--show-toplevel")
 	for _, p := range paths {
-		switch p {
-		case "-A", "--all", "-u", "--update", ":/":
-			return fmt.Sprintf("%s stages everything: name the files", p)
+		if strings.HasPrefix(p, "-") {
+			return fmt.Sprintf("name the files: %s is not a file here (an argument beginning with - is refused)", p)
 		}
 		if filepath.Clean(p) == "." {
-			return "'.' stages everything: name the files"
+			return "name the files: '.' stages everything"
 		}
 		if top != "" {
 			if abs, err := filepath.Abs(p); err == nil && sameDir(abs, top) {
-				return fmt.Sprintf("%s is the repository's root and stages everything: name the files", p)
+				return fmt.Sprintf("name the files: %s is the repository's root and stages everything", p)
 			}
+		}
+		if !pathIsHere(p) {
+			return fmt.Sprintf("name the files: %s is not a file here", p)
 		}
 	}
 	return ""
+}
+
+// pathIsHere says whether p names a file or directory in the worktree, or a path the index knows (a deleted
+// file), read literally.
+func pathIsHere(p string) bool {
+	if p == "" {
+		return false
+	}
+	if _, err := os.Lstat(p); err == nil {
+		return true
+	}
+	out, err := helperGit("", literalPathspecs, "ls-files", "--cached", "--", p)
+	return err == nil && out != ""
+}
+
+// directoryArgs are the paths that name a directory in the worktree.
+func directoryArgs(paths []string) []string {
+	var dirs []string
+	for _, p := range paths {
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			dirs = append(dirs, p)
+		}
+	}
+	return dirs
 }
 
 func sameDir(a, b string) bool {
@@ -294,14 +347,25 @@ func sameDir(a, b string) bool {
 // git parses it. paths nil means commit the index as it is (a merge in progress).
 func (r *gitHelperRun) commitWithBlock(message string, paths []string, merge bool) int {
 	if len(paths) > 0 {
-		add := append([]string{"add", "--"}, paths...)
+		add := append([]string{literalPathspecs, "add", "--"}, paths...)
 		r.commands = append(r.commands, printedCommand(add))
 		if out, err := helperGit("", add...); err != nil {
 			fmt.Fprintln(os.Stderr, out)
 			return r.fail("git add failed; nothing was committed")
 		}
+		// A directory stages what is under it: the one widening allowed, so it is shown.
+		for _, d := range directoryArgs(paths) {
+			out, _ := helperGit("", literalPathspecs, "diff", "--cached", "--name-only", "--", d)
+			files := []string{}
+			for _, f := range strings.Split(out, "\n") {
+				if f != "" {
+					files = append(files, f)
+				}
+			}
+			r.staged = append(r.staged, dirStaged{dir: d, files: files})
+		}
 	}
-	commit := append(append([]string{}, r.signing...), "commit", "-q", "-S", "--cleanup=verbatim", "-F", "-")
+	commit := append(append([]string{}, r.signing...), literalPathspecs, "commit", "-q", "-S", "--cleanup=verbatim", "-F", "-")
 	if len(paths) > 0 && !merge {
 		// Only the named paths, even when other changes were staged before.
 		commit = append(append(commit, "--"), paths...)
@@ -313,12 +377,14 @@ func (r *gitHelperRun) commitWithBlock(message string, paths []string, merge boo
 	}
 	sha, _ := helperGit("", "rev-parse", "HEAD")
 	body, _ := helperGit("", "log", "-1", "--format=%B", "HEAD")
-	parsed, _ := helperGit(body+"\n", "interpret-trailers", "--parse")
+	// --no-divider: a '---' line in the body is prose, not a patch divider (ARCHITECTURE round 2 s2); git log
+	// and the server read the whole message the same way.
+	parsed, _ := helperGit(body+"\n", "interpret-trailers", "--no-divider", "--parse")
 	subject, _, _ := strings.Cut(message, "\n")
 	if problem := checkParsedBlock(parsed, r.trailers); problem != "" {
-		fmt.Fprintf(os.Stderr, "rearm: commit %s was made, but its trailer block as git parses it is not the three lines: %s.\n"+
-			"git interpret-trailers --parse printed:\n%s\nAmend it by hand before you push (git commit --amend); a commit you pushed is replaced, never force-pushed.\n",
-			shortSha(sha), problem, parsed)
+		fmt.Fprintf(os.Stderr, "rearm: commit %s was made, but its trailer block as git parses it is not the %d lines written: %s.\n"+
+			"git interpret-trailers --no-divider --parse printed:\n%s\nAmend it by hand before you push (git commit --amend); a commit you pushed is replaced, never force-pushed.\n",
+			shortSha(sha), len(r.trailers.lines()), problem, parsed)
 		r.report(sha, subject, merge, false)
 		return 1
 	}
@@ -360,14 +426,21 @@ func (r *gitHelperRun) fail(msg string) int {
 
 func (r *gitHelperRun) report(sha, subject string, merge, blockOk bool) {
 	if r.jsonOutput {
+		dirs := map[string][]string{}
+		for _, d := range r.staged {
+			dirs[d.dir] = d.files
+		}
 		emitJson(map[string]interface{}{
 			"committed": true, "sha": sha, "subject": subject, "merge": merge, "commands": r.commands,
-			"trailers": r.trailers.lines(), "trailerBlockOk": blockOk,
+			"directories": dirs, "trailers": r.trailers.lines(), "trailerBlockOk": blockOk,
 		})
 		return
 	}
 	for _, c := range r.commands {
 		fmt.Println("ran: " + c)
+	}
+	for _, d := range r.staged {
+		fmt.Printf("directory %s staged: %s\n", d.dir, strings.Join(d.files, " "))
 	}
 	fmt.Println(sha + " " + subject)
 }
@@ -466,16 +539,22 @@ code session on another instance with that instance's credentials (-u/-i/-k or -
 var agentGitCommitCmd = &cobra.Command{
 	Use:   "commit --session <s> -m <subject> [-m <body>]... -- <path>...",
 	Short: "Stage exactly the named paths and commit them, signed, with the session's trailer block",
-	Long: `Runs git add -- <path>... and git commit -S with the subject, the body paragraphs and the three
-trailers, then checks the block as git interpret-trailers --parse reads it.
+	Long: `Runs git --literal-pathspecs add -- <path>... and git commit -S with the subject, the body
+paragraphs and the three trailers, then checks the block as git interpret-trailers --no-divider
+--parse reads it.
+
+Every path is a file name, never a pattern: '*', ':(top)', ':/' and ':!x' name files. A directory
+stages what is under it, and the files it staged are printed.
 
 Refused before anything is written:
-  - no path, or '.', -A, --all, or the repository's root (name the files; a directory is a path);
+  - no path; a path that names no file or directory in the worktree or the index; '.', the
+    repository's root, or anything beginning with - (-A, --all, -u, --update): name the files;
   - a double quote in the subject or the body (it breaks the rearm-actions templates);
   - a body line that reads as a trailer ('Word: ' at its start);
   - a session whose client id or agent is unknown, or an agent with no co-author line.
 
---co-author '<name> <email>' is kept per agent once given, and so are --signing-key and
+--co-author '<name> <email>' is kept per agent once given. --no-co-author writes the two ReARM
+trailers alone for that commit, where the repository's policy wants no co-author line. --signing-key and
 --signing-format, passed to git as -c user.signingkey and -c gpg.format (give the key you enrolled
 with 'rearm agent enrollkey'). Without them git's own signing configuration is used.
 
@@ -512,6 +591,7 @@ func init() {
 		f.StringVar(&gitCoAuthor, "co-author", "", "the agent's Co-Authored-By line, '<name> <email>'; kept per agent")
 		f.StringVar(&gitSigningKey, "signing-key", "", "the signing key (an ssh key file, or a gpg key id); kept per agent")
 		f.StringVar(&gitSigningFormat, "signing-format", "", "ssh or gpg; kept per agent")
+		f.BoolVar(&gitNoCoAuthor, "no-co-author", false, "write the two ReARM trailers alone, without Co-Authored-By, for this commit")
 		f.BoolVar(&gitJson, "json", false, "print the result as JSON")
 	}
 	agentGitCmd.AddCommand(agentGitCommitCmd)
