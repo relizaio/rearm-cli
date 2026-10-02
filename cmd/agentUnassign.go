@@ -70,13 +70,18 @@ func unassignedHop(err error) bool {
 // the session was unassigned, the task is no longer this session's: it is forgotten locally, so the
 // session's usage stops being reported against it.
 func runHopCompact(query string, variables map[string]interface{}, key, sessionUuid, taskUuid string) {
+	printCompact(runHop(query, variables, key, sessionUuid, taskUuid))
+}
+
+// runHop is runHopCompact without the printing: it returns the response, for a verb that adds to what it prints.
+func runHop(query string, variables map[string]interface{}, key, sessionUuid, taskUuid string) interface{} {
 	data, err := sendGraphQLRequest(query, variables)
 	if err != nil {
 		forgetUnassignedHop(err, sessionUuid, taskUuid)
 		printRefusal(err)
 		os.Exit(1)
 	}
-	printCompact(data[key])
+	return data[key]
 }
 
 // forgetUnassignedHop drops the task from the session's local state when the refusal says the session
