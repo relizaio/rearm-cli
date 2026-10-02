@@ -209,18 +209,18 @@ func (p *pushRun) remoteHeads(pr map[string]interface{}) (map[string]string, str
 	return heads, pullHead, nil
 }
 
-// upstreamBranch is the current branch's upstream when it is on origin, else "".
-func upstreamBranch(dir string) string {
+// upstreamBranch is the current branch's name and its upstream when that is on origin, else "" for either.
+func upstreamBranch(dir string) (string, string) {
 	cur, _, err := pushGit(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil || cur == "" {
-		return ""
+		return "", ""
 	}
 	remote, _, _ := pushGit(dir, "config", "--get", "branch."+cur+".remote")
 	merge, _, _ := pushGit(dir, "config", "--get", "branch."+cur+".merge")
 	if strings.TrimSpace(remote) != "origin" || !strings.HasPrefix(strings.TrimSpace(merge), "refs/heads/") {
-		return ""
+		return cur, ""
 	}
-	return strings.TrimPrefix(strings.TrimSpace(merge), "refs/heads/")
+	return cur, strings.TrimPrefix(strings.TrimSpace(merge), "refs/heads/")
 }
 
 // cleanBranch is a --branch value as a branch name: refs/heads/ and origin/ are dropped.
@@ -266,7 +266,8 @@ func prBases(pr map[string]interface{}) []string {
 //     run's fast-forward check then requires HEAD to contain it; else refused.
 //
 // With no base known (an unregistered row, no --base) every tie and every fallback is refused with "pass --base or
-// --branch": any branch at the head sha, and the upstream, could be the base. A worktree made with git worktree add
+// --branch": any branch at the head sha, and the upstream, could be the base. So is a single candidate that is the
+// upstream of a local branch of another name (the worktree hazard, with the PR's branch gone). A worktree made with git worktree add
 // -b <name> origin/<base> tracks the base, and pushing there is the RD3-5 mistake this verb exists to prevent.
 func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string, pullHead string) branchPick {
 	bases := prBases(pr)
@@ -296,10 +297,17 @@ func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string,
 		}
 	}
 	matches = sortedStrings(matches)
+	cur, up := upstreamBranch(p.dir)
 	if len(matches) == 1 {
+		// With no base known, the one candidate is the base when the PR's branch is gone and the base was
+		// fast-forwarded onto its head. Its tell is the worktree hazard: the candidate is the upstream of a local
+		// branch of another name, as git worktree add -b <name> origin/<base> leaves it. Refused, not guessed.
+		if len(bases) == 0 && matches[0] == up && cur != up {
+			return branchPick{why: fmt.Sprintf("%s's head %s is the tip of %s alone on origin, which is the upstream of the current branch %s, not its name; the PR's row names no base branch, and a worktree cut from the base tracks the base, so %s could be the base, which task push never pushes to.",
+				url, shortSha(head), up, cur, up), remedy: sayBaseOrBranch}
+		}
 		return branchPick{branch: matches[0], source: source}
 	}
-	up := upstreamBranch(p.dir)
 	upIs := func() string {
 		if up == "" {
 			return ", and the current branch has no upstream on origin."
@@ -512,7 +520,9 @@ repository, and verifies the remote head with git ls-remote (task RD5-3). Never 
      origin's refs/pull/<n>/head. When several share it, the current branch's upstream if it is one
      of them; when none does, the upstream if HEAD contains its tip. Neither when the upstream is the
      base or at the base's tip, nor when the base's tip is the head sha, nor when no base is known
-     (a row CI never registered, without --base): then refused, say --base or --branch.
+     (a row CI never registered, without --base): then refused, say --base or --branch. With no
+     base known, a lone branch at the head sha that is the upstream of a local branch of another
+     name (a worktree cut from the base) is refused the same way: it could be the base.
   3. Fast-forward only: origin's tip of that branch must be an ancestor of HEAD
      (git merge-base --is-ancestor); otherwise refused: merge origin/<branch> and retry.
      Equal: already pushed, exit 0.

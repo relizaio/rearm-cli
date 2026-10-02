@@ -229,3 +229,49 @@ func TestPushFallsBackToPrUrls(t *testing.T) {
 		t.Fatal("not pushed")
 	}
 }
+
+// An unregistered row whose PR branch is gone, the base fast-forwarded onto its head, in a worktree cut from the base:
+// the one branch at the pull ref head is the base, the upstream of a local branch of another name. Refused; with
+// --base it is no candidate, and the upstream on the base is refused too.
+func TestPushUnregisteredRowWithOnlyTheBaseAtThePullHead(t *testing.T) {
+	w := newPushWorld(t)
+	feature := w.pr(0)["head"].(string)
+	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head", feature+":refs/heads/main", ":refs/heads/feature")
+	w.pr(0)["head"] = ""
+	w.upstream("main")
+	before := map[string]string{"main": feature}
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "refused: "+pPR+"'s head "+shortSha(feature)+" is the tip of main alone on origin, which is the upstream of the current branch work, not its name;",
+		"so main could be the base, which task push never pushes to.", "Remedy: pass --base <the PR's base branch>")
+	w.pushedNothing(out, before)
+
+	pushBase = "main"
+	out, code = w.run()
+	if code != 1 {
+		t.Fatalf("--base: exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "is on origin only as the PR's base main, which task push never pushes to; the current branch's upstream is main, the PR's base")
+	w.pushedNothing(out, before)
+}
+
+// The same unregistered row with the checkout on a branch named after the one it tracks, the PR's branch: pushed.
+func TestPushUnregisteredRowOnTheBranchItTracks(t *testing.T) {
+	w := newPushWorld(t)
+	feature := w.pr(0)["head"].(string)
+	vGit(t, w.repo, "", "push", "-q", "origin", feature+":refs/pull/7/head")
+	w.pr(0)["head"] = ""
+	vGit(t, w.repo, "", "branch", "-m", "work", "feature")
+	vGit(t, w.repo, "", "config", "branch.feature.remote", "origin")
+	vGit(t, w.repo, "", "config", "branch.feature.merge", "refs/heads/feature")
+	out, code := w.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "branch feature, found by pull ref head sha")
+	if w.remote("feature") != w.head() {
+		t.Fatal("not pushed")
+	}
+}
