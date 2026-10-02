@@ -208,9 +208,7 @@ that opened it as well.`,
 }
 
 func init() {
-	addProviderSessionFlags(agentSessionInitCmd.PersistentFlags())
-	agentSessionInitCmd.PersistentFlags().BoolVar(&noDeviceInfo, "no-device-info", false, "Do not report this "+
-		"machine's hostname, OS, time zone and client version")
+	// session init's (and session open's) provider flags are registered by addSessionInitFlags.
 	addProviderSessionFlags(agentSessionUpdateMetaCmd.PersistentFlags())
 	agentSessionUpdateMetaCmd.PersistentFlags().StringVar(&updateMetaTitle, "title", "", "New session title")
 	agentSessionCmd.AddCommand(agentSessionUpdateMetaCmd)
