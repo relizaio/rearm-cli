@@ -176,7 +176,8 @@ role you have held on the board produces, on an active task; never an index type
 
 --json prints one JSON value on stdout and nothing on stderr on success: the release, plus
 checks {verdict, counts, blocking, lines} (null for a document without elements) and, when
-the publish said anything beside it, notices. With --check it prints {check: true, checks}.
+the publish said anything beside it, notices. With --check it prints {check: true, checks},
+with --dry-run {dryRun: true, input}, each with notices when there are any.
 A refusal or local error still goes to stderr with exit 1 and nothing on stdout.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocPublish(); err != nil {
@@ -196,9 +197,19 @@ A refusal or local error still goes to stderr with exit 1 and nothing on stdout.
 // Shared by both shapes so the pending-output bookkeeping cannot drift between them: an
 // index-only round is an output of the hop exactly as a markdown round is, and a sign-off that
 // could not offer it would lose the questions it just asked.
-func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
+//
+// repoPath is the documents checkout to remember for the session ("" for an index-only publish). It is
+// remembered once the publish succeeded (or the dry run got this far), before anything is printed, so a
+// warning that it could not be kept goes into the --json object rather than after it (task RD5-8, round 2).
+func sendDocPublish(st *agentSessionState, input map[string]interface{}, repoPath string) error {
 	if docDryRun {
-		flushPublishNotices()
+		rememberDocumentsRepoPath(st, repoPath)
+		// --json: a dry run is a success too, so one object, {dryRun: true, input, notices}, and nothing on
+		// stderr (ARCHITECTURE round 2). Without --json the input alone, indented, as before.
+		if compactJson {
+			emitJson(withNotices(map[string]interface{}{"dryRun": true, "input": input}))
+			return nil
+		}
 		out, _ := json.MarshalIndent(input, "", "  ")
 		fmt.Println(string(out))
 		return nil
@@ -217,6 +228,7 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	if releaseUuid != "" && docTask != "" && remembersAsOutput() {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
+	rememberDocumentsRepoPath(st, repoPath)
 	// The board checked the elements as it took the document (elements.md §7): say what it found
 	// now, while the author can still fix it, rather than at the sign-off it would refuse.
 	_, withElements := input["elements"]
@@ -282,7 +294,7 @@ func publishIndexOnly(st *agentSessionState) error {
 				" sends it to the role that produces that input")
 		}
 	}
-	return sendDocPublish(st, indexOnlyInput(sessionUuidOf(st, docSession), spec, idx))
+	return sendDocPublish(st, indexOnlyInput(sessionUuidOf(st, docSession), spec, idx), "")
 }
 
 // indexOnlyInput is an index-alone publish as sent, with --advisory applied like any other publish
@@ -448,10 +460,7 @@ func runDocPublish() error {
 		input["indexDigest"] = indexDigest
 	}
 
-	if repoPath != "" {
-		defer rememberDocumentsRepoPath(st, repoPath)
-	}
-	return sendDocPublish(st, input)
+	return sendDocPublish(st, input, repoPath)
 }
 
 // queryDocumentPath asks the server where a new document of this type goes on the board: its

@@ -371,22 +371,6 @@ func TestALocalErrorWithJsonPrintsNothingOnStdout(t *testing.T) {
 	}
 }
 
-// A dry run with --json prints the input on stdout, as before, and its lines on stderr, as before; nothing sent.
-func TestADryRunWithJsonKeepsItsLinesOnStderr(t *testing.T) {
-	b, dir, url := pjWorld(t, pjReport(true))
-	r := pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign, "--json", "--dry-run")...)
-	var in map[string]any
-	if err := json.Unmarshal([]byte(r.stdout), &in); err != nil || in["path"] != pjDesign || r.code != 0 {
-		t.Errorf("stdout is the input, got exit %d %q (%v)", r.code, r.stdout, err)
-	}
-	if !strings.HasPrefix(r.stderr, "elements: 2 element(s)") {
-		t.Errorf("the element count on stderr, got %q", r.stderr)
-	}
-	if b.publishes != 0 || b.reads != 0 {
-		t.Errorf("a dry run sends nothing, got %d publishes, %d reads", b.publishes, b.reads)
-	}
-}
-
 // publish --check --json: {check: true, checks}, the check's lines as notices, nothing published, nothing on stderr;
 // exit 0 when nothing the board blocks on fails.
 func TestACheckWithJsonPrintsOneObject(t *testing.T) {

@@ -19,7 +19,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 // One JSON value per command with --json (task RD5-8). A script captures both streams (2>&1) to keep a refusal's
@@ -31,22 +30,15 @@ import (
 // publishNotices are the lines a publish says beside its result, kept for the JSON object when --json is set.
 var publishNotices []string
 
-// sayPublishNote prints a publish's own line on w, or keeps it for the object under --json.
+// sayPublishNote prints a publish's own line on w, or keeps it for the object under --json: every object a publish
+// prints (the release, the --check result, the --dry-run input) carries the kept lines as notices. Only the publish
+// path calls it, the local-state warnings of a publish that succeeded included, so a line kept is always printed.
 func sayPublishNote(w io.Writer, line string) {
 	if compactJson {
 		publishNotices = append(publishNotices, line)
 		return
 	}
 	fmt.Fprintln(w, line)
-}
-
-// flushPublishNotices prints the kept lines on stderr: a dry run prints its input, not the object, so the lines go
-// where they went before.
-func flushPublishNotices() {
-	for _, line := range publishNotices {
-		fmt.Fprintln(os.Stderr, line)
-	}
-	publishNotices = nil
 }
 
 // withNotices adds the kept lines to an object, when there are any.

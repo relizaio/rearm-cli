@@ -508,7 +508,8 @@ func rememberDocumentsRepoPath(st *agentSessionState, path string) {
 	}
 	st.DocumentsRepoPath = path
 	if err := writeAgentState(st); err != nil {
-		fmt.Fprintf(os.Stderr, "rearm: could not remember the documents repository path: %v\n", err)
+		// A warning of a publish that succeeded: a notice under --json (task RD5-8, round 2).
+		sayPublishNote(os.Stderr, fmt.Sprintf("rearm: could not remember the documents repository path: %v", err))
 	}
 }
 
@@ -523,8 +524,9 @@ func rememberPendingOutput(st *agentSessionState, taskUuid, releaseUuid string) 
 		return
 	}
 	if err := writeAgentState(st); err != nil {
-		fmt.Fprintf(os.Stderr, "rearm: could not record the published document locally; "+
-			"pass --outputs %s at sign-off: %v\n", releaseUuid, err)
+		// A warning of a publish that succeeded: a notice under --json (task RD5-8, round 2).
+		sayPublishNote(os.Stderr, fmt.Sprintf("rearm: could not record the published document locally; "+
+			"pass --outputs %s at sign-off: %v", releaseUuid, err))
 	}
 }
 
