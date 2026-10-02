@@ -42,7 +42,25 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "AI Agent commands (coding agents — Claude Code, Cursor, Codex, …)",
-	Long:  `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection. Its core, and each section by the action it covers, print with 'rearm agent orientation [--section <name>]'.`,
+	Long: `Commands for managing AI coding agents and their sessions. The authoritative runtime contract is served by the backend at $REARM_URL/api/agents/orientation.md — point your agent runtime at that URL on first connection. Its core, and each section by the action it covers, print with 'rearm agent orientation [--section <name>]'.
+
+Every agent verb that takes --session uses the current session when the flag is left out: the one recorded for
+the repository the command runs in, on the instance the credentials point at ('rearm agent session open', or
+'rearm agent session current --set <uuid>'). An explicit --session wins.`,
+	// Replaces the root's hook (cobra runs only the nearest), so the configuration is loaded here first: the
+	// fallback needs the instance the credentials resolve to, and must see a --session the environment set.
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if code := agentPreRun(cmd); code != 0 {
+			os.Exit(code)
+		}
+	},
+}
+
+// agentPreRun loads the configuration, then applies the --session fallback (task RD5-4); the exit code of a refusal,
+// or 0.
+func agentPreRun(cmd *cobra.Command) int {
+	initConfig(cmd)
+	return applySessionFallback(cmd)
 }
 
 var agentSessionCmd = &cobra.Command{
@@ -91,54 +109,70 @@ CLI reports about the machine -- hostname, OS, time zone and version.
 Hostname and address are shown only to org admins and the session's
 owner. --no-device-info stops the CLI reporting the machine.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Resolved before anything is sent, so --require-provider-session refuses without
-		// opening a session it would then have to explain.
-		ps, err := resolveProviderSession(currentProviderSessionOpts())
+		session, err := initializeSession()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "rearm:", err)
+			if _, local := err.(localSessionError); local {
+				fmt.Fprintln(os.Stderr, "rearm:", err)
+			} else {
+				printRefusal(err)
+			}
 			os.Exit(1)
 		}
-		query := rearm.SessionInitializeProgrammatic_Operation
-		input := map[string]interface{}{
-			"agentName": agentName,
-		}
-		if agentModel != "" {
-			input["agentModel"] = agentModel
-		}
-		if agentModelVersion != "" {
-			input["agentModelVersion"] = agentModelVersion
-		}
-		if agentVendor != "" {
-			input["agentVendor"] = agentVendor
-		}
-		if agentIconKind != "" {
-			input["agentIconKind"] = agentIconKind
-		}
-		if agentColor != "" {
-			input["agentColor"] = agentColor
-		}
-		if clientSessionId != "" {
-			input["clientSessionId"] = clientSessionId
-		}
-		if sessionTitle != "" {
-			input["title"] = sessionTitle
-		}
-		if ps != nil {
-			input["providerSession"] = ps
-		}
-		if device := sessionDeviceInput(noDeviceInfo); device != nil {
-			input["device"] = device
-		}
-		variables := map[string]interface{}{"sessionInit": input}
-		data, err := sendGraphQLRequest(query, variables)
-		if err != nil {
-			printRefusal(err)
-			os.Exit(1)
-		}
-		session := data["sessionInitializeProgrammatic"]
-		recordInitState(session)
 		emitJson(session)
 	},
+}
+
+// localSessionError is a refusal made before anything is sent.
+type localSessionError struct{ error }
+
+// initializeSession opens the session with the init flags and writes its local state; shared by session init and
+// session open (task RD5-4).
+func initializeSession() (interface{}, error) {
+	// Resolved before anything is sent, so --require-provider-session refuses without
+	// opening a session it would then have to explain.
+	ps, err := resolveProviderSession(currentProviderSessionOpts())
+	if err != nil {
+		return nil, localSessionError{err}
+	}
+	query := rearm.SessionInitializeProgrammatic_Operation
+	input := map[string]interface{}{
+		"agentName": agentName,
+	}
+	if agentModel != "" {
+		input["agentModel"] = agentModel
+	}
+	if agentModelVersion != "" {
+		input["agentModelVersion"] = agentModelVersion
+	}
+	if agentVendor != "" {
+		input["agentVendor"] = agentVendor
+	}
+	if agentIconKind != "" {
+		input["agentIconKind"] = agentIconKind
+	}
+	if agentColor != "" {
+		input["agentColor"] = agentColor
+	}
+	if clientSessionId != "" {
+		input["clientSessionId"] = clientSessionId
+	}
+	if sessionTitle != "" {
+		input["title"] = sessionTitle
+	}
+	if ps != nil {
+		input["providerSession"] = ps
+	}
+	if device := sessionDeviceInput(noDeviceInfo); device != nil {
+		input["device"] = device
+	}
+	variables := map[string]interface{}{"sessionInit": input}
+	data, err := sendGraphQLRequest(query, variables)
+	if err != nil {
+		return nil, err
+	}
+	session := data["sessionInitializeProgrammatic"]
+	recordInitState(session)
+	return session, nil
 }
 
 // recordInitState writes the local state file the usage hooks read.
@@ -175,10 +209,12 @@ func recordInitState(session interface{}) {
 		// practice, which would have left every hook unable to find its session.
 		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
 	}
+	agentUuid, _ := m["agent"].(string)
 	st := &agentSessionState{
 		SessionUuid:       uuid,
 		ClientSessionId:   clientId,
 		ExternalSessionId: claudeId,
+		AgentUuid:         agentUuid,
 	}
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: session opened, but local usage state could not be written: %v\n", err)
@@ -202,23 +238,23 @@ var agentSessionTouchCmd = &cobra.Command{
 }
 
 var agentSessionCloseCmd = &cobra.Command{
-	Use:   "close <session-uuid>",
-	Short: "Close the session (terminal — re-init creates a new row)",
-	Args:  cobra.ExactArgs(1),
+	Use:   "close [<session-uuid>] [--final <file>]",
+	Short: "Close the session (terminal — re-init creates a new row); --final files the FINAL report first",
+	Long: `Closes the session. A closed session is no repository's current session any more: every entry naming
+it is cleared.
+
+--final <file> files the FINAL report first (an AGENTIC_REPORT artifact, display id final, tag
+agenticPhase=FINAL), then closes; a failed upload stops before the close and leaves the session open. With
+--final the session uuid may be left out: the current session for this repository on the instance the
+credentials point at is closed. Without --final the uuid is required, as before.`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if strings.TrimSpace(closeFinal) == "" {
+			return cobra.ExactArgs(1)(cmd, args)
+		}
+		return cobra.MaximumNArgs(1)(cmd, args)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		query := rearm.SessionCloseProgrammatic_Operation
-		variables := map[string]interface{}{"sessionUuid": args[0]}
-		data, err := sendGraphQLRequest(query, variables)
-		if err != nil {
-			printRefusal(err)
-			os.Exit(1)
-		}
-		// The session is over; its local state is now just a stale mapping that a later Claude
-		// session reusing the id would pick up. Removed after the close succeeds, never before.
-		if st := findStateBySessionUuid(args[0]); st != nil {
-			removeAgentState(st)
-		}
-		emitJson(data["sessionCloseProgrammatic"])
+		os.Exit(runSessionClose(args))
 	},
 }
 
@@ -467,18 +503,8 @@ declare.`,
 }
 
 func init() {
-	// init flags
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentName, "agent-name", "", "Display name of the agent (e.g. \"Claude Code\") — required")
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentModel, "agent-model", "", "Model the agent runs (e.g. \"claude-sonnet\") — required")
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentModelVersion, "agent-model-version", "", "Model version (e.g. \"4.5\") — optional, defaults to \"unknown\"")
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentVendor, "agent-vendor", "", "Publisher / vendor (e.g. \"Anthropic\") — optional")
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentIconKind, "agent-icon", "", "Dashboard glyph for the agent — optional")
-	agentSessionInitCmd.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
-	agentSessionInitCmd.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
-	agentSessionInitCmd.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Deprecated alias for --provider-session-id with --provider claude-code (defaults to $CLAUDE_CODE_SESSION_ID)")
-	agentSessionInitCmd.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
-	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-name")
-	_ = agentSessionInitCmd.MarkPersistentFlagRequired("agent-model")
+	// init flags; session open takes the same ones (task RD5-4)
+	addSessionInitFlags(agentSessionInitCmd)
 
 	// session add-artifact flags
 	agentSessionAddArtifactCmd.PersistentFlags().StringVar(&addArtifactFile, "file", "", "Local file path to upload (required)")
@@ -513,6 +539,25 @@ func init() {
 	agentCmd.AddCommand(agentSessionCmd)
 	agentCmd.AddCommand(agentReleaseCmd)
 	rootCmd.AddCommand(agentCmd)
+}
+
+// addSessionInitFlags registers every flag session init takes on c, bound to the same variables, so session open
+// (task RD5-4) takes exactly what init takes.
+func addSessionInitFlags(c *cobra.Command) {
+	c.PersistentFlags().StringVar(&agentName, "agent-name", "", "Display name of the agent (e.g. \"Claude Code\") — required")
+	c.PersistentFlags().StringVar(&agentModel, "agent-model", "", "Model the agent runs (e.g. \"claude-sonnet\") — required")
+	c.PersistentFlags().StringVar(&agentModelVersion, "agent-model-version", "", "Model version (e.g. \"4.5\") — optional, defaults to \"unknown\"")
+	c.PersistentFlags().StringVar(&agentVendor, "agent-vendor", "", "Publisher / vendor (e.g. \"Anthropic\") — optional")
+	c.PersistentFlags().StringVar(&agentIconKind, "agent-icon", "", "Dashboard glyph for the agent — optional")
+	c.PersistentFlags().StringVar(&agentColor, "agent-color", "", "Dashboard accent colour (CSS hex) — optional")
+	c.PersistentFlags().StringVar(&clientSessionId, "client-session-id", "", "Agent-supplied session id; defaults to the new row uuid")
+	c.PersistentFlags().StringVar(&claudeSessionId, "claude-session-id", "", "Deprecated alias for --provider-session-id with --provider claude-code (defaults to $CLAUDE_CODE_SESSION_ID)")
+	c.PersistentFlags().StringVar(&sessionTitle, "title", "", "Human-readable session title")
+	_ = c.MarkPersistentFlagRequired("agent-name")
+	_ = c.MarkPersistentFlagRequired("agent-model")
+	addProviderSessionFlags(c.PersistentFlags())
+	c.PersistentFlags().BoolVar(&noDeviceInfo, "no-device-info", false, "Do not report this "+
+		"machine's hostname, OS, time zone and client version")
 }
 
 func emitJson(v interface{}) {

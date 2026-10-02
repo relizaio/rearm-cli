@@ -106,6 +106,9 @@ type taskBrief struct {
 	// server that does not serve the split, which leaves the URL above.
 	OrientationCore     string         `json:"orientationCore,omitempty"`
 	OrientationSections []briefSection `json:"orientationSections,omitempty"`
+
+	// The path of the next round of each type the role produces on the task (task RD5-5).
+	NextRounds []briefNextRound `json:"nextRounds"`
 }
 
 type briefSection struct {
@@ -151,7 +154,9 @@ var agentTaskBriefCmd = &cobra.Command{
 	Use:   "brief <task>",
 	Short: "Everything a fresh context needs for one task: prompt, task, documents, repository, rules, notes",
 	Long: `Prints, in one call and in this order: the prompt the task's role is served (or --role's), the task,
-its documents newest round first per type, the documents repository (its uri, your checkout, the
+its documents newest round first per type, then "next <TYPE>: <path>" for each type the role
+produces on the task (the round a publish would cut, or "republish = new version of round <n>" when
+this hop already published that round), the documents repository (its uri, your checkout, the
 board's root and path templates), the rules, and the tail of notes/<role>.md. Markdown by default;
 --json for the same as structure. --inline prints the newest round of each of the role's input types
 in full, from your checkout. The documents it prints are recorded as read for --session, so the
@@ -206,7 +211,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		}
 		roles, composed = fallback, false
 	}
-	var inputs []string
+	var inputs, outputs []string
 	found, pushesCode := false, false
 	for _, r := range asList(roles["agentTaskRoleConfigsProgrammatic"]) {
 		if !strings.EqualFold(str(r["name"]), role) {
@@ -216,6 +221,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		b.Role = str(r["name"])
 		b.ServedPrompt = str(r["servedPrompt"])
 		b.PromptVersion = str(r["promptVersion"])
+		outputs = briefTaskOutputs(r)
 		if !composed {
 			b.ServedPrompt = str(r["prompt"]) + "\n\n(" + servedPromptMissing + ")"
 		}
@@ -251,6 +257,9 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 	if t, err := json.Marshal(brd["documentPaths"]); err == nil && string(t) != "null" {
 		b.Repository.Templates = t
 	}
+	templates, _ := brd["documentPaths"].(map[string]interface{})
+	b.NextRounds = briefNextRounds(outputs, templates, b.Repository.Root, b.Key, b.TaskUuid, asList(task["documents"]),
+		hopOutputsFor(session, b.TaskUuid))
 	if st := lookupAgentState(session); st != nil && st.DocumentsRepoPath != "" {
 		b.Repository.LocalPath = st.DocumentsRepoPath
 	} else if b.Repository.Uri != "" {
@@ -560,6 +569,9 @@ func renderTaskBrief(b *taskBrief) string {
 			fmt.Fprintf(&sb, ": `%s`", d.Path)
 		}
 		sb.WriteString("\n")
+	}
+	for _, n := range b.NextRounds {
+		sb.WriteString(renderNextRound(n) + "\n")
 	}
 	for _, in := range b.Inline {
 		fmt.Fprintf(&sb, "\n### %s round %d (`%s`)\n\n", in.Specification, in.Round, in.Path)

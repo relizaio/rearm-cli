@@ -159,6 +159,10 @@ The documents repository is usually NOT the repository you are working in. It is
 resolved from --repo, else the current directory when its origin matches the
 board's documents repository, else the path remembered from an earlier --repo.
 
+Without --file the path is the board's for the type's next round, except when this hop
+already published the newest round of the type on the task: the publish then defaults to
+that round's path and lands as a new version of it, and says so. --file always wins.
+
 For BOARD_REVIEW_ITEMS and BOARD_TEST_REPORT the index is read alongside the markdown and
 checked against it: every id in one must appear in the other.
 
@@ -168,7 +172,13 @@ opening a new round.
 
 --advisory puts a round on a task another role holds, for example an architect's
 amendment answering a review item while the coder works the task. Only a prose type a
-role you have held on the board produces, on an active task; never an index type.`,
+role you have held on the board produces, on an active task; never an index type.
+
+--json prints one JSON value on stdout and nothing on stderr on success: the release, plus
+checks {verdict, counts, blocking, lines} (null for a document without elements) and, when
+the publish said anything beside it, notices. With --check it prints {check: true, checks},
+with --dry-run {dryRun: true, input}, each with notices when there are any.
+A refusal or local error still goes to stderr with exit 1 and nothing on stdout.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDocPublish(); err != nil {
 			fmt.Fprintf(os.Stderr, "rearm: %v\n", err)
@@ -187,8 +197,19 @@ role you have held on the board produces, on an active task; never an index type
 // Shared by both shapes so the pending-output bookkeeping cannot drift between them: an
 // index-only round is an output of the hop exactly as a markdown round is, and a sign-off that
 // could not offer it would lose the questions it just asked.
-func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
+//
+// repoPath is the documents checkout to remember for the session ("" for an index-only publish). It is
+// remembered once the publish succeeded (or the dry run got this far), before anything is printed, so a
+// warning that it could not be kept goes into the --json object rather than after it (task RD5-8, round 2).
+func sendDocPublish(st *agentSessionState, input map[string]interface{}, repoPath string) error {
 	if docDryRun {
+		rememberDocumentsRepoPath(st, repoPath)
+		// --json: a dry run is a success too, so one object, {dryRun: true, input, notices}, and nothing on
+		// stderr (ARCHITECTURE round 2). Without --json the input alone, indented, as before.
+		if compactJson {
+			emitJson(withNotices(map[string]interface{}{"dryRun": true, "input": input}))
+			return nil
+		}
 		out, _ := json.MarshalIndent(input, "", "  ")
 		fmt.Println(string(out))
 		return nil
@@ -207,16 +228,29 @@ func sendDocPublish(st *agentSessionState, input map[string]interface{}) error {
 	if releaseUuid != "" && docTask != "" && remembersAsOutput() {
 		rememberPendingOutput(st, docTask, releaseUuid)
 	}
-	// Compact by default (task RD3-9): what was published and its release; --json for the whole response.
-	if compactJson {
-		emitJson(release)
-	} else {
-		fmt.Println(compactDocument(release, strings.ToUpper(strings.ReplaceAll(docType, "-", "_")), docAdvisory))
-	}
+	rememberDocumentsRepoPath(st, repoPath)
 	// The board checked the elements as it took the document (elements.md §7): say what it found
 	// now, while the author can still fix it, rather than at the sign-off it would refuse.
-	if _, withElements := input["elements"]; withElements && releaseUuid != "" && input["taskUuid"] != nil {
-		printElementCheckReport(releaseUuid)
+	_, withElements := input["elements"]
+	withChecks := withElements && releaseUuid != "" && input["taskUuid"] != nil
+	// --json: one object, the release with the report folded in as checks, and nothing on stderr (task RD5-8).
+	// A report that could not be read is said in checks too: the publish itself succeeded.
+	if compactJson {
+		var checks interface{}
+		if withChecks {
+			if rel, err := readElementCheckReport(releaseUuid); err != nil {
+				checks = map[string]interface{}{"verdict": nil, "error": err.Error()}
+			} else {
+				checks = releaseChecks(rel)
+			}
+		}
+		emitJson(publishObject(release, checks))
+		return nil
+	}
+	// Compact by default (task RD3-9): what was published and its release, then the report on stderr.
+	fmt.Println(compactDocument(release, strings.ToUpper(strings.ReplaceAll(docType, "-", "_")), docAdvisory))
+	if withChecks {
+		printElementCheckReport(readElementCheckReport(releaseUuid))
 	}
 	return nil
 }
@@ -260,7 +294,7 @@ func publishIndexOnly(st *agentSessionState) error {
 				" sends it to the role that produces that input")
 		}
 	}
-	return sendDocPublish(st, indexOnlyInput(sessionUuidOf(st, docSession), spec, idx))
+	return sendDocPublish(st, indexOnlyInput(sessionUuidOf(st, docSession), spec, idx), "")
 }
 
 // indexOnlyInput is an index-alone publish as sent, with --advisory applied like any other publish
@@ -278,6 +312,7 @@ func indexOnlyInput(session, spec string, idx map[string]interface{}) map[string
 }
 
 func runDocPublish() error {
+	publishNotices = nil
 	if docSession == "" {
 		return fmt.Errorf("--session is required")
 	}
@@ -391,7 +426,7 @@ func runDocPublish() error {
 		input[k] = v
 	}
 	if extra != nil {
-		fmt.Fprintln(os.Stderr, "elements: "+summarise(ix))
+		sayPublishNote(os.Stderr, "elements: "+summarise(ix))
 	}
 	if head.Message != "" {
 		input["commitMessage"] = head.Message
@@ -425,10 +460,7 @@ func runDocPublish() error {
 		input["indexDigest"] = indexDigest
 	}
 
-	if repoPath != "" {
-		defer rememberDocumentsRepoPath(st, repoPath)
-	}
-	return sendDocPublish(st, input)
+	return sendDocPublish(st, input, repoPath)
 }
 
 // queryDocumentPath asks the server where a new document of this type goes on the board: its
@@ -463,10 +495,18 @@ func pathFromResponse(data map[string]interface{}, err error, spec string) (stri
 	return p, nil
 }
 
-// documentFile is --file when given, else the path the board gives for this type.
+// documentFile is --file when given; else, when this hop published the newest round of the type on the task,
+// that round's path, a republish there being a new version of it (task RD5-6); else the path the board gives
+// for this type.
 func documentFile(board map[string]interface{}, spec string) (string, error) {
 	if docFile != "" {
 		return docFile, nil
+	}
+	if n, ok, err := hopVersionRound(board, spec); err != nil {
+		return "", err
+	} else if ok {
+		sayPublishNote(publishNoteOut(), versionPathLine(n))
+		return n.Path, nil
 	}
 	boardUuid, _ := board["uuid"].(string)
 	return queryDocumentPath(boardUuid, spec, docTask, docComponent)
@@ -478,7 +518,7 @@ func init() {
 	f.StringVar(&docType, "type", "", "specification type, e.g. BOARD_REVIEW_ITEMS")
 	f.StringVar(&docTask, "task", "", "task this round belongs to (task-scoped types)")
 	f.StringVar(&docComponent, "component", "", "document series (component-scoped types)")
-	f.StringVar(&docFile, "file", "", "repo-relative path; asked of the board (its template, placeholders filled) when omitted")
+	f.StringVar(&docFile, "file", "", "repo-relative path; when omitted, the round this hop published of the type (a new version of it), else asked of the board (its template, placeholders filled)")
 	f.StringVar(&docIndexFile, "index", "", "repo-relative path of the JSON index; defaults beside the file")
 	f.BoolVar(&docIndexOnlyFlag, "index-only", false,
 		"publish the index alone, with no file: the items ARE the document, which is the usual"+

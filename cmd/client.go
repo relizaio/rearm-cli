@@ -115,6 +115,8 @@ func decodeData(raw json.RawMessage) map[string]interface{} {
 func sendGraphQLRequest(query string, variables map[string]interface{}) (map[string]interface{}, error) {
 	raw, err := rearm.Raw(context.Background(), rearmClient(), opNameOf(query), query, variables)
 	if err != nil {
+		// A verb that fell back to the current session clears it when the server says it is closed (task RD5-4).
+		noticeClosedCurrentSession(err)
 		return nil, err
 	}
 	return decodeData(raw), nil

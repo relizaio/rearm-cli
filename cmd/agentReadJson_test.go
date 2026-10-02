@@ -183,7 +183,7 @@ func TestEveryAgentVerbIsClassifiedForJson(t *testing.T) {
 	}
 	// Text by default, JSON with the flag: their own --json.
 	for _, c := range []*cobra.Command{agentTaskBriefCmd, agentBoardEventsCmd, agentBoardAgentsCmd, agentTaskMergeplanCmd,
-		agentDocElementCheckCmd} {
+		agentDocElementCheckCmd, agentTaskVerifyCmd, agentTaskPushCmd, agentGitCommitCmd, agentGitMergeCmd, agentSessionCurrentCmd} {
 		takesJson[c] = "own"
 	}
 	without := map[string]bool{
@@ -198,6 +198,8 @@ func TestEveryAgentVerbIsClassifiedForJson(t *testing.T) {
 		"rearm agent orientation": true, "rearm agent notes append": true, "rearm agent notes tail": true,
 		"rearm agent claude hooks install": true, "rearm agent claude hooks uninstall": true, "rearm agent claude usage": true,
 		"rearm agent board apply": true, "rearm agent board export": true,
+		// the env snippet a shell reads (task RD5-4)
+		"rearm agent session open":  true,
 		"rearm agent presets apply": true, "rearm agent presets export": true,
 	}
 	var walk func(c *cobra.Command)

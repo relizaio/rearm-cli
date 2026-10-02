@@ -43,7 +43,7 @@ import (
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
 //   rearm agent task next --session <uuid> [--board <uuid>]
 //   rearm agent task assign <task-uuid> --session <uuid>
-//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change]
+//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--pr <url>]...
 //   rearm agent task return <task-uuid> --session <uuid> --reason <enum> [--description d]
 //   rearm agent task authorize <task-uuid> --session <uuid> --role <r> [--order N]
 //   rearm agent task order <task-uuid> --session <uuid> --order N
@@ -432,6 +432,12 @@ var agentTaskSignoffCmd = &cobra.Command{
 	Short: "Record the hop's sign-off (PASSED/REJECTED); the task redirects to the coordinator",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// --pr links come first (task RD5-5): a refused link stops here, before anything is signed off.
+		linked, err := linkSignOffPrs(args[0], taskSignoffPrs)
+		if err != nil {
+			printRefusal(err)
+			os.Exit(1)
+		}
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "outcome": taskOutcome}
 		if taskNote != "" {
 			variables["note"] = taskNote
@@ -454,7 +460,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 		if taskNoCode {
 			variables["noCode"] = true
 		}
-		runHopCompact(signOffOperation(), variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0])
+		printSignOff(runHop(signOffOperation(), variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0]), linked)
 		forgetSeen(taskSessionUuid, args[0])
 		forgetHopOutputs(taskSessionUuid, args[0])
 		// The hop is closed; usage after this point is not this task's.
