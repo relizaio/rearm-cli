@@ -175,10 +175,12 @@ func recordInitState(session interface{}) {
 		// practice, which would have left every hook unable to find its session.
 		claudeId = firstNonEmptyEnv("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")
 	}
+	agentUuid, _ := m["agent"].(string)
 	st := &agentSessionState{
 		SessionUuid:       uuid,
 		ClientSessionId:   clientId,
 		ExternalSessionId: claudeId,
+		AgentUuid:         agentUuid,
 	}
 	if err := writeAgentState(st); err != nil {
 		fmt.Fprintf(os.Stderr, "rearm: session opened, but local usage state could not be written: %v\n", err)
