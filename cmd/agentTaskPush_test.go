@@ -88,7 +88,7 @@ func newPushWorld(t *testing.T) *pushWorld {
 	pushSession = "s-1"
 	t.Cleanup(func() {
 		apiClient, taskKeyLookup, pushGit = nil, prevLookup, prevGit
-		pushSession, pushPr, pushBranch, pushJson = "", "", "", false
+		pushSession, pushPr, pushBranch, pushBase, pushJson = "", "", "", "", false
 	})
 	t.Chdir(w.repo)
 	return w
@@ -195,7 +195,7 @@ func TestPushFindsTheBranchByHeadShaOverTheUpstream(t *testing.T) {
 
 func TestPushUsesTheUpstreamWhenTheRowHasNoHead(t *testing.T) {
 	w := newPushWorld(t)
-	w.pr(0)["head"] = ""
+	w.pr(0)["head"], w.pr(0)["targetBranch"] = "", "main"
 	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
 	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/feature")
 	out, code := w.run()
@@ -211,6 +211,7 @@ func TestPushUsesTheUpstreamWhenTheRowHasNoHead(t *testing.T) {
 func TestPushUsesTheUpstreamWhenTheHeadShaIsAmbiguous(t *testing.T) {
 	w := newPushWorld(t)
 	vGit(t, w.repo, "", "push", "-q", "origin", w.pr(0)["head"].(string)+":refs/heads/twin")
+	w.pr(0)["targetBranch"] = "main"
 	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
 	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/twin")
 	out, code := w.run()
@@ -262,6 +263,7 @@ func TestPushNeverTakesTheBaseAsTheUpstream(t *testing.T) {
 func TestPushTakesAnUpstreamOnlyFromTheBranchesAtTheHead(t *testing.T) {
 	w := newPushWorld(t)
 	vGit(t, w.repo, "", "push", "-q", "origin", w.pr(0)["head"].(string)+":refs/heads/twin")
+	w.pr(0)["targetBranch"] = "main"
 	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
 	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/main")
 	mainBefore := w.remote("main")
@@ -278,6 +280,7 @@ func TestPushTakesAnUpstreamOnlyFromTheBranchesAtTheHead(t *testing.T) {
 func TestPushRefusesAnAmbiguousHeadWithoutAnUpstream(t *testing.T) {
 	w := newPushWorld(t)
 	vGit(t, w.repo, "", "push", "-q", "origin", w.pr(0)["head"].(string)+":refs/heads/twin")
+	w.pr(0)["targetBranch"] = "main"
 	before := w.remote("feature")
 	out, code := w.run()
 	if code != 1 {
@@ -291,7 +294,7 @@ func TestPushRefusesAnAmbiguousHeadWithoutAnUpstream(t *testing.T) {
 
 func TestPushUpstreamMustBeOnOrigin(t *testing.T) {
 	w := newPushWorld(t)
-	w.pr(0)["head"] = ""
+	w.pr(0)["head"], w.pr(0)["targetBranch"] = "", "main"
 	vGit(t, w.repo, "", "remote", "add", "fork", w.bare)
 	vGit(t, w.repo, "", "config", "branch.work.remote", "fork")
 	vGit(t, w.repo, "", "config", "branch.work.merge", "refs/heads/feature")
@@ -315,7 +318,8 @@ func TestPushRefusesWithoutHeadOrUpstream(t *testing.T) {
 	}
 }
 
-func TestPushRefusesAHeadNoBranchHasEvenWithAnUpstream(t *testing.T) {
+// With no base known, the upstream could be the base: a head no branch carries is refused, asking for --base.
+func TestPushRefusesAHeadNoBranchHasWithoutABase(t *testing.T) {
 	w := newPushWorld(t)
 	w.pr(0)["head"] = strings.Repeat("ab", 20)
 	vGit(t, w.repo, "", "config", "branch.work.remote", "origin")
@@ -325,7 +329,8 @@ func TestPushRefusesAHeadNoBranchHasEvenWithAnUpstream(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	wantIn(t, out, "no branch on origin has "+pPR+"'s head abababa at its tip", "Remedy: say --branch")
+	wantIn(t, out, "no branch on origin has "+pPR+"'s head abababa at its tip: the row is stale or the branch moved; the current branch's upstream is feature, but the PR's row names no base branch",
+		"Remedy: pass --base <the PR's base branch> so task push can leave it out, or say --branch")
 	if w.remote("feature") != before {
 		t.Fatal("pushed anyway")
 	}

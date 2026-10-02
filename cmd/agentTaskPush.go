@@ -18,9 +18,9 @@ import (
 // A returning task must push to the branch its PR is open from and confirm the PR head moved; a push to a fresh
 // branch or to the base costs a tester round (the RD3-5 lesson), and force-pushing is refused by the board's
 // rules. The PR row carries the PR's url, head sha, state and declaration but not the head branch name, and the
-// operator wants the CLI alone touched on this board, so the branch is found from git: the remote head whose tip
-// is the row's head sha (or origin's refs/pull/<n>/head when the row has none), then the current branch's upstream,
-// then --branch is required.
+// operator wants the CLI alone touched on this board, so the branch is found from git: the remote head, other than
+// the PR's base, whose tip is the row's head sha (or origin's refs/pull/<n>/head when the row has none), then the
+// current branch's upstream where it cannot be the base, then --branch is required (pickBranch).
 //
 // Thin, by the operator's decision of 2026-10-01: one task read, two git reads (ls-remote, merge-base) and one
 // push, each printed. It does not link, merge, rebase, fetch or open anything.
@@ -29,6 +29,7 @@ var (
 	pushSession string
 	pushPr      string
 	pushBranch  string
+	pushBase    string
 	pushJson    bool
 )
 
@@ -229,15 +230,51 @@ func cleanBranch(b string) string {
 	return strings.TrimPrefix(b, "origin/")
 }
 
-// pickBranch finds the PR's head branch (task RD5-3 §3.1 step 2): --branch; else the one remote head whose tip
-// is the row's head sha (origin's refs/pull/<n>/head when the row has none); else, when no head is known or several
-// heads share it, the upstream; else refused. The upstream is taken only where it cannot be the base: among the
-// branches at the head sha when they are several, and never the PR's base branch when the row names one. A
-// worktree made with git worktree add -b <name> origin/<base> tracks the base, and pushing there is the RD3-5
-// mistake this verb exists to prevent.
-func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string, pullHead string) (string, string, string) {
+// branchPick is pickBranch's answer: the branch and how it was found, or why none was and what to do.
+type branchPick struct {
+	branch, source string
+	// fallback: the upstream was taken because no branch on origin carries the PR's head sha, so it is the PR's
+	// branch only if HEAD contains its tip; the fast-forward refusal then asks for --branch.
+	fallback    bool
+	why, remedy string
+}
+
+const sayBranch = "say --branch <the PR's head branch>"
+const sayBaseOrBranch = "pass --base <the PR's base branch> so task push can leave it out, or " + sayBranch
+
+// prBases is the PR's base branch: the row's targetBranch, and --base (needed on a row CI never registered, which
+// names none). Either is never pushed to.
+func prBases(pr map[string]interface{}) []string {
+	var out []string
+	for _, b := range []string{cleanBranch(str(pr["targetBranch"])), cleanBranch(pushBase)} {
+		if b != "" && !containsString(out, b) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// pickBranch finds the PR's head branch (task RD5-3 §3.1 step 2, as ARCHITECTURE round 2 amends it). The base (the
+// row's targetBranch, else --base) is never pushed to: --branch naming it is refused, and it is never a candidate.
+// The candidates are origin's branches whose tip is the PR's head sha (the row's head, else origin's
+// refs/pull/<n>/head), minus the base:
+//   - one: that branch;
+//   - several: the current branch's upstream when it is one of them, the base is known, and the base's tip is not
+//     the head sha (then every candidate carries the base's tip and none can be told from a copy of the base);
+//     else refused;
+//   - none: the upstream when the base is known, the upstream is not the base and its tip is not the base's tip;
+//     run's fast-forward check then requires HEAD to contain it; else refused.
+//
+// With no base known (an unregistered row, no --base) every tie and every fallback is refused with "pass --base or
+// --branch": any branch at the head sha, and the upstream, could be the base. A worktree made with git worktree add
+// -b <name> origin/<base> tracks the base, and pushing there is the RD3-5 mistake this verb exists to prevent.
+func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string, pullHead string) branchPick {
+	bases := prBases(pr)
 	if b := cleanBranch(pushBranch); b != "" {
-		return b, "--branch", ""
+		if containsString(bases, b) {
+			return branchPick{why: fmt.Sprintf("--branch %s is the PR's base branch, and task push never pushes to the base.", b), remedy: sayBranch}
+		}
+		return branchPick{branch: b, source: "--branch"}
 	}
 	url := str(pr["url"])
 	head, source := strings.ToLower(str(pr["head"])), "head sha"
@@ -245,41 +282,65 @@ func (p *pushRun) pickBranch(pr map[string]interface{}, heads map[string]string,
 		head, source = strings.ToLower(pullHead), "pull ref head sha"
 	}
 	var matches []string
+	baseAtHead := ""
 	if head != "" {
 		for name, tip := range heads {
-			if strings.EqualFold(tip, head) {
-				matches = append(matches, name)
+			if !strings.EqualFold(tip, head) {
+				continue
 			}
+			if containsString(bases, name) {
+				baseAtHead = name
+				continue
+			}
+			matches = append(matches, name)
 		}
 	}
 	matches = sortedStrings(matches)
 	if len(matches) == 1 {
-		return matches[0], source, ""
+		return branchPick{branch: matches[0], source: source}
 	}
 	up := upstreamBranch(p.dir)
-	noUpstream := ", and the current branch has no upstream on origin."
-	switch {
-	case len(matches) > 1:
-		if up != "" && containsString(matches, up) {
-			return up, "upstream", ""
-		}
-		why := fmt.Sprintf("%s's head %s is the tip of %d branches on origin (%s)", url, shortSha(head), len(matches), strings.Join(matches, ", "))
+	upIs := func() string {
 		if up == "" {
-			return "", "", why + noUpstream
+			return ", and the current branch has no upstream on origin."
 		}
-		return "", "", why + ", and the current branch's upstream " + up + " is not one of them."
-	case head == "":
-		base := cleanBranch(str(pr["targetBranch"]))
-		if up != "" && up != base {
-			return up, "upstream", ""
-		}
-		why := url + " has no head on its row (CI never reported it), and origin names none for it"
-		if up == "" {
-			return "", "", why + noUpstream
-		}
-		return "", "", why + "; the current branch's upstream is " + up + ", the PR's base, and task push never pushes to the base."
+		return ", and the current branch's upstream is " + up + "."
 	}
-	return "", "", fmt.Sprintf("no branch on origin has %s's head %s at its tip: the row is stale or the branch moved.", url, shortSha(head))
+	if len(matches) > 1 {
+		why := fmt.Sprintf("%s's head %s is the tip of %d branches on origin (%s)", url, shortSha(head), len(matches), strings.Join(matches, ", "))
+		switch {
+		case len(bases) == 0:
+			return branchPick{why: why + "; the PR's row names no base branch, and any of them could be the base, which task push never pushes to" + upIs(), remedy: sayBaseOrBranch}
+		case baseAtHead != "":
+			return branchPick{why: why + fmt.Sprintf(", and the PR's base %s is at the same commit, so none of them can be told from a copy of the base%s", baseAtHead, upIs()), remedy: sayBranch}
+		case up != "" && containsString(matches, up):
+			return branchPick{branch: up, source: "upstream"}
+		case up == "":
+			return branchPick{why: why + upIs(), remedy: sayBranch}
+		}
+		return branchPick{why: why + ", and the current branch's upstream " + up + " is not one of them.", remedy: sayBranch}
+	}
+	why := fmt.Sprintf("no branch on origin has %s's head %s at its tip: the row is stale or the branch moved", url, shortSha(head))
+	if head == "" {
+		why = url + " has no head on its row (CI never reported it), and origin names none for it"
+	}
+	if baseAtHead != "" {
+		why = fmt.Sprintf("%s's head %s is on origin only as the PR's base %s, which task push never pushes to", url, shortSha(head), baseAtHead)
+	}
+	switch {
+	case up == "":
+		return branchPick{why: why + upIs(), remedy: sayBranch}
+	case len(bases) == 0:
+		return branchPick{why: why + "; the current branch's upstream is " + up + ", but the PR's row names no base branch, so it could be the base, which task push never pushes to.", remedy: sayBaseOrBranch}
+	case containsString(bases, up):
+		return branchPick{why: why + "; the current branch's upstream is " + up + ", the PR's base, and task push never pushes to the base.", remedy: sayBranch}
+	}
+	for _, b := range bases {
+		if tip, ok := heads[b]; ok && strings.EqualFold(tip, heads[up]) {
+			return branchPick{why: why + fmt.Sprintf("; the current branch's upstream %s is at the PR's base %s's tip, so it cannot be told from a copy of the base.", up, b), remedy: sayBranch}
+		}
+	}
+	return branchPick{branch: up, source: "upstream", fallback: true}
 }
 
 func sortedStrings(in []string) []string {
@@ -348,17 +409,18 @@ func (p *pushRun) run(args []string) int {
 	if err != nil {
 		return readErr("%v", err)
 	}
-	branch, source, why := p.pickBranch(pr, heads, pullHead)
-	if branch == "" {
-		return p.refuse(why, "say --branch <the PR's head branch>")
+	pick := p.pickBranch(pr, heads, pullHead)
+	if pick.branch == "" {
+		return p.refuse(pick.why, pick.remedy)
 	}
-	p.result.Branch, p.result.BranchSource = branch, source
+	branch := pick.branch
+	p.result.Branch, p.result.BranchSource = branch, pick.source
 
 	// Fast-forward only (§3.1 step 3): the branch's tip on origin is an ancestor of HEAD.
 	tip, found := heads[branch]
 	if !found {
 		return p.refuse(fmt.Sprintf("origin has no branch %s: task push sends commits to the PR's existing head branch, never a new one.", branch),
-			"say --branch <the PR's head branch>")
+			sayBranch)
 	}
 	p.result.RemoteBefore = tip
 	if strings.EqualFold(tip, localHead) {
@@ -370,7 +432,12 @@ func (p *pushRun) run(args []string) int {
 		if _, _, err := pushGit(top, "cat-file", "-e", tip+"^{commit}"); err != nil {
 			reason = fmt.Sprintf("would not fast-forward: origin/%s is at %s, which is not in this repository.", branch, shortSha(tip))
 		}
-		return p.refuse(reason, fmt.Sprintf("merge origin/%s and retry (git fetch origin %s, then git merge --no-ff origin/%s with your trailers); never force", branch, branch, branch))
+		remedy := fmt.Sprintf("merge origin/%s and retry (git fetch origin %s, then git merge --no-ff origin/%s with your trailers); never force", branch, branch, branch)
+		if pick.fallback {
+			reason += " The upstream was taken only because no branch on origin carries the PR's head, so it may not be the PR's branch."
+			remedy = sayBranch + "; merge origin/" + branch + " and retry only if it is the PR's branch; never force"
+		}
+		return p.refuse(reason, remedy)
 	}
 
 	// Push and verify (§3.1 step 4): no force flag of any kind, then ls-remote must name HEAD.
@@ -439,10 +506,13 @@ repository, and verifies the remote head with git ls-remote (task RD5-3). Never 
 
   1. The PR: the linked PR whose repository is the origin remote's; --pr when several are open.
      A PR that is merged, or declared superseded or abandoned, is refused by name.
-  2. The branch: --branch when given; else the branch on origin whose tip is the PR row's head sha
-     (git ls-remote --heads origin), or, when the row has no head yet, origin's refs/pull/<n>/head;
-     else, when no head is known or several branches share it, the current branch's upstream on
-     origin, never the PR's base and, among several, only one of them; else refused: say --branch.
+  2. The branch. The PR's base (the row's targetBranch, else --base) is never pushed to: --branch
+     naming it is refused. --branch when given; else the branch on origin, other than the base, whose
+     tip is the PR row's head sha (git ls-remote --heads origin), or, when the row has no head yet,
+     origin's refs/pull/<n>/head. When several share it, the current branch's upstream if it is one
+     of them; when none does, the upstream if HEAD contains its tip. Neither when the upstream is the
+     base or at the base's tip, nor when the base's tip is the head sha, nor when no base is known
+     (a row CI never registered, without --base): then refused, say --base or --branch.
   3. Fast-forward only: origin's tip of that branch must be an ancestor of HEAD
      (git merge-base --is-ancestor); otherwise refused: merge origin/<branch> and retry.
      Equal: already pushed, exit 0.
@@ -455,6 +525,7 @@ remote URL's credentials removed. Exit 0 when HEAD is on the branch, 1 when refu
 remoteAfter, reason, remedy, commands}.
 
   rearm agent task push RD5-3 --session <board-session>
+  rearm agent task push RD5-3 --session <board-session> --base 2026-10-agent-boards
   rearm agent task push RD5-3 --session <board-session> --pr https://github.com/acme/app/pull/7 --branch feature`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -467,6 +538,7 @@ func init() {
 	f.StringVar(&pushSession, "session", "", "the board session holding the task — required")
 	f.StringVar(&pushPr, "pr", "", "the linked PR to push to, when several linked PRs are open on this repository")
 	f.StringVar(&pushBranch, "branch", "", "the PR's head branch on origin, when it cannot be found from the PR's head sha or the upstream")
+	f.StringVar(&pushBase, "base", "", "the PR's base branch, never pushed to, when the PR row names none (a PR CI never registered)")
 	f.BoolVar(&pushJson, "json", false, "print the result as JSON")
 	agentTaskCmd.AddCommand(agentTaskPushCmd)
 }
