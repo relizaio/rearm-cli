@@ -92,6 +92,9 @@ type verifyHop struct {
 	noCode       bool
 	reports      map[string]map[string]interface{} // newest version of an output -> its newest check report
 	codeSessions []string
+	// Where codeSessions came from when no --code-session was given: the instances whose current sessions for this
+	// repository supplied them (task RD5-4), else empty.
+	codeSessionsFrom []string
 }
 
 // verifyTaskOperation is the task read with what the checks need and the pinned client does not select: each
@@ -190,6 +193,9 @@ func runTaskVerify(args []string) int {
 	hop := &verifyHop{task: task, taskUuid: taskUuid, label: orElse(str(task["key"]), taskUuid),
 		session: sessionUuidOf(st, verifySession), sessionRef: verifySession, noCode: verifyNoCode,
 		reports: map[string]map[string]interface{}{}, codeSessions: cleanSessions(verifyCodeSession)}
+	if len(hop.codeSessions) == 0 {
+		hop.codeSessions, hop.codeSessionsFrom = codeSessionFallback()
+	}
 	if a, _ := task["assignment"].(map[string]interface{}); a != nil {
 		hop.heldBy = str(a["session"])
 		hop.role = str(a["role"])
@@ -715,6 +721,25 @@ func commitLabel(c verifyCommit) string {
 }
 
 // cleanSessions is the --code-session ids, trimmed, without empties or repeats.
+// codeSessionFallback is verify's code session when no --code-session is given (ARCHITECTURE round 2 §2): the client
+// ids of the current sessions recorded for this repository on every instance other than the one the board is read
+// from, from local state, so no other instance is read. None recorded: nil, and the board session's client id is
+// compared, as before.
+func codeSessionFallback() (ids, from []string) {
+	repo, err := repositoryKey()
+	if err != nil {
+		return nil, nil
+	}
+	for _, e := range otherInstanceSessions(repo, currentInstance()) {
+		if e.ClientSessionId == "" || containsString(ids, e.ClientSessionId) {
+			continue
+		}
+		ids = append(ids, e.ClientSessionId)
+		from = append(from, e.Instance)
+	}
+	return ids, from
+}
+
 func cleanSessions(ids []string) []string {
 	var out []string
 	for _, id := range ids {
@@ -818,6 +843,9 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 			remedy = "pass --code-session <client session id> when your code commits carry the session you opened on the controlling instance; " + remedy
 		} else if len(h.codeSessions) == 0 {
 			remedy += "; when your code commits carry a code session on another instance, pass --code-session <its client id>"
+		} else if len(h.codeSessionsFrom) > 0 {
+			remedy += "; the session compared is the current session recorded for this repository on " + strings.Join(h.codeSessionsFrom, ", ") +
+				": pass --code-session for each code session the task's rounds used, which replaces it"
 		} else {
 			remedy += "; a returning task's earlier rounds carry their own code sessions: repeat --code-session for each"
 		}
@@ -826,8 +854,12 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	if total == 0 {
 		return verifyPass(checkTrailers, "no commit since the merge base with "+strings.Join(bases, ", ")+".")
 	}
+	label := sessionsLabel(wants)
+	if len(h.codeSessionsFrom) > 0 {
+		label += " (the current session recorded here on " + strings.Join(h.codeSessionsFrom, ", ") + ")"
+	}
 	return verifyPass(checkTrailers, fmt.Sprintf("%d commit(s) since the merge base with origin/%s (%d merge(s)) carry the three trailers, %s.",
-		total, strings.Join(bases, ", origin/"), merges, sessionsLabel(wants)))
+		total, strings.Join(bases, ", origin/"), merges, label))
 }
 
 // verifySubjectsCheck (check 6): no commit message in the range carries a double quote, which breaks the
@@ -988,7 +1020,9 @@ Server facts, from the task read and this CLI's record of the hop:
 Git facts, in the current repository when its origin is one a linked PR names (else skipped):
   trailers         every commit since the merge base with the PR's base, merges included, ends in
                    ReARM-Agentic-Session, ReARM-Agent and Co-Authored-By as one paragraph; the session
-                   is this session's client id (or a --code-session id); one agent throughout
+                   is a --code-session id; without the flag, a current session recorded for this
+                   repository on another instance (session open, session current --set), else this
+                   session's client id; one agent throughout
   subjects         no commit message carries a double quote
   head             each linked PR's head (as CI reported it, else origin's refs/pull/<n>/head) is HEAD
   base             origin's tip of the base branch (git ls-remote) is merged into HEAD
@@ -1011,6 +1045,6 @@ func init() {
 	f.StringVar(&verifyBase, "base", "", "the branch the PR merges into, when the PR row names none (unregistered here)")
 	f.BoolVar(&verifyNoCode, "no-code", false, "the sign-off will say this round changed no code (skips the moved-PR check, as the server does)")
 	f.BoolVar(&verifyJson, "json", false, "print the checks as JSON")
-	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session the task's rounds used")
+	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session the task's rounds used. Left out: the current sessions recorded for this repository on other instances, else the board session's")
 	agentTaskCmd.AddCommand(agentTaskVerifyCmd)
 }
