@@ -126,6 +126,20 @@ func checkOf(t *testing.T, r Report, id string) CheckResult {
 	return CheckResult{}
 }
 
+// checkDeclaration finds a declared check and its profile by check id.
+func checkDeclaration(t *testing.T, id string) (Profile, Check) {
+	t.Helper()
+	for _, p := range profiles {
+		for _, c := range p.Checks {
+			if c.ID == id {
+				return p, c
+			}
+		}
+	}
+	t.Fatalf("check %s is not declared", id)
+	return Profile{}, Check{}
+}
+
 func assertStatus(t *testing.T, r Report, id string, want Status) CheckResult {
 	t.Helper()
 	c := checkOf(t, r, id)

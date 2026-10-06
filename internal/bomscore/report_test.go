@@ -7,6 +7,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -148,8 +149,8 @@ func TestReportJSONShape(t *testing.T) {
 	if bytes.Contains(b, []byte("null")) || !bytes.Contains(b, []byte(`"failing": []`)) || !bytes.Contains(b, []byte(`"checks": []`)) || !bytes.Contains(b, []byte(`"errors": []`)) {
 		t.Error("want empty arrays as [] and no null")
 	}
-	if !bytes.Contains(b, []byte(`CISA et al., \"2026 Minimum Elements`)) || bytes.Contains(b, []byte(`\u003c`)) {
-		t.Error("source title missing or HTML-escaped")
+	if !bytes.Contains(b, []byte(`CISA et al., \"2026 Minimum Elements`)) {
+		t.Error("source title missing")
 	}
 	var generic map[string]any
 	if err := json.Unmarshal(b, &generic); err != nil {
@@ -168,6 +169,36 @@ func TestReportJSONShape(t *testing.T) {
 	none := Report{Profiles: []ProfileReport{{Key: "x", Checks: []CheckResult{}}}, Structure: StructureReport{Checks: []CheckResult{}}, Errors: []CheckError{}}
 	if !bytes.Contains(reportJSON(t, none), []byte(`"score": null`)) {
 		t.Error("want score null when nothing is counted")
+	}
+}
+
+// HTML escaping is off (design 3.4): the report carries the characters of the input raw. Purls
+// with more than one qualifier carry '&'; a name with '<' and '>' covers the other two.
+func TestReportJSONNoHTMLEscaping(t *testing.T) {
+	m := jsonFixture(t, "full.cdx.json")
+	g := gammaCDX(m)
+	g["purl"] = "pkg:apk/alpine/gamma@3.1.0?arch=x86_64&distro=alpine-3.20.5"
+	delete(g, "licenses")
+	alpha := m["components"].([]any)[0].(map[string]any)
+	delete(alpha, "purl")
+	delete(alpha, "licenses")
+	alpha["name"] = "alpha<arm64>"
+	r := scoreOK(t, encode(t, m), ProfileCISA2026)
+	failing := checkOf(t, r, "cisa-2026.component-license").Failing
+	wantFailing := []string{"alpha<arm64>@1.0.0", "pkg:apk/alpine/gamma@3.1.0?arch=x86_64&distro=alpine-3.20.5"}
+	if !reflect.DeepEqual(failing, wantFailing) {
+		t.Fatalf("failing %v, want %v", failing, wantFailing)
+	}
+	b := reportJSON(t, r)
+	for _, raw := range []string{`"alpha<arm64>@1.0.0"`, `"pkg:apk/alpine/gamma@3.1.0?arch=x86_64&distro=alpine-3.20.5"`} {
+		if !bytes.Contains(b, []byte(raw)) {
+			t.Errorf("report does not carry %s raw", raw)
+		}
+	}
+	for _, escaped := range []string{`\u0026`, `\u003c`, `\u003e`} {
+		if bytes.Contains(b, []byte(escaped)) {
+			t.Errorf("report carries %s: HTML escaping is on", escaped)
+		}
 	}
 }
 

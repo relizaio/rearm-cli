@@ -158,6 +158,43 @@ func TestUnknownMarkersCountAsMissing(t *testing.T) {
 	})
 }
 
+// The timestamp checks parse the value as RFC 3339 (design P-3.3); a present value that does not
+// parse fails them like a missing one, in both formats, and an RFC 3339 value with an offset and
+// fractional seconds passes.
+func TestTimestampMustParseRFC3339(t *testing.T) {
+	timestampChecks := []string{"cisa-2026.sbom-timestamp", "ntia-2021.timestamp", "fda.baseline.timestamp"}
+	formats := []struct {
+		name    string
+		fixture string
+		set     func(m map[string]any, v string)
+	}{
+		{"cdx", "full.cdx.json", func(m map[string]any, v string) { cdxMetadata(m)["timestamp"] = v }},
+		{"spdx", "full.spdx.json", func(m map[string]any, v string) { spdxCreationInfo(m)["created"] = v }},
+	}
+	for _, f := range formats {
+		baseline := scoreOK(t, readFixture(t, f.fixture))
+		for _, v := range []string{"yesterday", "2026-10-06", "2026-10-06T10:00:00"} {
+			t.Run(f.name+"/"+v, func(t *testing.T) {
+				m := jsonFixture(t, f.fixture)
+				f.set(m, v)
+				r := scoreOK(t, encode(t, m))
+				for _, id := range timestampChecks {
+					p, c := checkDeclaration(t, id)
+					assertOnlyFails(t, p, c, r, baseline, "", nil)
+				}
+			})
+		}
+		t.Run(f.name+"/offset and fraction", func(t *testing.T) {
+			m := jsonFixture(t, f.fixture)
+			f.set(m, "2026-10-06T10:00:00.123+02:00")
+			r := scoreOK(t, encode(t, m))
+			for _, id := range timestampChecks {
+				assertStatus(t, r, id, StatusPass)
+			}
+		})
+	}
+}
+
 // Test 22, O3: a declared-unknown value counts as missing (isPresent).
 func TestOperatorPoint_O3(t *testing.T) {
 	for _, v := range []string{"", "  ", "\t", "NOASSERTION", "NONE", " NOASSERTION "} {
