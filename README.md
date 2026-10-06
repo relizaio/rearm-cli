@@ -42,6 +42,7 @@ All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/
     2. [BOM supplier enrichment with BEAR](docs/bomutils.md#92-bom-supplier-enrichment-with-bear)
     3. [Convert SPDX to CycloneDX](docs/bomutils.md#93-convert-spdx-to-cyclonedx)
     4. [Merge Multiple BOMs](docs/bomutils.md#94-merge-multiple-boms)
+    5. [Score an SBOM against CISA, NTIA and FDA minimum elements](docs/bomutils.md#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)
 10. [Finalize Release After CI Completion](#10-use-case-finalize-release-after-ci-completion)
 11. [Transparency Exchange API (TEA) Commands](docs/tea.md)
     1. [Transparency Exchange API (TEA) Discovery](docs/tea.md#111-transparency-exchange-api-tea-discovery)

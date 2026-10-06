@@ -27,6 +27,7 @@ RUN go vet ./...
 RUN sh hack/pin-client-go.sh --check
 
 RUN go test ./tests
+RUN go test ./internal/bomscore/...
 RUN go version
 ARG TARGETOS
 ARG TARGETARCH
