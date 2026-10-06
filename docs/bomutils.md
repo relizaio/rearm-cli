@@ -11,6 +11,7 @@ Base Command: `bomutils`
    - [Enrich Both Supplier and License](#923-enrich-both-supplier-and-license)
 3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
 4. [Merge Multiple BOMs](#94-merge-multiple-boms)
+5. [Score an SBOM against CISA, NTIA and FDA minimum elements](#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)
 
 ---
 
@@ -172,3 +173,77 @@ Flags stand for:
 - **--root-component-merge-mode** - How to handle root components: PRESERVE_UNDER_NEW_ROOT or FLATTEN_UNDER_NEW_ROOT (default: PRESERVE_UNDER_NEW_ROOT)
 - **--purl** - Set bom-ref and purl for the root merged component (optional)
 - **--outfile** - Output file path to write merged BOM (optional - writes to stdout when not specified)
+
+## 9.5 Score an SBOM against CISA, NTIA and FDA minimum elements
+
+The `score` command reads one SBOM file and says, per profile, whether it is ready (`READY`, `NOT_READY` or `UNKNOWN`), a score from 0 to 100, and which checks fail on which components. It runs locally: no ReARM server, no credentials, no network call, and no file is written except `--outfile`.
+
+Sample commands:
+
+```bash
+rearm bomutils score -f bom.cdx.json
+rearm bomutils score -f bom.spdx.json --profile cisa-2026 --profile fda --format json -o report.json
+cat bom.cdx.xml | rearm bomutils score --profile ntia-2021 --fail-on-not-ready
+```
+
+Flags stand for:
+- **-f, --infile** - Input SBOM file path; empty or `-` reads stdin
+- **-o, --outfile** - Output report file path; empty or `-` writes stdout
+- **--profile** - Profile to score, repeatable: `cisa-2026` (default), `ntia-2021`, `fda`. Profiles come out in the order given; a profile given twice is scored once
+- **--format** - `text` (default) or `json`
+- **--fail-on-not-ready** - Exit 3 when any requested profile is `NOT_READY` or `UNKNOWN` (the report is still written)
+
+### Profiles and their source documents
+
+| Profile | Document | Version / date | What is checked |
+|---|---|---|---|
+| `cisa-2026` | CISA et al., "2026 Minimum Elements for a Software Bill of Materials (SBOM)", https://www.cisa.gov/sites/default/files/2026-07/2026_cisa_sbom_minimum_elements_508c.pdf | version 2.1, 2026-07-29 | the 17 data fields of Table 1 (REQUIRED); the six practices (Accommodation of Updates to SBOM Data, Coverage, Distribution and Delivery, Explicitly Identifying Unknown Information, Frequency, Machine-Processable Data) as INFO checks, always not assessed: one file cannot show a practice |
+| `ntia-2021` | NTIA, "The Minimum Elements For a Software Bill of Materials (SBOM)", https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf | 2021-07-12 | the seven fields of the Data Fields table |
+| `fda` | FDA, "Cybersecurity in Medical Devices: Quality Management System Considerations and Content of Premarket Submissions", section V.A.4(b), https://www.fda.gov/media/119933/download | 2026-02-03 | the eight baseline attributes of NTIA "Framing Software Component Transparency", 2nd edition (2021-10-21), section 2.2, which the guidance cites (the seven July 2021 fields plus Component Hash); the software level of support and the end-of-support date of each component; known vulnerabilities as an INFO check (delivered as VDR/VEX with the submission, not in the SBOM) |
+
+What the checks read, in short:
+- **SBOM author**: CycloneDX `metadata.authors[].name` or `metadata.manufacturer.name` (the organization that created the BOM). The deprecated `metadata.manufacture` names the maker of the described component, not the BOM's author, and does not count, nor does `metadata.supplier`. SPDX: a `Person:` or `Organization:` creator.
+- **Tool name and version**: CycloneDX legacy `metadata.tools[]`, `metadata.tools.components[]` and `.services[]`; every tool needs a version. SPDX: `Tool:` creators of the form `name-version` (the text after the last `-`).
+- **Component producer**: CycloneDX `manufacturer`, `supplier`, `authors[]` or `author`; SPDX `supplier` or `originator`.
+- **Component identifiers**: CycloneDX `purl`, `cpe`, `swid.tagId`, `swhid[]` or `omniborId[]`; SPDX external references of type `purl`, `cpe22Type`, `cpe23Type`, `swh` or `gitoid`.
+- **Dependency relationship**: CycloneDX `dependencies[]` has an entry; SPDX has a `DEPENDS_ON`, `DEPENDENCY_OF`, `CONTAINS` or `CONTAINED_BY` relationship between two packages, or from a package to `NONE`.
+- **Level of support** (`fda`): the component property `reliza:support:levelOfSupport` is exactly `actively maintained`, `no longer maintained` or `abandoned`. **End-of-support date** (`fda`): the component property `cdx:lifecycle:milestone:endOfSupport`, or SPDX 2.3 `validUntilDate`, is an ISO 8601 date or date-time. ReARM writes both properties into release exports that include support metadata.
+- The component set is every CycloneDX component, nested ones included, without `metadata.component`; for SPDX every package except the ones the document describes.
+- A value that only says "unknown" (`NOASSERTION`, `NONE`, an empty or whitespace-only string) counts as missing.
+- A signature is checked for presence only (CycloneDX JSON top-level `signature`; XML a root-level `Signature` element in a foreign namespace such as XML-DSig), never verified.
+
+**What SPDX 2.x cannot carry.** SPDX 2.x has no place for the SBOM author signature, the generation context (lifecycle), the SBOM version or the level of support, and SPDX 2.1 and 2.2 none for the end-of-support date. Those checks fail with the note `not representable in SPDX <version>`, so an SPDX 2.x file is always `NOT_READY` under `cisa-2026` and `fda`.
+
+### Supported inputs
+
+| Format | Serializations | Versions |
+|---|---|---|
+| CycloneDX | JSON, XML | 1.0 to 1.7 |
+| SPDX | JSON, YAML, tag-value | 2.1, 2.2, 2.3 |
+
+Not supported: SPDX RDF/XML, SPDX 3.x, CycloneDX 2.0 and newer, CycloneDX protobuf, and files of neither format. A CycloneDX document without components (for example VEX only) is scored: every component check fails with `0/0`.
+
+### Verdict and score
+
+- A check is `PASS` when every component (or the document) has the field, else `FAIL`; a component check on a BOM without components fails. `NOT_ASSESSED` is for INFO checks only; `ERROR` is a check that failed to evaluate (printed to stderr and listed under `errors`).
+- Verdict: `NOT_READY` when a REQUIRED check fails; otherwise `UNKNOWN` when a REQUIRED check is in `ERROR`; otherwise `READY`. INFO checks never change a verdict.
+- Score: over the REQUIRED checks that pass or fail, the mean of `passed / total` per check, times 100, rounded down, so 100 means every counted check passed in full. One missing hash in 5000 components costs a fraction of one check, not the whole check.
+- The `structure` block (CycloneDX only) holds three INFO checks, `structure.purl-valid`, `structure.refs-resolve` and `structure.no-orphans`; they never change a verdict or a score.
+
+### Exit codes
+
+- **0** - scored, whatever the verdict
+- **1** - unsupported or unparsable input: one line on stderr, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, nothing on stdout
+- **2** - an unknown `--profile` or `--format` value
+- **3** - with `--fail-on-not-ready`, a requested profile is `NOT_READY` or `UNKNOWN`
+
+### Sample output
+
+```
+cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 99
+  FAIL  Component Hash Value  120/123  (Table 1, Component Hash Value)
+        missing in: libbar@0.3, libfoo@2.1, pkg:npm/a@1.0.0
+  17 required: 16 pass, 1 fail, 0 error; 6 not assessed
+```
+
+With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles and CLI version give the same bytes. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note.
