@@ -206,7 +206,7 @@ func (d *Doc) addCDXServiceRefs(services []cdx.Service) {
 }
 
 func cdxComp(c *cdx.Component, position int) Comp {
-	comp := Comp{Ref: c.BOMRef, Name: c.Name, Version: c.Version, IsFile: c.Type == cdx.ComponentTypeFile}
+	comp := Comp{Ref: c.BOMRef, Name: c.Name, Version: c.Version, IsFile: c.Type == cdx.ComponentTypeFile, Type: string(c.Type)}
 	if c.Manufacturer != nil {
 		comp.Producers = append(comp.Producers, c.Manufacturer.Name)
 	}

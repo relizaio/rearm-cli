@@ -1,6 +1,7 @@
 package bomscore
 
 import (
+	"sort"
 	"strings"
 	"time"
 )
@@ -18,6 +19,21 @@ var supportLevels = map[string]bool{
 	"no longer maintained": true,
 	"abandoned":            true,
 }
+
+// skippedSupportTypes are the component types the fda support checks do not judge: no supplier
+// supports a file, key material, a data set, an ML model or a device. Exact, case-sensitive values
+// of CycloneDX component.type and SPDX 2.3 primaryPackagePurpose; an absent or any other value is
+// judged. Nothing else in the engine reads this set.
+var skippedSupportTypes = map[Format]map[string]bool{
+	FormatCycloneDX: {"file": true, "cryptographic-asset": true, "data": true, "machine-learning-model": true, "device": true},
+	FormatSPDX:      {"FILE": true, "DEVICE": true},
+}
+
+// noteNoSupportable is the note of a support check that skipped every component.
+const noteNoSupportable = "no supportable component"
+
+// supportable says whether the fda support checks judge the component (false for the skipped types).
+func (c *Comp) supportable(f Format) bool { return !skippedSupportTypes[f][c.Type] }
 
 // isPresent says whether a value states something. Operator point O3: a declared-unknown value
 // (SPDX NOASSERTION or NONE, an empty or whitespace-only string) counts as missing. To let declared
@@ -71,6 +87,36 @@ func perComponent(d *Doc, has func(c *Comp) bool) Outcome {
 		} else {
 			o.Failing = append(o.Failing, c.DisplayID)
 		}
+	}
+	return o
+}
+
+// perSupportableComponent evaluates has on the supportable components only and reports the rest:
+// how many were skipped and their distinct types, sorted. When it skipped every component the
+// check has total 0 (FAIL) and the note noteNoSupportable.
+func perSupportableComponent(d *Doc, has func(c *Comp) bool) Outcome {
+	var o Outcome
+	types := map[string]bool{}
+	for i := range d.Components {
+		c := &d.Components[i]
+		if !c.supportable(d.Format) {
+			o.Skipped++
+			types[c.Type] = true
+			continue
+		}
+		o.Total++
+		if has(c) {
+			o.Passed++
+		} else {
+			o.Failing = append(o.Failing, c.DisplayID)
+		}
+	}
+	for t := range types {
+		o.SkippedTypes = append(o.SkippedTypes, t)
+	}
+	sort.Strings(o.SkippedTypes)
+	if o.Skipped > 0 && o.Total == 0 {
+		o.Note = noteNoSupportable
 	}
 	return o
 }
@@ -258,7 +304,7 @@ func hasSupportLevel(d *Doc) Outcome {
 	if d.notRepresentable(FieldSupportLevel) {
 		return compNotRepresentable(d)
 	}
-	return perComponent(d, func(c *Comp) bool {
+	return perSupportableComponent(d, func(c *Comp) bool {
 		for _, p := range c.Properties {
 			if p.Name == propSupportLevel && supportLevels[p.Value] {
 				return true
@@ -272,7 +318,7 @@ func hasEndOfSupport(d *Doc) Outcome {
 	if d.notRepresentable(FieldEndOfSupport) {
 		return compNotRepresentable(d)
 	}
-	return perComponent(d, func(c *Comp) bool {
+	return perSupportableComponent(d, func(c *Comp) bool {
 		if d.Format == FormatSPDX {
 			return parseISODate(c.ValidUntil)
 		}

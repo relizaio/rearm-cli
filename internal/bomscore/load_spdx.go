@@ -151,6 +151,7 @@ func spdxDoc(doc *spdx.Document, version string, s Serialization) *Doc {
 			Version:    p.PackageVersion,
 			ValidUntil: p.ValidUntilDate,
 			IsFile:     p.PrimaryPackagePurpose == spdxPurposeFile,
+			Type:       p.PrimaryPackagePurpose,
 			Licenses:   []string{p.PackageLicenseDeclared, p.PackageLicenseConcluded},
 		}
 		if p.PackageSupplier != nil {

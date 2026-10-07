@@ -233,7 +233,8 @@ Not supported: SPDX RDF/XML, SPDX 3.x, CycloneDX 2.0 and newer, CycloneDX protob
 - Verdict: `NOT_READY` when a REQUIRED check fails; otherwise `UNKNOWN` when a REQUIRED check is in `ERROR`; otherwise `READY`. INFO checks never change a verdict.
 - Score: over the REQUIRED checks that pass or fail, the mean of `passed / total` per check, times 100, rounded down, so 100 means every counted check passed in full. One missing hash in 5000 components costs a fraction of one check, not the whole check.
 - The `structure` block (CycloneDX only) holds three INFO checks, `structure.purl-valid`, `structure.refs-resolve` and `structure.no-orphans`; they never change a verdict or a score.
-- `input.components` is the number of components scored, the `total` of every component check; with `--skip-files`, `input.componentsSkipped` is the number left out.
+- `input.components` is the number of components scored, the `total` of every component check except the two fda support checks below; with `--skip-files`, `input.componentsSkipped` is the number left out.
+- `fda.component.support-level` and `fda.component.end-of-support` judge software packages only: they skip CycloneDX components of type `file`, `cryptographic-asset`, `data`, `machine-learning-model` and `device`, and SPDX 2.3 packages with `primaryPackagePurpose` `FILE` or `DEVICE`; a component without a type is judged. A check that skipped components reports `componentsSkipped` and `skippedTypes`, and the text output prints `skipped N components of type ... (not software packages)` under it. With `--skip-files` the file components are already left out before these checks. Every other check judges these components as before.
 
 ### How results differ from sbomqs
 
@@ -247,6 +248,7 @@ sbomqs v2.1.2 scores the same fields, and on the real-world files we compared mo
 | SBOM author | never taken from `metadata.tools` or `Tool:` creators | its NTIA 2021 profile gives full marks for an author inferred from the generation tool (its 2026 profile does not) | a tool is not the author of the SBOM |
 | Declared unknowns | `NOASSERTION`, `NONE` and blank count as missing in every field | counts SPDX `NOASSERTION` as a declared supplier and producer | a value that says "unknown" does not give the field |
 | `NOASSERTION` supplier | missing, in SPDX as in CycloneDX | present in SPDX; on the CycloneDX file of the same scan it counted 65 of 1845 components, on the SPDX file 1842 | the same scan should score the same in either format |
+| Level of support, end of support | skips file, key-material, data, ML-model and device components, stated per check | scores every component | a supplier does not maintain a key file or a data set |
 
 With `--skip-files` the per-component totals differ from sbomqs as well, which scores file components.
 
@@ -266,4 +268,4 @@ cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 99
   17 required: 16 pass, 1 fail, 0 error; 6 not assessed
 ```
 
-With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count and `componentsSkipped` the number `--skip-files` left out) comes `options`, today `{"skipFiles": false}` or `true`. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note.
+With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count and `componentsSkipped` the number `--skip-files` left out) comes `options`, today `{"skipFiles": false}` or `true`. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note, and, when the check skipped components, `componentsSkipped` and `skippedTypes`.

@@ -90,7 +90,7 @@ func TestOperatorPoint_O4(t *testing.T) {
 
 // Test 14: determinism, golden reports, profile order and duplicates.
 func TestDeterminismAndGolden(t *testing.T) {
-	for _, fixture := range []string{"full.cdx.json", "full.spdx.json"} {
+	for _, fixture := range []string{"full.cdx.json", "full.spdx.json", "full.types.cdx.json"} {
 		data := readFixture(t, fixture)
 		for _, key := range allProfiles {
 			first := reportJSON(t, scoreOK(t, data, key))
