@@ -9,7 +9,11 @@
     "specVersion": "2.3",
     "serialization": "json",
     "components": 4,
+    "componentsSkipped": 0,
     "sha256": "baecc4b0b72a979dd9573c48101c2d4de99b71a603958a1b500459a48579f491"
+  },
+  "options": {
+    "skipFiles": false
   },
   "profiles": [
     {
@@ -139,7 +143,7 @@
           "failing": [],
           "failingTruncated": false,
           "ref": "V.A.4(b); NTIA Framing 2nd ed. 2.2, Relationship",
-          "remedy": "",
+          "remedy": "declare the described component's direct dependencies: CycloneDX dependencies[] entry for metadata.component's bom-ref (or a compositions entry with aggregate complete), SPDX DEPENDS_ON from the described package",
           "note": ""
         },
         {

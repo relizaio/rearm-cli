@@ -91,9 +91,11 @@ type Comp struct {
 	Licenses    []string // CycloneDX license id, name or expression; SPDX licenseDeclared, licenseConcluded
 	Properties  []Property
 	ValidUntil  string // SPDX 2.3 validUntilDate
+	IsFile      bool   // CycloneDX type file; SPDX 2.3 primaryPackagePurpose FILE
 }
 
-// Dependency is one CycloneDX dependencies[] entry.
+// Dependency is one CycloneDX dependencies[] entry, or for SPDX the packages one package depends
+// on or contains (DEPENDS_ON / CONTAINS from it, DEPENDENCY_OF / CONTAINED_BY to it).
 type Dependency struct {
 	Ref       string
 	DependsOn []string
@@ -111,19 +113,47 @@ type Doc struct {
 	Lifecycles       []string // CycloneDX metadata.lifecycles[] phase or name
 	SBOMVersion      int
 	SignaturePresent bool
-	// HasDependencies: CycloneDX dependencies[] has an entry; SPDX has a dependency relationship
-	// between packages of the document (or from a package to NONE).
-	HasDependencies bool
+
+	// SubjectRefs names the described component: CycloneDX metadata.component's bom-ref (one
+	// element, when present and not blank); SPDX the SPDXIDs of the described packages. Empty when
+	// the document names no subject.
+	SubjectRefs []string
+	// SubjectNamed: CycloneDX metadata.component exists (with or without a bom-ref); SPDX a
+	// DESCRIBES or DESCRIBED_BY names a package. Only the wording of the dependency note reads it.
+	SubjectNamed bool
+	// DeclaredNoDependencies holds the refs that may pass the dependency rule with no dependsOn:
+	// CycloneDX a compositions[] entry with aggregate complete lists the bom-ref in its
+	// dependencies; SPDX a DEPENDS_ON NONE or CONTAINS NONE from the package. A non-empty
+	// dependsOn is preferred when both exist.
+	DeclaredNoDependencies map[string]bool
 
 	Components []Comp
 
-	// CycloneDX only, for the structure checks.
+	// Dependencies: CycloneDX dependencies[]; SPDX package-to-package dependency relationships,
+	// one entry per depending package. The structure checks read them for CycloneDX only.
 	Dependencies []Dependency
-	Refs         []string // every bom-ref of a component (metadata.component and its parts included) or service
+	// Refs: CycloneDX only, every bom-ref of a component (metadata.component, its parts and
+	// skipped files included) or service.
+	Refs []string
 
 	NotRepresentable map[Field]bool
 }
 
 func (d *Doc) notRepresentable(f Field) bool {
 	return d.NotRepresentable[f]
+}
+
+// skipFiles removes the file components from the component set and returns how many it removed.
+// Components nested in a file component are kept (they are judged on their own type), and Refs is
+// not touched, so dependencies naming a skipped file still resolve.
+func (d *Doc) skipFiles() int {
+	kept := d.Components[:0]
+	for _, c := range d.Components {
+		if !c.IsFile {
+			kept = append(kept, c)
+		}
+	}
+	skipped := len(d.Components) - len(kept)
+	d.Components = kept
+	return skipped
 }

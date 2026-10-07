@@ -156,6 +156,26 @@ func TestBomScoreFailOnNotReady(t *testing.T) {
 	if run := runBomScore(cmd.BomScoreOptions{FailOnNotReady: true, Profiles: []string{"ntia-2021"}}, spdx); run.code != 0 {
 		t.Errorf("READY with the flag: exit %d, want 0", run.code)
 	}
+	// SCORE-10: the dependency rule alone makes ntia-2021 NOT_READY when the root declares nothing.
+	var m map[string]any
+	if err := json.Unmarshal(bomScoreFixture(t, "full.cdx.json"), &m); err != nil {
+		t.Fatal(err)
+	}
+	var kept []any
+	for _, e := range m["dependencies"].([]any) {
+		if e.(map[string]any)["ref"] != "app" {
+			kept = append(kept, e)
+		}
+	}
+	m["dependencies"] = kept
+	noRoot, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run := runBomScore(cmd.BomScoreOptions{FailOnNotReady: true, Profiles: []string{"ntia-2021"}, Format: "json"}, noRoot); run.code != 3 ||
+		!strings.Contains(run.stdout, "described component declares no direct dependencies: app") {
+		t.Errorf("root without dependencies under ntia-2021: exit %d, want 3 and the dependency note", run.code)
+	}
 	unknown := bomscore.Report{Profiles: []bomscore.ProfileReport{{Verdict: bomscore.VerdictReady}, {Verdict: bomscore.VerdictUnknown}}}
 	if code := cmd.BomScoreExitCode(unknown, true); code != 3 {
 		t.Errorf("UNKNOWN with the flag: exit %d, want 3", code)
@@ -221,5 +241,9 @@ func TestBomScoreBinary(t *testing.T) {
 	}
 	if code, _, _ := run(nil, "-f", filepath.Join(bomScoreFixtures, "full.spdx"), "--format", "xml"); code != 2 {
 		t.Errorf("--format xml: exit %d, want 2", code)
+	}
+	// SCORE-10: the --skip-files flag is registered and reaches the report.
+	if code, out, _ := run(bomScoreFixture(t, "full.cdx.json"), "--skip-files", "--format", "json"); code != 0 || !strings.Contains(out, `"skipFiles": true`) {
+		t.Errorf("--skip-files: exit %d, stdout %.200q; want 0 and skipFiles true", code, out)
 	}
 }

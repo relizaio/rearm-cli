@@ -89,7 +89,7 @@ func scoreOK(t *testing.T, data []byte, profiles ...ProfileKey) Report {
 	if len(profiles) == 0 {
 		profiles = allProfiles
 	}
-	r, err := Score(data, keyStrings(profiles), testEngineVersion)
+	r, err := Score(data, keyStrings(profiles), testEngineVersion, Options{})
 	if err != nil {
 		t.Fatalf("Score: %v", err)
 	}

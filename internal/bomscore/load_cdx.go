@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"strconv"
+	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
@@ -72,12 +73,13 @@ func xmlRootSignature(data []byte) (bool, error) {
 
 func cdxDoc(bom *cdx.BOM, s Serialization, signed bool) *Doc {
 	d := &Doc{
-		Format:           FormatCycloneDX,
-		SpecVersion:      bom.SpecVersion.String(),
-		Serialization:    s,
-		SBOMVersion:      bom.Version,
-		SignaturePresent: signed,
-		NotRepresentable: map[Field]bool{},
+		Format:                 FormatCycloneDX,
+		SpecVersion:            bom.SpecVersion.String(),
+		Serialization:          s,
+		SBOMVersion:            bom.Version,
+		SignaturePresent:       signed,
+		DeclaredNoDependencies: map[string]bool{},
+		NotRepresentable:       map[Field]bool{},
 	}
 	if m := bom.Metadata; m != nil {
 		d.Timestamp = m.Timestamp
@@ -105,6 +107,10 @@ func cdxDoc(bom *cdx.BOM, s Serialization, signed bool) *Doc {
 			}
 		}
 		if m.Component != nil {
+			d.SubjectNamed = true
+			if strings.TrimSpace(m.Component.BOMRef) != "" {
+				d.SubjectRefs = []string{m.Component.BOMRef}
+			}
 			// The subject and its parts are bom-refs a dependency may name, not components of
 			// the set.
 			d.addCDXComponentRefs([]cdx.Component{*m.Component})
@@ -117,13 +123,24 @@ func cdxDoc(bom *cdx.BOM, s Serialization, signed bool) *Doc {
 		d.addCDXServiceRefs(*bom.Services)
 	}
 	if bom.Dependencies != nil {
-		d.HasDependencies = len(*bom.Dependencies) > 0
 		for _, dep := range *bom.Dependencies {
 			e := Dependency{Ref: dep.Ref}
 			if dep.Dependencies != nil {
 				e.DependsOn = append(e.DependsOn, *dep.Dependencies...)
 			}
 			d.Dependencies = append(d.Dependencies, e)
+		}
+	}
+	if bom.Compositions != nil {
+		// Only aggregate complete states that a listed component's dependencies are all known;
+		// incomplete, unknown, not_specified or any other value states nothing.
+		for _, c := range *bom.Compositions {
+			if c.Aggregate != cdx.CompositionAggregateComplete || c.Dependencies == nil {
+				continue
+			}
+			for _, ref := range *c.Dependencies {
+				d.DeclaredNoDependencies[string(ref)] = true
+			}
 		}
 	}
 	return d
@@ -189,7 +206,7 @@ func (d *Doc) addCDXServiceRefs(services []cdx.Service) {
 }
 
 func cdxComp(c *cdx.Component, position int) Comp {
-	comp := Comp{Ref: c.BOMRef, Name: c.Name, Version: c.Version}
+	comp := Comp{Ref: c.BOMRef, Name: c.Name, Version: c.Version, IsFile: c.Type == cdx.ComponentTypeFile}
 	if c.Manufacturer != nil {
 		comp.Producers = append(comp.Producers, c.Manufacturer.Name)
 	}

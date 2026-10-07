@@ -30,7 +30,7 @@ var profileCISA2026 = Profile{
 		cisaField("component-hash-algorithm", "Component Hash Algorithm", ScopeComponent, "", hasComponentHashAlgorithm),
 		cisaField("component-hash-value", "Component Hash Value", ScopeComponent, "", hasComponentHashValue),
 		cisaField("component-license", "Component License", ScopeComponent, remedyEnrich, hasComponentLicense),
-		cisaField("component-dependency-relationship", "Component Dependency Relationship", ScopeDocument, "", hasDependencyRelationship),
+		cisaField("component-dependency-relationship", "Component Dependency Relationship", ScopeDocument, remedyDependencies, declaresDirectDependencies),
 		cisaPractice("updates", "Accommodation of Updates to SBOM Data"),
 		cisaPractice("coverage", "Coverage"),
 		cisaPractice("distribution", "Distribution and Delivery"),

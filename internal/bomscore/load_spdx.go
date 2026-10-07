@@ -11,13 +11,15 @@ import (
 	"github.com/spdx/tools-golang/yaml"
 )
 
-// SPDX creator types and the special value of a relationship end that states "none".
+// SPDX creator types, the special values of a relationship end (NONE states "none") and the
+// primaryPackagePurpose of a package that is a file.
 const (
 	spdxCreatorPerson       = "Person"
 	spdxCreatorOrganization = "Organization"
 	spdxCreatorTool         = "Tool"
 	spdxNone                = "NONE"
 	spdxNoAssertion         = "NOASSERTION"
+	spdxPurposeFile         = "FILE"
 )
 
 // spdxIdentifierTypes are the external reference types that identify a package.
@@ -94,6 +96,8 @@ func spdxDoc(doc *spdx.Document, version string, s Serialization) *Doc {
 		return id.DocumentRefID == "" && id.SpecialID == "" && packages[id.ElementRefID]
 	}
 	isNone := func(id common.DocElementID) bool { return id.SpecialID == spdxNone }
+	d.DeclaredNoDependencies = map[string]bool{}
+	dependencyAt := map[string]int{} // depending package -> index in d.Dependencies
 	for _, r := range doc.Relationships {
 		if r == nil {
 			continue
@@ -104,12 +108,36 @@ func spdxDoc(doc *spdx.Document, version string, s Serialization) *Doc {
 		case r.Relationship == common.TypeRelationshipDescribeBy && isDocument(r.RefB) && isPackage(r.RefA):
 			described[r.RefA.ElementRefID] = true
 		case spdxDependencyTypes[r.Relationship]:
-			// Between packages of this document, or from a package to NONE (no dependencies). A
-			// CONTAINS to a file (the readers fold hasFiles into such relationships) or an end of
-			// NOASSERTION does not count.
-			if (isPackage(r.RefA) && (isPackage(r.RefB) || isNone(r.RefB))) || (isNone(r.RefA) && isPackage(r.RefB)) {
-				d.HasDependencies = true
+			// Read as "from depends on (or contains) to", DEPENDENCY_OF and CONTAINED_BY turned
+			// round. Only package to package counts, or package to NONE (it states no
+			// dependencies). A CONTAINS to a file (the readers fold hasFiles into such
+			// relationships) or an end of NOASSERTION does not count.
+			from, to := r.RefA, r.RefB
+			if r.Relationship == common.TypeRelationshipDependencyOf || r.Relationship == common.TypeRelationshipContainedBy {
+				from, to = r.RefB, r.RefA
 			}
+			if !isPackage(from) {
+				continue
+			}
+			ref := common.RenderElementID(from.ElementRefID)
+			switch {
+			case isNone(to):
+				d.DeclaredNoDependencies[ref] = true
+			case isPackage(to):
+				i, ok := dependencyAt[ref]
+				if !ok {
+					i = len(d.Dependencies)
+					dependencyAt[ref] = i
+					d.Dependencies = append(d.Dependencies, Dependency{Ref: ref})
+				}
+				d.Dependencies[i].DependsOn = append(d.Dependencies[i].DependsOn, common.RenderElementID(to.ElementRefID))
+			}
+		}
+	}
+	d.SubjectNamed = len(described) > 0
+	for _, p := range doc.Packages {
+		if p != nil && described[p.PackageSPDXIdentifier] {
+			d.SubjectRefs = append(d.SubjectRefs, common.RenderElementID(p.PackageSPDXIdentifier))
 		}
 	}
 
@@ -122,6 +150,7 @@ func spdxDoc(doc *spdx.Document, version string, s Serialization) *Doc {
 			Name:       p.PackageName,
 			Version:    p.PackageVersion,
 			ValidUntil: p.ValidUntilDate,
+			IsFile:     p.PrimaryPackagePurpose == spdxPurposeFile,
 			Licenses:   []string{p.PackageLicenseDeclared, p.PackageLicenseConcluded},
 		}
 		if p.PackageSupplier != nil {

@@ -43,6 +43,7 @@ var (
 	bomScoreProfiles       []string
 	bomScoreFormat         string
 	bomScoreFailOnNotReady bool
+	bomScoreSkipFiles      bool
 )
 
 // BomScoreOptions are the inputs of one bomutils score run. Infile and Outfile empty or "-" mean
@@ -53,6 +54,7 @@ type BomScoreOptions struct {
 	Profiles       []string
 	Format         BomScoreFormat
 	FailOnNotReady bool
+	SkipFiles      bool
 }
 
 var bomScoreCmd = &cobra.Command{
@@ -72,6 +74,7 @@ Exit codes: 0 scored; 1 unsupported or unparsable input; 2 unknown --profile or 
 			Profiles:       bomScoreProfiles,
 			Format:         BomScoreFormat(bomScoreFormat),
 			FailOnNotReady: bomScoreFailOnNotReady,
+			SkipFiles:      bomScoreSkipFiles,
 		}, os.Stdin, os.Stdout, os.Stderr)
 		if code != bomScoreExitScored {
 			os.Exit(code)
@@ -85,6 +88,8 @@ func init() {
 	bomScoreCmd.Flags().StringVar(&bomScoreFormat, "format", string(BomScoreFormatText), "report format: text or json")
 	bomScoreCmd.Flags().BoolVar(&bomScoreFailOnNotReady, "fail-on-not-ready", false,
 		"exit 3 when a requested profile is NOT_READY or UNKNOWN")
+	bomScoreCmd.Flags().BoolVar(&bomScoreSkipFiles, "skip-files", false,
+		"leave type: file components out of the component checks (CISA 2026 Coverage allows excluding non-code files)")
 }
 
 // RunBomScore scores the input and writes the report; it returns the exit code. Its own errors
@@ -123,7 +128,7 @@ func RunBomScore(opts BomScoreOptions, stdin io.Reader, stdout, stderr io.Writer
 		return bomScoreExitRefused
 	}
 
-	report, err := bomscore.Score(input, profiles, Version)
+	report, err := bomscore.Score(input, profiles, Version, bomscore.Options{SkipFiles: opts.SkipFiles})
 	if err != nil {
 		var unknown *bomscore.UnknownProfileError
 		if errors.As(err, &unknown) {

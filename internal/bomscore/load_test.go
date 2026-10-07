@@ -75,7 +75,7 @@ func TestLoadRefusals(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, err := Score([]byte(c.input), keyStrings(allProfiles), testEngineVersion)
+			r, err := Score([]byte(c.input), keyStrings(allProfiles), testEngineVersion, Options{})
 			if err == nil {
 				t.Fatalf("scored, want refusal %q", c.want)
 			}
