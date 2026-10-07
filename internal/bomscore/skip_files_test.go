@@ -10,8 +10,10 @@ import (
 // the component checks.
 
 // twoFilesCDX is full.cdx.json with two type file components and no version, one of them nesting a
-// complete library (epsilon, a copy of alpha).
-func twoFilesCDX(t *testing.T) []byte {
+// complete library (epsilon, a copy of alpha), and two components of other types (application
+// tool, container base-image, only with otherTypes) that have no version either: --skip-files must
+// keep and score them.
+func twoFilesCDX(t *testing.T, otherTypes bool) []byte {
 	t.Helper()
 	m := jsonFixture(t, "full.cdx.json")
 	components := m["components"].([]any)
@@ -19,17 +21,24 @@ func twoFilesCDX(t *testing.T) []byte {
 	epsilon["bom-ref"] = "epsilon"
 	epsilon["name"] = "epsilon"
 	epsilon["purl"] = "pkg:npm/epsilon@1.0.0"
-	m["components"] = append(components,
+	components = append(components,
 		map[string]any{"type": "file", "bom-ref": "file-readme", "name": "README.md"},
 		map[string]any{"type": "file", "bom-ref": "file-app-bin", "name": "bin/app", "components": []any{epsilon}},
 	)
+	if otherTypes {
+		components = append(components,
+			map[string]any{"type": "application", "bom-ref": "app-tool", "name": "tool"},
+			map[string]any{"type": "container", "bom-ref": "img-base", "name": "base-image"},
+		)
+	}
+	m["components"] = components
 	return encode(t, m)
 }
 
 func TestSkipFiles(t *testing.T) {
-	d := loadOK(t, twoFilesCDX(t))
-	if n := len(d.Components); n != 7 {
-		t.Fatalf("component set %d, want 7 before skipping", n)
+	d := loadOK(t, twoFilesCDX(t, true))
+	if n := len(d.Components); n != 9 {
+		t.Fatalf("component set %d, want 9 before skipping", n)
 	}
 	if n := d.skipFiles(); n != 2 {
 		t.Errorf("skipFiles() = %d, want 2", n)
@@ -38,8 +47,9 @@ func TestSkipFiles(t *testing.T) {
 	for _, c := range d.Components {
 		names = append(names, c.Name)
 	}
-	if len(names) != 5 || !contains(names, "epsilon") || contains(names, "README.md") || contains(names, "bin/app") {
-		t.Errorf("component set after skipping %v, want the four fixture components and epsilon", names)
+	if len(names) != 7 || !contains(names, "epsilon") || !contains(names, "tool") || !contains(names, "base-image") ||
+		contains(names, "README.md") || contains(names, "bin/app") {
+		t.Errorf("component set after skipping %v, want the four fixture components, epsilon, tool and base-image", names)
 	}
 	for _, ref := range []string{"file-readme", "file-app-bin", "epsilon"} {
 		if !contains(d.Refs, ref) {
@@ -50,9 +60,17 @@ func TestSkipFiles(t *testing.T) {
 	m := jsonFixture(t, "full.spdx.json")
 	gammaSPDX(m)["primaryPackagePurpose"] = "FILE"
 	spdxPackage(m, "SPDXRef-alpha")["primaryPackagePurpose"] = "LIBRARY"
+	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "APPLICATION"
 	d = loadOK(t, encode(t, m))
 	if n := d.skipFiles(); n != 1 || len(d.Components) != 3 {
 		t.Errorf("SPDX 2.3 primaryPackagePurpose FILE: skipped %d, %d left, want 1 and 3", n, len(d.Components))
+	}
+	names = nil
+	for _, c := range d.Components {
+		names = append(names, c.Ref)
+	}
+	if !contains(names, "SPDXRef-beta") || !contains(names, "SPDXRef-alpha") || contains(names, "SPDXRef-gamma") {
+		t.Errorf("SPDX component set after skipping %v, want the APPLICATION and LIBRARY packages kept, the FILE one left out", names)
 	}
 
 	// The described package is not in the set, so it is never counted as skipped.
@@ -70,7 +88,7 @@ func TestSkipFiles(t *testing.T) {
 }
 
 func TestSkipFilesReport(t *testing.T) {
-	data := twoFilesCDX(t)
+	data := twoFilesCDX(t, true)
 	without, err := Score(data, keyStrings(allProfiles), testEngineVersion, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -79,11 +97,11 @@ func TestSkipFilesReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if without.Options.SkipFiles || without.Input.Components != 7 || without.Input.ComponentsSkipped != 0 {
-		t.Errorf("without the option: %+v %+v, want skipFiles false, 7 scored, 0 skipped", without.Options, without.Input)
+	if without.Options.SkipFiles || without.Input.Components != 9 || without.Input.ComponentsSkipped != 0 {
+		t.Errorf("without the option: %+v %+v, want skipFiles false, 9 scored, 0 skipped", without.Options, without.Input)
 	}
-	if !with.Options.SkipFiles || with.Input.Components != 5 || with.Input.ComponentsSkipped != 2 {
-		t.Errorf("with the option: %+v %+v, want skipFiles true, 5 scored, 2 skipped", with.Options, with.Input)
+	if !with.Options.SkipFiles || with.Input.Components != without.Input.Components-2 || with.Input.ComponentsSkipped != 2 {
+		t.Errorf("with the option: %+v %+v, want skipFiles true, 7 scored, 2 skipped", with.Options, with.Input)
 	}
 
 	totals := func(r Report) map[string]int {
@@ -120,8 +138,24 @@ func TestSkipFilesReport(t *testing.T) {
 		t.Fatal("no component checks compared")
 	}
 
-	assertStatus(t, without, "cisa-2026.component-version", StatusFail)
-	assertStatus(t, with, "cisa-2026.component-version", StatusPass)
+	// The application and container components have no version and are kept: with the option,
+	// exactly they miss it, two more than on the same document without them (files skipped).
+	filesOnly, err := Score(twoFilesCDX(t, false), keyStrings(allProfiles), testEngineVersion, Options{SkipFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"ntia-2021.component-version", "cisa-2026.component-version"} {
+		c, base := checkOf(t, with, id), checkOf(t, filesOnly, id)
+		if c.Total != with.Input.Components {
+			t.Errorf("%s with the option: total %d, want input.components %d", id, c.Total, with.Input.Components)
+		}
+		if missing, baseMissing := c.Total-c.Passed, base.Total-base.Passed; missing != baseMissing+2 {
+			t.Errorf("%s with the option: %d missing, want %d (2 more than without tool and base-image)", id, missing, baseMissing+2)
+		}
+		assertStatus(t, without, id, StatusFail)
+		assertStatus(t, with, id, StatusFail)
+		assertStatus(t, filesOnly, id, StatusPass)
+	}
 	if b, a := profileOf(t, without, ProfileCISA2026).Score, profileOf(t, with, ProfileCISA2026).Score; *a <= *b {
 		t.Errorf("cisa-2026 score %d with the option, %d without; want it higher", *a, *b)
 	}

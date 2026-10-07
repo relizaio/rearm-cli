@@ -54,10 +54,7 @@ func TestSPDXDependencyRelationship(t *testing.T) {
 	}
 
 	m := noDependsOn(t)
-	m["files"] = []any{map[string]any{
-		"SPDXID": "SPDXRef-file-readme", "fileName": "./README.md",
-		"checksums": []any{map[string]any{"algorithm": "SHA1", "checksumValue": "da39a3ee5e6b4b0d3255bfef95601890afd80709"}},
-	}}
+	addSPDXReadmeFile(m)
 	app := spdxPackage(m, "SPDXRef-app")
 	app["filesAnalyzed"] = true
 	app["hasFiles"] = []any{"SPDXRef-file-readme"}
