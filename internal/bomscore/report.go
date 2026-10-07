@@ -23,6 +23,7 @@ type Report struct {
 	ReportVersion int             `json:"reportVersion"`
 	Engine        Engine          `json:"engine"`
 	Input         Input           `json:"input"`
+	Options       Options         `json:"options"`
 	Profiles      []ProfileReport `json:"profiles"`
 	Structure     StructureReport `json:"structure"`
 	Errors        []CheckError    `json:"errors"`
@@ -33,12 +34,22 @@ type Engine struct {
 	Version string `json:"version"`
 }
 
+// Input describes the scored file. Components counts the components scored (after
+// Options.SkipFiles), ComponentsSkipped the ones it left out (0 without it).
 type Input struct {
-	Format        Format        `json:"format"`
-	SpecVersion   string        `json:"specVersion"`
-	Serialization Serialization `json:"serialization"`
-	Components    int           `json:"components"`
-	SHA256        string        `json:"sha256"`
+	Format            Format        `json:"format"`
+	SpecVersion       string        `json:"specVersion"`
+	Serialization     Serialization `json:"serialization"`
+	Components        int           `json:"components"`
+	ComponentsSkipped int           `json:"componentsSkipped"`
+	SHA256            string        `json:"sha256"`
+}
+
+// Options are the scoring options of one Score call; the report echoes them.
+type Options struct {
+	// SkipFiles leaves file components (CycloneDX type file, SPDX 2.3 primaryPackagePurpose FILE)
+	// out of the component checks.
+	SkipFiles bool `json:"skipFiles"`
 }
 
 type ProfileReport struct {
@@ -71,9 +82,10 @@ func (e *UnknownProfileError) Error() string {
 }
 
 // Score scores input under the given profiles, in the order given (a key given twice is scored
-// once, at its first position). engineVersion is the CLI version the report names. A refused input
-// returns a *RefusalError and no report; an unknown profile key an *UnknownProfileError.
-func Score(input []byte, profileKeys []string, engineVersion string) (Report, error) {
+// once, at its first position). engineVersion is the CLI version the report names; opts are echoed
+// in the report. A refused input returns a *RefusalError and no report; an unknown profile key an
+// *UnknownProfileError.
+func Score(input []byte, profileKeys []string, engineVersion string, opts Options) (Report, error) {
 	var selected []Profile
 	seen := map[ProfileKey]bool{}
 	for _, raw := range profileKeys {
@@ -92,17 +104,23 @@ func Score(input []byte, profileKeys []string, engineVersion string) (Report, er
 	if err != nil {
 		return Report{}, err
 	}
+	skipped := 0
+	if opts.SkipFiles {
+		skipped = d.skipFiles()
+	}
 	sum := sha256.Sum256(input)
 	r := Report{
 		ReportVersion: ReportVersion,
 		Engine:        Engine{Name: EngineName, Version: engineVersion},
 		Input: Input{
-			Format:        d.Format,
-			SpecVersion:   d.SpecVersion,
-			Serialization: d.Serialization,
-			Components:    len(d.Components),
-			SHA256:        hex.EncodeToString(sum[:]),
+			Format:            d.Format,
+			SpecVersion:       d.SpecVersion,
+			Serialization:     d.Serialization,
+			Components:        len(d.Components),
+			ComponentsSkipped: skipped,
+			SHA256:            hex.EncodeToString(sum[:]),
 		},
+		Options:   opts,
 		Profiles:  []ProfileReport{},
 		Structure: StructureReport{Checks: []CheckResult{}},
 		Errors:    []CheckError{},
@@ -185,9 +203,13 @@ func (r Report) JSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Text renders one block per profile, then the structure block when it has a failing check.
+// Text renders one block per profile, then the structure block when it has a failing check. With
+// --skip-files an options line comes first; without it nothing is added.
 func (r Report) Text() string {
 	var b strings.Builder
+	if r.Options.SkipFiles {
+		fmt.Fprintf(&b, "options: --skip-files, %d file components left out\n", r.Input.ComponentsSkipped)
+	}
 	for i, p := range r.Profiles {
 		if i > 0 {
 			b.WriteString("\n")

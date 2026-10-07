@@ -16,7 +16,7 @@ var profileNTIA2021 = Profile{
 		ntiaField("component-name", "Component Name", ScopeComponent, "", hasComponentName),
 		ntiaField("component-version", "Version of the Component", ScopeComponent, "", hasComponentVersion),
 		ntiaField("other-unique-identifiers", "Other Unique Identifiers", ScopeComponent, "", hasComponentIdentifier),
-		ntiaField("dependency-relationship", "Dependency Relationship", ScopeDocument, "", hasDependencyRelationship),
+		ntiaField("dependency-relationship", "Dependency Relationship", ScopeDocument, remedyDependencies, declaresDirectDependencies),
 		ntiaField("author-of-sbom-data", "Author of SBOM Data", ScopeDocument, "", hasSBOMAuthor),
 		ntiaField("timestamp", "Timestamp", ScopeDocument, "", hasTimestamp),
 	},

@@ -192,6 +192,7 @@ Flags stand for:
 - **--profile** - Profile to score, repeatable: `cisa-2026` (default), `ntia-2021`, `fda`. Profiles come out in the order given; a profile given twice is scored once
 - **--format** - `text` (default) or `json`
 - **--fail-on-not-ready** - Exit 3 when any requested profile is `NOT_READY` or `UNKNOWN` (the report is still written)
+- **--skip-files** - Leave file components (CycloneDX `type: file`, SPDX 2.3 `primaryPackagePurpose: FILE`) out of the component checks; CISA 2026 Coverage allows excluding non-code files. Default: files counted. The report records it: `options.skipFiles`, `input.componentsSkipped` (how many were left out) and, in text output, a first line `options: --skip-files, N file components left out`. Components nested in a file component are kept and judged on their own type
 
 ### Profiles and their source documents
 
@@ -206,9 +207,12 @@ What the checks read, in short:
 - **Tool name and version**: CycloneDX legacy `metadata.tools[]`, `metadata.tools.components[]` and `.services[]`; every tool needs a version. SPDX: `Tool:` creators of the form `name-version` (the text after the last `-`).
 - **Component producer**: CycloneDX `manufacturer`, `supplier`, `authors[]` or `author`; SPDX `supplier` or `originator`.
 - **Component identifiers**: CycloneDX `purl`, `cpe`, `swid.tagId`, `swhid[]` or `omniborId[]`; SPDX external references of type `purl`, `cpe22Type`, `cpe23Type`, `swh` or `gitoid`.
-- **Dependency relationship**: CycloneDX `dependencies[]` has an entry; SPDX has a `DEPENDS_ON`, `DEPENDENCY_OF`, `CONTAINS` or `CONTAINED_BY` relationship between two packages, or from a package to `NONE`.
+- **Dependency relationship**: the described component must declare its direct dependencies; entries of other components count for nothing.
+  - CycloneDX: a `dependencies[]` entry whose `ref` is `metadata.component`'s `bom-ref`, with a non-empty `dependsOn`. A component with no dependencies says so with a `compositions[]` entry of `aggregate: complete` whose `dependencies[]` lists that `bom-ref`; any other aggregate (`incomplete`, `unknown`, `not_specified`) states nothing. An `incomplete` statement next to a non-empty `dependsOn` still passes: the direct dependencies are declared.
+  - SPDX: a `DEPENDS_ON` or `CONTAINS` relationship from each described package to a package of the document, or `DEPENDENCY_OF` / `CONTAINED_BY` from such a package to it; `DEPENDS_ON NONE` or `CONTAINS NONE` from the described package states it has none. A `CONTAINS` to a file, or an end of `NOASSERTION`, does not count. With several described packages, every one must declare.
+  - It fails, with a note, when there is no `metadata.component` (`no metadata.component`), when it has no `bom-ref` (`metadata.component has no bom-ref`), when the SPDX document describes no package (`no DESCRIBES relationship`), and when the root's entry is missing or has an empty `dependsOn` without a `complete` statement (`described component declares no direct dependencies: <refs>`): "none" must be stated, not inferred from an empty list.
 - **Level of support** (`fda`): the component property `reliza:support:levelOfSupport` is exactly `actively maintained`, `no longer maintained` or `abandoned`. **End-of-support date** (`fda`): the component property `cdx:lifecycle:milestone:endOfSupport`, or SPDX 2.3 `validUntilDate`, is an ISO 8601 date or date-time. ReARM writes both properties into release exports that include support metadata.
-- The component set is every CycloneDX component, nested ones included, without `metadata.component`; for SPDX every package except the ones the document describes.
+- **The described component is not checked.** `metadata.component` (CycloneDX) or the described package (SPDX) is the subject of the SBOM: its fields are not component fields, and only its dependency declaration is checked (above). Its parts (components nested under `metadata.component`) are not in the component set either. The component set is every other CycloneDX component, nested ones included; for SPDX every package except the ones the document describes; with `--skip-files`, without file components.
 - A value that only says "unknown" (`NOASSERTION`, `NONE`, an empty or whitespace-only string) counts as missing.
 - A signature is checked for presence only (CycloneDX JSON top-level `signature`; XML a root-level `Signature` element in a foreign namespace such as XML-DSig), never verified.
 
@@ -229,6 +233,22 @@ Not supported: SPDX RDF/XML, SPDX 3.x, CycloneDX 2.0 and newer, CycloneDX protob
 - Verdict: `NOT_READY` when a REQUIRED check fails; otherwise `UNKNOWN` when a REQUIRED check is in `ERROR`; otherwise `READY`. INFO checks never change a verdict.
 - Score: over the REQUIRED checks that pass or fail, the mean of `passed / total` per check, times 100, rounded down, so 100 means every counted check passed in full. One missing hash in 5000 components costs a fraction of one check, not the whole check.
 - The `structure` block (CycloneDX only) holds three INFO checks, `structure.purl-valid`, `structure.refs-resolve` and `structure.no-orphans`; they never change a verdict or a score.
+- `input.components` is the number of components scored, the `total` of every component check; with `--skip-files`, `input.componentsSkipped` is the number left out.
+
+### How results differ from sbomqs
+
+sbomqs scores the same fields, and on the real-world files we compared most results agree. Where they differ, it is on purpose:
+
+| Topic | rearm | sbomqs | Why |
+|---|---|---|---|
+| Described component | left out of the component checks; only its dependency declaration is checked | scored as a component, so a field missing on the primary component alone fails | the described component is the subject of the SBOM, not a part of it |
+| Dependency relationship | the described component declares its direct dependencies, or a `complete` composition (SPDX: `NONE`) states it has none; an empty `dependsOn` alone fails | the primary component declares its direct dependencies, or a completeness statement | an empty list is what generators write when they do not know; "none" must be stated |
+| Component licence | CycloneDX `licenses[]`; SPDX `licenseDeclared`, else `licenseConcluded` when the declared one is missing or `NOASSERTION` | SPDX `licenseDeclared` only | a concluded licence is still a licence of the component |
+| SBOM author | never taken from `metadata.tools` or `Tool:` creators | its NTIA 2021 profile gives full marks for an author inferred from the generation tool (its 2026 profile does not) | a tool is not the author of the SBOM |
+| Declared unknowns | `NOASSERTION`, `NONE` and blank count as missing in every field | counts SPDX `NOASSERTION` as a declared supplier and producer | a value that says "unknown" does not give the field |
+| `NOASSERTION` supplier | missing, in SPDX as in CycloneDX | present in SPDX; on the CycloneDX file of the same scan it counted 65 of 1845 components, on the SPDX file 1842 | the same scan should score the same in either format |
+
+With `--skip-files` the per-component totals differ from sbomqs as well, which scores file components.
 
 ### Exit codes
 
@@ -246,4 +266,4 @@ cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 99
   17 required: 16 pass, 1 fail, 0 error; 6 not assessed
 ```
 
-With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles and CLI version give the same bytes. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note.
+With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count and `componentsSkipped` the number `--skip-files` left out) comes `options`, today `{"skipFiles": false}` or `true`. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note.

@@ -109,7 +109,7 @@ func TestAlternativesCount(t *testing.T) {
 			spdxCreationInfo(m)["creators"] = []any{"Person: Jane Builder", "Tool: example-scanner-4.2.0"}
 		}, []string{"cisa-2026.sbom-author", "ntia-2021.author-of-sbom-data", "fda.baseline.author-name"}},
 		{"DEPENDENCY_OF only", func(m map[string]any) {
-			m["relationships"] = []any{map[string]any{"spdxElementId": "SPDXRef-delta", "relationshipType": "DEPENDENCY_OF", "relatedSpdxElement": "SPDXRef-gamma"}}
+			m["relationships"] = []any{map[string]any{"spdxElementId": "SPDXRef-alpha", "relationshipType": "DEPENDENCY_OF", "relatedSpdxElement": "SPDXRef-app"}}
 		}, dependencyChecks},
 		{"CONTAINS between packages only", func(m map[string]any) {
 			m["relationships"] = []any{map[string]any{"spdxElementId": "SPDXRef-app", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-alpha"}}

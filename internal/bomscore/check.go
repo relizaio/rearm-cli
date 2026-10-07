@@ -209,6 +209,8 @@ func profileByKey(key ProfileKey) (Profile, bool) {
 
 // Remedies shared by several checks.
 const (
-	remedyEnrich  = "run rearm bomutils enrich, or ask the supplier"
-	remedySupport = "assess support for the component in ReARM and export with support metadata"
+	remedyEnrich       = "run rearm bomutils enrich, or ask the supplier"
+	remedySupport      = "assess support for the component in ReARM and export with support metadata"
+	remedyDependencies = "declare the described component's direct dependencies: CycloneDX dependencies[] entry for " +
+		"metadata.component's bom-ref (or a compositions entry with aggregate complete), SPDX DEPENDS_ON from the described package"
 )

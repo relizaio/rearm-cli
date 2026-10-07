@@ -24,7 +24,7 @@ var profileFDA = Profile{
 		// test row) to score the seven July 2021 fields only.
 		fdaBaseline("component-hash", "Component Hash", ScopeComponent, "", hasComponentHash),
 		fdaBaseline("unique-identifier", "Unique Identifier", ScopeComponent, "", hasComponentIdentifier),
-		fdaBaseline("relationship", "Relationship", ScopeDocument, "", hasDependencyRelationship),
+		fdaBaseline("relationship", "Relationship", ScopeDocument, remedyDependencies, declaresDirectDependencies),
 		{ID: string(ProfileFDA) + ".component.support-level", Title: "Software level of support", Level: LevelRequired,
 			Scope: ScopeComponent, Ref: "V.A.4(b)", Remedy: remedySupport, Eval: hasSupportLevel},
 		{ID: string(ProfileFDA) + ".component.end-of-support", Title: "End-of-support date", Level: LevelRequired,

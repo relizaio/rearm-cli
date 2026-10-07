@@ -9,7 +9,11 @@
     "specVersion": "1.6",
     "serialization": "json",
     "components": 4,
+    "componentsSkipped": 0,
     "sha256": "d2524d6cb111f820b89e1ae5a6383d47134cff53228aa2f65da33bee3d2ba28c"
+  },
+  "options": {
+    "skipFiles": false
   },
   "profiles": [
     {
@@ -97,7 +101,7 @@
           "failing": [],
           "failingTruncated": false,
           "ref": "Data Fields, Dependency Relationship",
-          "remedy": "",
+          "remedy": "declare the described component's direct dependencies: CycloneDX dependencies[] entry for metadata.component's bom-ref (or a compositions entry with aggregate complete), SPDX DEPENDS_ON from the described package",
           "note": ""
         },
         {

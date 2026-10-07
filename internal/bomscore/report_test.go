@@ -119,7 +119,7 @@ func TestDeterminismAndGolden(t *testing.T) {
 		t.Errorf("profiles %v, want fda then cisa-2026, once each", r.Profiles)
 	}
 
-	_, err := Score(readFixture(t, "full.cdx.json"), []string{"bsi"}, testEngineVersion)
+	_, err := Score(readFixture(t, "full.cdx.json"), []string{"bsi"}, testEngineVersion, Options{})
 	var unknown *UnknownProfileError
 	if !errors.As(err, &unknown) || unknown.Key != "bsi" {
 		t.Errorf("error %v, want an unknown profile error for bsi", err)
@@ -156,7 +156,7 @@ func TestReportJSONShape(t *testing.T) {
 	if err := json.Unmarshal(b, &generic); err != nil {
 		t.Fatal(err)
 	}
-	keys := []string{"reportVersion", "engine", "input", "profiles", "structure", "errors"}
+	keys := []string{"reportVersion", "engine", "input", "options", "profiles", "structure", "errors"}
 	pos := -1
 	for _, k := range keys {
 		i := bytes.Index(b, []byte("\n  \""+k+"\":"))
@@ -164,6 +164,11 @@ func TestReportJSONShape(t *testing.T) {
 			t.Errorf("key %s out of order", k)
 		}
 		pos = i
+	}
+	// SCORE-10: options always present, componentsSkipped right after components.
+	if !bytes.Contains(b, []byte("\"components\": 4,\n    \"componentsSkipped\": 0,\n    \"sha256\": ")) ||
+		!bytes.Contains(b, []byte("\n  \"options\": {\n    \"skipFiles\": false\n  },\n")) {
+		t.Errorf("want input.componentsSkipped 0 after components and options.skipFiles false by default:\n%s", b[:400])
 	}
 
 	none := Report{Profiles: []ProfileReport{{Key: "x", Checks: []CheckResult{}}}, Structure: StructureReport{Checks: []CheckResult{}}, Errors: []CheckError{}}
@@ -225,6 +230,14 @@ func TestReportText(t *testing.T) {
 	}
 	if got := lines(text); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("text:\n%s\nwant:\n%s", text, strings.Join(want, "\n"))
+	}
+	// SCORE-10: with --skip-files an options line comes first, the rest is unchanged.
+	skipped, err := Score(data, []string{string(ProfileCISA2026)}, testEngineVersion, Options{SkipFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := lines(skipped.Text()); strings.Join(got, "\n") != strings.Join(append([]string{"options: --skip-files, 0 file components left out"}, want...), "\n") {
+		t.Errorf("text with --skip-files:\n%s", skipped.Text())
 	}
 
 	spdx := scoreOK(t, readFixture(t, "full.spdx.json"), ProfileFDA).Text()

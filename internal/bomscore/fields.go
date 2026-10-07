@@ -36,6 +36,14 @@ func anyPresent(vs []string) bool {
 	return false
 }
 
+// The notes of a failing dependency check.
+const (
+	noteNoSubject     = "no metadata.component"
+	noteNoSubjectRef  = "metadata.component has no bom-ref"
+	noteNoDescribes   = "no DESCRIBES relationship"
+	noteSubjectSilent = "described component declares no direct dependencies: "
+)
+
 func notRepresentableNote(d *Doc) string {
 	return "not representable in " + string(d.Format) + " " + d.SpecVersion
 }
@@ -145,7 +153,43 @@ func hasSBOMVersion(d *Doc) Outcome {
 	return docOutcome(d.SBOMVersion >= 1)
 }
 
-func hasDependencyRelationship(d *Doc) Outcome { return docOutcome(d.HasDependencies) }
+// declaresDirectDependencies: the document names its described component(s) and every one of
+// them declares its direct dependencies, by a dependency entry with a non-empty dependsOn or by a
+// statement that it has none (Doc.DeclaredNoDependencies). Entries of any other component count
+// for nothing. A dependsOn naming only unresolvable refs still counts; structure.refs-resolve
+// reports it.
+func declaresDirectDependencies(d *Doc) Outcome {
+	if len(d.SubjectRefs) == 0 {
+		o := docOutcome(false)
+		switch {
+		case d.Format == FormatSPDX:
+			o.Note = noteNoDescribes
+		case d.SubjectNamed:
+			o.Note = noteNoSubjectRef
+		default:
+			o.Note = noteNoSubject
+		}
+		return o
+	}
+	declares := map[string]bool{}
+	for _, dep := range d.Dependencies {
+		if len(dep.DependsOn) > 0 {
+			declares[dep.Ref] = true
+		}
+	}
+	var silent []string
+	for _, ref := range d.SubjectRefs {
+		if !declares[ref] && !d.DeclaredNoDependencies[ref] {
+			silent = append(silent, ref)
+		}
+	}
+	if len(silent) == 0 {
+		return docOutcome(true)
+	}
+	o := docOutcome(false)
+	o.Note = noteSubjectSilent + capList(silent)
+	return o
+}
 
 // Component evaluators.
 

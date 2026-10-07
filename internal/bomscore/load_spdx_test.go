@@ -43,8 +43,9 @@ var dependencyChecks = []string{
 	"fda.baseline.relationship",
 }
 
-// Test 19: only a dependency relationship between packages (or to NONE) counts; the CONTAINS the
-// reader adds for hasFiles, and an end of NOASSERTION, do not.
+// Test 19: only a dependency relationship from the described package to a package (or to NONE)
+// counts; the CONTAINS the reader adds for hasFiles, an end of NOASSERTION, and a NONE statement of
+// another package do not.
 func TestSPDXDependencyRelationship(t *testing.T) {
 	noDependsOn := func(t *testing.T) map[string]any {
 		m := jsonFixture(t, "full.spdx.json")
@@ -57,9 +58,9 @@ func TestSPDXDependencyRelationship(t *testing.T) {
 		"SPDXID": "SPDXRef-file-readme", "fileName": "./README.md",
 		"checksums": []any{map[string]any{"algorithm": "SHA1", "checksumValue": "da39a3ee5e6b4b0d3255bfef95601890afd80709"}},
 	}}
-	gamma := gammaSPDX(m)
-	gamma["filesAnalyzed"] = true
-	gamma["hasFiles"] = []any{"SPDXRef-file-readme"}
+	app := spdxPackage(m, "SPDXRef-app")
+	app["filesAnalyzed"] = true
+	app["hasFiles"] = []any{"SPDXRef-file-readme"}
 	data := encode(t, m)
 	doc, err := spdxjson.Read(bytes.NewReader(data))
 	if err != nil {
@@ -67,7 +68,7 @@ func TestSPDXDependencyRelationship(t *testing.T) {
 	}
 	folded := false
 	for _, rel := range doc.Relationships {
-		if rel.Relationship == common.TypeRelationshipContains && rel.RefB.ElementRefID == "file-readme" {
+		if rel.Relationship == common.TypeRelationshipContains && rel.RefA.ElementRefID == "app" && rel.RefB.ElementRefID == "file-readme" {
 			folded = true
 		}
 	}
@@ -80,12 +81,12 @@ func TestSPDXDependencyRelationship(t *testing.T) {
 	}
 
 	for _, c := range []struct {
-		related string
-		want    Status
-	}{{"NONE", StatusPass}, {"NOASSERTION", StatusFail}} {
+		from, related string
+		want          Status
+	}{{"SPDXRef-app", "NONE", StatusPass}, {"SPDXRef-app", "NOASSERTION", StatusFail}, {"SPDXRef-delta", "NONE", StatusFail}} {
 		m := noDependsOn(t)
 		m["relationships"] = []any{map[string]any{
-			"spdxElementId": "SPDXRef-delta", "relationshipType": "DEPENDS_ON", "relatedSpdxElement": c.related,
+			"spdxElementId": c.from, "relationshipType": "DEPENDS_ON", "relatedSpdxElement": c.related,
 		}}
 		r := scoreOK(t, encode(t, m))
 		for _, id := range dependencyChecks {
