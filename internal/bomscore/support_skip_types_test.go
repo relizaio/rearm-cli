@@ -425,18 +425,8 @@ func TestSupportSkipIsByType(t *testing.T) {
 
 // T-8: the loaders keep the type as written.
 func TestComponentTypeLoaded(t *testing.T) {
-	typeOf := func(d *Doc, ref string) string {
-		t.Helper()
-		for _, c := range d.Components {
-			if c.Ref == ref {
-				return c.Type
-			}
-		}
-		t.Fatalf("no component %s", ref)
-		return ""
-	}
 	for _, f := range []string{"full.cdx.json", "full.cdx.xml"} {
-		if got := typeOf(loadOK(t, readFixture(t, f)), "alpha"); got != "library" {
+		if got := compOf(t, loadOK(t, readFixture(t, f)), "alpha").Type; got != "library" {
 			t.Errorf("%s alpha: type %q, want library", f, got)
 		}
 	}
@@ -445,10 +435,10 @@ func TestComponentTypeLoaded(t *testing.T) {
 	delete(gammaCDX(m), "type")
 	m["components"].([]any)[0].(map[string]any)["type"] = "Library"
 	d := loadOK(t, encode(t, m))
-	if got := typeOf(d, "gamma"); got != "" {
+	if got := compOf(t, d, "gamma").Type; got != "" {
 		t.Errorf("untyped gamma: type %q, want empty", got)
 	}
-	if got := typeOf(d, "alpha"); got != "Library" {
+	if got := compOf(t, d, "alpha").Type; got != "Library" {
 		t.Errorf("alpha typed Library: type %q, want it as written", got)
 	}
 	// Wrong case is not a skipped type: the component is judged.
@@ -463,40 +453,60 @@ func TestComponentTypeLoaded(t *testing.T) {
 		assertNotSkipped(t, c)
 	}
 
-	// Kept as written, not trimmed: a padded skipped type is judged.
-	m = jsonFixture(t, "full.cdx.json")
-	m["components"].([]any)[0].(map[string]any)["type"] = " file"
-	if got := typeOf(loadOK(t, encode(t, m)), "alpha"); got != " file" {
-		t.Errorf("alpha typed \" file\": type %q, want it as written", got)
-	}
-	r = scoreOK(t, encode(t, m), ProfileFDA)
-	for _, id := range []string{supportLevelID, endOfSupportID} {
-		c := checkOf(t, r, id)
-		if c.Total != 4 {
-			t.Errorf("%s with a component typed \" file\": total %d, want 4", id, c.Total)
+	// Kept as written, neither trimmed nor case-folded: a padded or wrong-case skipped type is
+	// judged, and it is not a file for --skip-files either.
+	for _, typ := range []string{" file", "file ", " file ", "\tfile", "file\n", "\tfile\n", "File"} {
+		m = jsonFixture(t, "full.cdx.json")
+		m["components"].([]any)[0].(map[string]any)["type"] = typ
+		data := encode(t, m)
+		if c := compOf(t, loadOK(t, data), "alpha"); c.Type != typ || c.IsFile {
+			t.Errorf("alpha typed %q: type %q, file %v, want it as written and not a file", typ, c.Type, c.IsFile)
 		}
-		assertNotSkipped(t, c)
+		r = scoreOK(t, data, ProfileFDA)
+		for _, id := range []string{supportLevelID, endOfSupportID} {
+			c := checkOf(t, r, id)
+			if c.Total != 4 {
+				t.Errorf("%s with a component typed %q: total %d, want 4", id, typ, c.Total)
+			}
+			assertNotSkipped(t, c)
+		}
+	}
+	m = jsonFixture(t, "full.cdx.json")
+	m["components"].([]any)[0].(map[string]any)["type"] = "file"
+	if c := compOf(t, loadOK(t, encode(t, m)), "alpha"); c.Type != "file" || !c.IsFile {
+		t.Errorf("alpha typed file: type %q, file %v, want file and a file", c.Type, c.IsFile)
 	}
 
 	m = jsonFixture(t, "full.spdx.json")
 	spdxPackage(m, "SPDXRef-alpha")["primaryPackagePurpose"] = "LIBRARY"
-	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "DEVICE"
+	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "FILE"
 	d = loadOK(t, encode(t, m))
-	for ref, want := range map[string]string{"SPDXRef-alpha": "LIBRARY", "SPDXRef-beta": "DEVICE", "SPDXRef-gamma": ""} {
-		if got := typeOf(d, ref); got != want {
+	for ref, want := range map[string]string{"SPDXRef-alpha": "LIBRARY", "SPDXRef-beta": "FILE", "SPDXRef-gamma": ""} {
+		if got := compOf(t, d, ref).Type; got != want {
 			t.Errorf("SPDX %s: type %q, want %q", ref, got, want)
 		}
 	}
-	// Kept as written, not upper-cased: a lower-case skipped purpose is judged.
-	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "file"
-	if got := typeOf(loadOK(t, encode(t, m)), "SPDXRef-beta"); got != "file" {
-		t.Errorf("SPDX beta with purpose file: type %q, want it as written", got)
+	if c := compOf(t, d, "SPDXRef-beta"); !c.IsFile {
+		t.Errorf("SPDX beta with purpose FILE: not a file")
 	}
-	eos := checkOf(t, scoreOK(t, encode(t, m), ProfileFDA), endOfSupportID)
-	if eos.Total != 4 {
-		t.Errorf("%s with a package of purpose file: total %d, want 4", endOfSupportID, eos.Total)
+	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "DEVICE"
+	if got := compOf(t, loadOK(t, encode(t, m)), "SPDXRef-beta").Type; got != "DEVICE" {
+		t.Errorf("SPDX beta with purpose DEVICE: type %q, want DEVICE", got)
 	}
-	assertNotSkipped(t, eos)
+	// Kept as written, neither trimmed nor upper-cased: a padded or lower-case skipped purpose is
+	// judged, and it is not a file for --skip-files either.
+	for _, purpose := range []string{" FILE", "FILE ", " FILE ", "\tFILE", "FILE\n", "\tFILE\n", "file", "File"} {
+		spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = purpose
+		data := encode(t, m)
+		if c := compOf(t, loadOK(t, data), "SPDXRef-beta"); c.Type != purpose || c.IsFile {
+			t.Errorf("SPDX beta with purpose %q: type %q, file %v, want it as written and not a file", purpose, c.Type, c.IsFile)
+		}
+		eos := checkOf(t, scoreOK(t, data, ProfileFDA), endOfSupportID)
+		if eos.Total != 4 {
+			t.Errorf("%s with a package of purpose %q: total %d, want 4", endOfSupportID, purpose, eos.Total)
+		}
+		assertNotSkipped(t, eos)
+	}
 }
 
 // T-9: perSupportableComponent and evaluate.
