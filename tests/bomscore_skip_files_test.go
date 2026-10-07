@@ -28,8 +28,8 @@ import (
 // SCORE-10: rearm bomutils score --skip-files.
 
 // twoFilesBOM is full.cdx.json with two type file components, one of them nesting a library, and,
-// with otherTypes, an application and a container component without a version, which
-// --skip-files must keep and score.
+// with otherTypes, an application, a container and an untyped (no type) component without a
+// version, which --skip-files must keep and score.
 func twoFilesBOM(t *testing.T, otherTypes bool) []byte {
 	t.Helper()
 	var m map[string]any
@@ -46,6 +46,7 @@ func twoFilesBOM(t *testing.T, otherTypes bool) []byte {
 		components = append(components,
 			map[string]any{"type": "application", "bom-ref": "app-tool", "name": "tool"},
 			map[string]any{"type": "container", "bom-ref": "img-base", "name": "base-image"},
+			map[string]any{"bom-ref": "untyped", "name": "untyped"},
 		)
 	}
 	m["components"] = components
@@ -103,21 +104,21 @@ func TestBomScoreSkipFiles(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", run.code, run.stderr)
 	}
 	r := parse(t, run.stdout)
-	if !r.Options.SkipFiles || r.Input.ComponentsSkipped != 2 || r.Input.Components != 7 {
-		t.Errorf("--skip-files: %+v, want skipFiles true, 7 scored, 2 skipped", r.Input)
+	if !r.Options.SkipFiles || r.Input.ComponentsSkipped != 2 || r.Input.Components != 8 {
+		t.Errorf("--skip-files: %+v, want skipFiles true, 8 scored, 2 skipped", r.Input)
 	}
-	// tool and base-image are kept and have no version; every file is left out.
+	// tool, base-image and untyped are kept and have no version; every file is left out.
 	total, missing := missingVersion(t, r)
 	run = runBomScore(cmd.BomScoreOptions{SkipFiles: true, Format: "json", Profiles: ntia}, twoFilesBOM(t, false))
 	_, baseMissing := missingVersion(t, parse(t, run.stdout))
-	if total != r.Input.Components || missing != baseMissing+2 {
+	if total != r.Input.Components || missing != baseMissing+3 {
 		t.Errorf("--skip-files ntia-2021.component-version: total %d, %d missing; want total %d, %d missing",
-			total, missing, r.Input.Components, baseMissing+2)
+			total, missing, r.Input.Components, baseMissing+3)
 	}
 
 	run = runBomScore(cmd.BomScoreOptions{Format: "json"}, data)
-	if r := parse(t, run.stdout); run.code != 0 || r.Options.SkipFiles || r.Input.ComponentsSkipped != 0 || r.Input.Components != 9 {
-		t.Errorf("without the flag: exit %d %+v, want skipFiles false, 9 scored, 0 skipped", run.code, r.Input)
+	if r := parse(t, run.stdout); run.code != 0 || r.Options.SkipFiles || r.Input.ComponentsSkipped != 0 || r.Input.Components != 10 {
+		t.Errorf("without the flag: exit %d %+v, want skipFiles false, 10 scored, 0 skipped", run.code, r.Input)
 	}
 
 	run = runBomScore(cmd.BomScoreOptions{SkipFiles: true}, data)

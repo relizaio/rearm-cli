@@ -61,6 +61,14 @@ func spdxRelationship(a, rel, b string) map[string]any {
 	return map[string]any{"spdxElementId": a, "relationshipType": rel, "relatedSpdxElement": b}
 }
 
+// spdxDescribesFirst names the subject SPDXRef-app with a DESCRIBES relationship listed before the
+// others, as syft writes it, instead of documentDescribes, which the reader appends after the
+// listed relationships: the described package is then known before the rest are read.
+func spdxDescribesFirst(m map[string]any) {
+	delete(m, "documentDescribes")
+	m["relationships"] = append([]any{spdxRelationship("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-app")}, m["relationships"].([]any)...)
+}
+
 // spdxWithoutRootRelationships keeps the fixture's relationships that do not start at the
 // described package SPDXRef-app, then appends extra.
 func spdxWithoutRootRelationships(m map[string]any, extra ...map[string]any) {
@@ -224,6 +232,38 @@ func TestDeclaresDirectDependencies(t *testing.T) {
 			assertDependencyChecks(t, scoreOK(t, encode(t, m)), c.want, c.note)
 		})
 	}
+
+	// The subject named by a DESCRIBES relationship listed first: a relationship whose depending
+	// side is not a package of this document still says nothing about the described package.
+	describesFirstCases := []struct {
+		name     string
+		extra    map[string]any
+		withFile bool
+		want     Status
+		note     string
+	}{
+		{"DEPENDS_ON from the described package removed", nil, false, StatusFail, noteSubjectSilent + "SPDXRef-app"},
+		{"12a NONE DEPENDENCY_OF the described package", spdxRelationship("NONE", "DEPENDENCY_OF", "SPDXRef-app"), false, StatusPass, ""},
+		{"12c NONE DEPENDS_ON the described package", spdxRelationship("NONE", "DEPENDS_ON", "SPDXRef-app"), false, StatusFail, noteSubjectSilent + "SPDXRef-app"},
+		{"12d NONE CONTAINS the described package", spdxRelationship("NONE", "CONTAINS", "SPDXRef-app"), false, StatusFail, noteSubjectSilent + "SPDXRef-app"},
+		{"file DEPENDS_ON a package", spdxRelationship("SPDXRef-file-readme", "DEPENDS_ON", "SPDXRef-alpha"), true, StatusFail, noteSubjectSilent + "SPDXRef-app"},
+		{"external document DEPENDS_ON a package", spdxRelationship("DocumentRef-ext:SPDXRef-x", "DEPENDS_ON", "SPDXRef-alpha"), false, StatusFail, noteSubjectSilent + "SPDXRef-app"},
+	}
+	for _, c := range describesFirstCases {
+		t.Run("12 spdx DESCRIBES first "+c.name, func(t *testing.T) {
+			m := jsonFixture(t, "full.spdx.json")
+			if c.withFile {
+				addSPDXReadmeFile(m)
+			}
+			if c.extra == nil {
+				spdxWithoutRootRelationships(m)
+			} else {
+				spdxWithoutRootRelationships(m, c.extra)
+			}
+			spdxDescribesFirst(m)
+			assertDependencyChecks(t, scoreOK(t, encode(t, m)), c.want, c.note)
+		})
+	}
 }
 
 // The three checks keep their declaration and carry the dependency remedy.
@@ -308,7 +348,9 @@ func TestDependencyRuleLoad(t *testing.T) {
 }
 
 // Which SPDX NONE relationships the loader reads as "declares none", and that a dependency
-// relationship whose depending side is not a package of this document adds nothing.
+// relationship whose depending side is not a package of this document adds nothing, with the
+// subject named by documentDescribes (read after the listed relationships) and by a DESCRIBES
+// relationship listed first (read before them).
 func TestDependencyRuleLoadSPDXNone(t *testing.T) {
 	// The fixture's relationships that do not start at SPDXRef-app.
 	rest := []Dependency{
@@ -329,23 +371,33 @@ func TestDependencyRuleLoadSPDXNone(t *testing.T) {
 		{"file DEPENDS_ON alpha", spdxRelationship("SPDXRef-file-readme", "DEPENDS_ON", "SPDXRef-alpha"), true, map[string]bool{}},
 		{"external document DEPENDS_ON alpha", spdxRelationship("DocumentRef-ext:SPDXRef-x", "DEPENDS_ON", "SPDXRef-alpha"), false, map[string]bool{}},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m := jsonFixture(t, "full.spdx.json")
-			if c.withFile {
-				addSPDXReadmeFile(m)
-			}
-			spdxWithoutRootRelationships(m, c.extra)
-			d := loadOK(t, encode(t, m))
-			if !reflect.DeepEqual(d.SubjectRefs, []string{"SPDXRef-app"}) {
-				t.Errorf("SubjectRefs %v, want [SPDXRef-app]", d.SubjectRefs)
-			}
-			if !reflect.DeepEqual(d.DeclaredNoDependencies, c.none) {
-				t.Errorf("DeclaredNoDependencies %v, want %v", d.DeclaredNoDependencies, c.none)
-			}
-			if !reflect.DeepEqual(d.Dependencies, rest) {
-				t.Errorf("Dependencies %+v, want %+v", d.Dependencies, rest)
-			}
-		})
+	namings := []struct {
+		name  string
+		apply func(m map[string]any)
+	}{
+		{"documentDescribes", func(map[string]any) {}},
+		{"DESCRIBES first", spdxDescribesFirst},
+	}
+	for _, n := range namings {
+		for _, c := range cases {
+			t.Run(n.name+" "+c.name, func(t *testing.T) {
+				m := jsonFixture(t, "full.spdx.json")
+				if c.withFile {
+					addSPDXReadmeFile(m)
+				}
+				spdxWithoutRootRelationships(m, c.extra)
+				n.apply(m)
+				d := loadOK(t, encode(t, m))
+				if !reflect.DeepEqual(d.SubjectRefs, []string{"SPDXRef-app"}) {
+					t.Errorf("SubjectRefs %v, want [SPDXRef-app]", d.SubjectRefs)
+				}
+				if !reflect.DeepEqual(d.DeclaredNoDependencies, c.none) {
+					t.Errorf("DeclaredNoDependencies %v, want %v", d.DeclaredNoDependencies, c.none)
+				}
+				if !reflect.DeepEqual(d.Dependencies, rest) {
+					t.Errorf("Dependencies %+v, want %+v", d.Dependencies, rest)
+				}
+			})
+		}
 	}
 }

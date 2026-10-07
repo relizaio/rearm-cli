@@ -10,9 +10,9 @@ import (
 // the component checks.
 
 // twoFilesCDX is full.cdx.json with two type file components and no version, one of them nesting a
-// complete library (epsilon, a copy of alpha), and two components of other types (application
-// tool, container base-image, only with otherTypes) that have no version either: --skip-files must
-// keep and score them.
+// complete library (epsilon, a copy of alpha), and three components of other types (application
+// tool, container base-image, and untyped with no type at all; only with otherTypes) that have no
+// version either: --skip-files must keep and score them.
 func twoFilesCDX(t *testing.T, otherTypes bool) []byte {
 	t.Helper()
 	m := jsonFixture(t, "full.cdx.json")
@@ -29,6 +29,7 @@ func twoFilesCDX(t *testing.T, otherTypes bool) []byte {
 		components = append(components,
 			map[string]any{"type": "application", "bom-ref": "app-tool", "name": "tool"},
 			map[string]any{"type": "container", "bom-ref": "img-base", "name": "base-image"},
+			map[string]any{"bom-ref": "untyped", "name": "untyped"},
 		)
 	}
 	m["components"] = components
@@ -37,8 +38,8 @@ func twoFilesCDX(t *testing.T, otherTypes bool) []byte {
 
 func TestSkipFiles(t *testing.T) {
 	d := loadOK(t, twoFilesCDX(t, true))
-	if n := len(d.Components); n != 9 {
-		t.Fatalf("component set %d, want 9 before skipping", n)
+	if n := len(d.Components); n != 10 {
+		t.Fatalf("component set %d, want 10 before skipping", n)
 	}
 	if n := d.skipFiles(); n != 2 {
 		t.Errorf("skipFiles() = %d, want 2", n)
@@ -47,9 +48,9 @@ func TestSkipFiles(t *testing.T) {
 	for _, c := range d.Components {
 		names = append(names, c.Name)
 	}
-	if len(names) != 7 || !contains(names, "epsilon") || !contains(names, "tool") || !contains(names, "base-image") ||
-		contains(names, "README.md") || contains(names, "bin/app") {
-		t.Errorf("component set after skipping %v, want the four fixture components, epsilon, tool and base-image", names)
+	if len(names) != 8 || !contains(names, "epsilon") || !contains(names, "tool") || !contains(names, "base-image") ||
+		!contains(names, "untyped") || contains(names, "README.md") || contains(names, "bin/app") {
+		t.Errorf("component set after skipping %v, want the four fixture components, epsilon, tool, base-image and untyped", names)
 	}
 	for _, ref := range []string{"file-readme", "file-app-bin", "epsilon"} {
 		if !contains(d.Refs, ref) {
@@ -97,11 +98,11 @@ func TestSkipFilesReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if without.Options.SkipFiles || without.Input.Components != 9 || without.Input.ComponentsSkipped != 0 {
-		t.Errorf("without the option: %+v %+v, want skipFiles false, 9 scored, 0 skipped", without.Options, without.Input)
+	if without.Options.SkipFiles || without.Input.Components != 10 || without.Input.ComponentsSkipped != 0 {
+		t.Errorf("without the option: %+v %+v, want skipFiles false, 10 scored, 0 skipped", without.Options, without.Input)
 	}
 	if !with.Options.SkipFiles || with.Input.Components != without.Input.Components-2 || with.Input.ComponentsSkipped != 2 {
-		t.Errorf("with the option: %+v %+v, want skipFiles true, 7 scored, 2 skipped", with.Options, with.Input)
+		t.Errorf("with the option: %+v %+v, want skipFiles true, 8 scored, 2 skipped", with.Options, with.Input)
 	}
 
 	totals := func(r Report) map[string]int {
@@ -138,8 +139,9 @@ func TestSkipFilesReport(t *testing.T) {
 		t.Fatal("no component checks compared")
 	}
 
-	// The application and container components have no version and are kept: with the option,
-	// exactly they miss it, two more than on the same document without them (files skipped).
+	// The application, container and untyped components have no version and are kept: with the
+	// option, exactly they miss it, three more than on the same document without them (files
+	// skipped).
 	filesOnly, err := Score(twoFilesCDX(t, false), keyStrings(allProfiles), testEngineVersion, Options{SkipFiles: true})
 	if err != nil {
 		t.Fatal(err)
@@ -149,8 +151,8 @@ func TestSkipFilesReport(t *testing.T) {
 		if c.Total != with.Input.Components {
 			t.Errorf("%s with the option: total %d, want input.components %d", id, c.Total, with.Input.Components)
 		}
-		if missing, baseMissing := c.Total-c.Passed, base.Total-base.Passed; missing != baseMissing+2 {
-			t.Errorf("%s with the option: %d missing, want %d (2 more than without tool and base-image)", id, missing, baseMissing+2)
+		if missing, baseMissing := c.Total-c.Passed, base.Total-base.Passed; missing != baseMissing+3 {
+			t.Errorf("%s with the option: %d missing, want %d (3 more than without tool, base-image and untyped)", id, missing, baseMissing+3)
 		}
 		assertStatus(t, without, id, StatusFail)
 		assertStatus(t, with, id, StatusFail)
