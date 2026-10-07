@@ -112,13 +112,13 @@ func TestSupportChecksSkipTypesCDX(t *testing.T) {
 
 // spdxTypesDoc is full.spdx.json (SPDX 2.3) plus one package per purpose (named pkg-<purpose>,
 // pkg-untyped without one), each a copy of alpha with its own SPDXID, name and purl and no
-// validUntilDate except the LIBRARY one; none is described. 4 + 11 = 15 packages in the set.
+// validUntilDate except the LIBRARY one; none is described. 4 + 13 = 17 packages in the set.
 func spdxTypesDoc(t *testing.T, fixture string) map[string]any {
 	t.Helper()
 	m := jsonFixture(t, fixture)
 	alpha := spdxPackage(m, "SPDXRef-alpha")
 	packages := m["packages"].([]any)
-	for _, purpose := range []string{"FILE", "DEVICE", "APPLICATION", "LIBRARY", "OPERATING-SYSTEM", "FIRMWARE", "SOURCE", "ARCHIVE", "INSTALL", "OTHER", ""} {
+	for _, purpose := range []string{"FILE", "DEVICE", "APPLICATION", "FRAMEWORK", "LIBRARY", "CONTAINER", "OPERATING-SYSTEM", "FIRMWARE", "SOURCE", "ARCHIVE", "INSTALL", "OTHER", ""} {
 		name := "pkg-untyped"
 		if purpose != "" {
 			name = "pkg-" + strings.ToLower(purpose)
@@ -144,15 +144,15 @@ func spdxTypesDoc(t *testing.T, fixture string) map[string]any {
 // not representable in SPDX and end-of-support not in SPDX 2.2.
 func TestSupportChecksSkipTypesSPDX(t *testing.T) {
 	r := scoreOK(t, encode(t, spdxTypesDoc(t, "full.spdx.json")), ProfileFDA)
-	if r.Input.Components != 15 {
-		t.Fatalf("input.components %d, want 15", r.Input.Components)
+	if r.Input.Components != 17 {
+		t.Fatalf("input.components %d, want 17", r.Input.Components)
 	}
 	eos := assertStatus(t, r, endOfSupportID, StatusFail)
 	assertSkipped(t, eos, 2, "DEVICE", "FILE")
-	if eos.Total != 13 || eos.Passed != 5 {
-		t.Errorf("%s: %d/%d, want 5/13 (4 fixture packages and the LIBRARY one pass)", endOfSupportID, eos.Passed, eos.Total)
+	if eos.Total != 15 || eos.Passed != 5 {
+		t.Errorf("%s: %d/%d, want 5/15 (4 fixture packages and the LIBRARY one pass)", endOfSupportID, eos.Passed, eos.Total)
 	}
-	for _, name := range []string{"application", "operating-system", "firmware", "source", "archive", "install", "other", "untyped"} {
+	for _, name := range []string{"application", "framework", "container", "operating-system", "firmware", "source", "archive", "install", "other", "untyped"} {
 		if !contains(eos.Failing, "pkg:generic/pkg-"+name+"@1.0.0") {
 			t.Errorf("%s: failing %v lacks the kept pkg-%s", endOfSupportID, eos.Failing, name)
 		}
@@ -164,8 +164,8 @@ func TestSupportChecksSkipTypesSPDX(t *testing.T) {
 	}
 
 	level := assertStatus(t, r, supportLevelID, StatusFail)
-	if level.Note != "not representable in SPDX 2.3" || level.Total != 15 || level.Passed != 0 {
-		t.Errorf("%s: note %q %d/%d, want the not-representable note and 0/15", supportLevelID, level.Note, level.Passed, level.Total)
+	if level.Note != "not representable in SPDX 2.3" || level.Total != 17 || level.Passed != 0 {
+		t.Errorf("%s: note %q %d/%d, want the not-representable note and 0/17", supportLevelID, level.Note, level.Passed, level.Total)
 	}
 	assertNotSkipped(t, level)
 
@@ -227,10 +227,11 @@ func TestSupportChecksAllSkipped(t *testing.T) {
 	}
 	retype(m["components"].([]any))
 	r := scoreOK(t, encode(t, m), ProfileFDA)
+	const note = "no supportable component" // the literal text of design 3.1, not the production constant
 	for _, id := range []string{supportLevelID, endOfSupportID} {
 		c := assertStatus(t, r, id, StatusFail)
-		if c.Passed != 0 || c.Total != 0 || c.Note != noteNoSupportable || len(c.Failing) != 0 {
-			t.Errorf("%s: %d/%d note %q failing %v, want 0/0, note %q, none failing", id, c.Passed, c.Total, c.Note, c.Failing, noteNoSupportable)
+		if c.Passed != 0 || c.Total != 0 || c.Note != note || len(c.Failing) != 0 {
+			t.Errorf("%s: %d/%d note %q failing %v, want 0/0, note %q, none failing", id, c.Passed, c.Total, c.Note, c.Failing, note)
 		}
 		assertSkipped(t, c, 4, "cryptographic-asset")
 	}
@@ -242,6 +243,18 @@ func TestSupportChecksAllSkipped(t *testing.T) {
 		if c := checkOf(t, r, id); c.Total != 4 {
 			t.Errorf("%s: total %d, want 4", id, c.Total)
 		}
+	}
+
+	// Nothing skipped and nothing to judge: 0/0 as before SCORE-20, without the note or the fields.
+	empty := jsonFixture(t, "full.cdx.json")
+	empty["components"] = []any{}
+	r = scoreOK(t, encode(t, empty), ProfileFDA)
+	for _, id := range []string{supportLevelID, endOfSupportID} {
+		c := assertStatus(t, r, id, StatusFail)
+		if c.Total != 0 || c.Note != "" {
+			t.Errorf("%s without components: total %d note %q, want 0 and no note", id, c.Total, c.Note)
+		}
+		assertNotSkipped(t, c)
 	}
 }
 
@@ -286,24 +299,39 @@ func TestSkipFilesAndSupportSkip(t *testing.T) {
 	}
 }
 
-// T-6 (a, b): the text line sits between the check line and its missing list; a report without
-// skipped components has neither the line nor the JSON fields.
-func TestSupportSkipReportOutput(t *testing.T) {
-	text := lines(scoreOK(t, filesAndKeyCDX(t), ProfileFDA).Text())
-	const skippedLine = "        skipped 3 components of type cryptographic-asset, file (not software packages)"
+// assertSkippedLine checks that each failing support check line of text is followed by want and
+// then by its missing list.
+func assertSkippedLine(t *testing.T, text, want string) {
+	t.Helper()
+	ls := lines(text)
 	found := 0
-	for i, l := range text {
+	for i, l := range ls {
 		if !strings.HasPrefix(l, "  FAIL  Software level of support  ") && !strings.HasPrefix(l, "  FAIL  End-of-support date  ") {
 			continue
 		}
 		found++
-		if i+2 >= len(text) || text[i+1] != skippedLine || !strings.HasPrefix(text[i+2], "        missing in: ") {
-			t.Errorf("after %q want %q then the missing list, got:\n%s", l, skippedLine, strings.Join(text[i:], "\n"))
+		if i+2 >= len(ls) || ls[i+1] != want || !strings.HasPrefix(ls[i+2], "        missing in: ") {
+			t.Errorf("after %q want %q then the missing list, got:\n%s", l, want, strings.Join(ls[i:], "\n"))
 		}
 	}
 	if found != 2 {
-		t.Errorf("%d failing support check lines, want 2:\n%s", found, strings.Join(text, "\n"))
+		t.Errorf("%d failing support check lines, want 2:\n%s", found, text)
 	}
+}
+
+// T-6 (a, b): the text line sits between the check line and its missing list, for one skipped
+// component as for several; a report without skipped components has neither the line nor the
+// JSON fields.
+func TestSupportSkipReportOutput(t *testing.T) {
+	data := filesAndKeyCDX(t)
+	assertSkippedLine(t, scoreOK(t, data, ProfileFDA).Text(),
+		"        skipped 3 components of type cryptographic-asset, file (not software packages)")
+	one, err := Score(data, keyStrings([]ProfileKey{ProfileFDA}), testEngineVersion, Options{SkipFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkippedLine(t, one.Text(),
+		"        skipped 1 components of type cryptographic-asset (not software packages)")
 
 	m := jsonFixture(t, "full.cdx.json")
 	delete(gammaCDX(m), "properties")
@@ -435,6 +463,21 @@ func TestComponentTypeLoaded(t *testing.T) {
 		assertNotSkipped(t, c)
 	}
 
+	// Kept as written, not trimmed: a padded skipped type is judged.
+	m = jsonFixture(t, "full.cdx.json")
+	m["components"].([]any)[0].(map[string]any)["type"] = " file"
+	if got := typeOf(loadOK(t, encode(t, m)), "alpha"); got != " file" {
+		t.Errorf("alpha typed \" file\": type %q, want it as written", got)
+	}
+	r = scoreOK(t, encode(t, m), ProfileFDA)
+	for _, id := range []string{supportLevelID, endOfSupportID} {
+		c := checkOf(t, r, id)
+		if c.Total != 4 {
+			t.Errorf("%s with a component typed \" file\": total %d, want 4", id, c.Total)
+		}
+		assertNotSkipped(t, c)
+	}
+
 	m = jsonFixture(t, "full.spdx.json")
 	spdxPackage(m, "SPDXRef-alpha")["primaryPackagePurpose"] = "LIBRARY"
 	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "DEVICE"
@@ -444,6 +487,16 @@ func TestComponentTypeLoaded(t *testing.T) {
 			t.Errorf("SPDX %s: type %q, want %q", ref, got, want)
 		}
 	}
+	// Kept as written, not upper-cased: a lower-case skipped purpose is judged.
+	spdxPackage(m, "SPDXRef-beta")["primaryPackagePurpose"] = "file"
+	if got := typeOf(loadOK(t, encode(t, m)), "SPDXRef-beta"); got != "file" {
+		t.Errorf("SPDX beta with purpose file: type %q, want it as written", got)
+	}
+	eos := checkOf(t, scoreOK(t, encode(t, m), ProfileFDA), endOfSupportID)
+	if eos.Total != 4 {
+		t.Errorf("%s with a package of purpose file: total %d, want 4", endOfSupportID, eos.Total)
+	}
+	assertNotSkipped(t, eos)
 }
 
 // T-9: perSupportableComponent and evaluate.
