@@ -267,6 +267,10 @@ func writeFailedChecks(b *strings.Builder, checks []CheckResult) {
 		} else {
 			fmt.Fprintf(b, "  %-4s  %s  (%s)\n", c.Status, c.Title, c.Ref)
 		}
+		if c.ComponentsSkipped > 0 {
+			fmt.Fprintf(b, "        skipped %d components of type %s (not software packages)\n",
+				c.ComponentsSkipped, strings.Join(c.SkippedTypes, ", "))
+		}
 		if len(c.Failing) > 0 {
 			missing := strings.Join(c.Failing, ", ")
 			if c.FailingTruncated {

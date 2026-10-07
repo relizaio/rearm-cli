@@ -125,6 +125,14 @@ func TestSkipFilesReport(t *testing.T) {
 				continue
 			}
 			component++
+			if supportCheckIDs[c.ID] {
+				// SCORE-20: the support checks never judge a file component, so the option
+				// leaves their total unchanged.
+				if after[c.ID] != before[c.ID] {
+					t.Errorf("%s: total %d -> %d, want it unchanged", c.ID, before[c.ID], after[c.ID])
+				}
+				continue
+			}
 			if after[c.ID] != before[c.ID]-2 {
 				t.Errorf("%s: total %d -> %d, want a drop of 2", c.ID, before[c.ID], after[c.ID])
 			}

@@ -92,6 +92,7 @@ type Comp struct {
 	Properties  []Property
 	ValidUntil  string // SPDX 2.3 validUntilDate
 	IsFile      bool   // CycloneDX type file; SPDX 2.3 primaryPackagePurpose FILE
+	Type        string // CycloneDX component.type; SPDX 2.3 primaryPackagePurpose, as written; "" when absent
 }
 
 // Dependency is one CycloneDX dependencies[] entry, or for SPDX the packages one package depends

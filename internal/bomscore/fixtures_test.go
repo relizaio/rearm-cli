@@ -126,6 +126,18 @@ func checkOf(t *testing.T, r Report, id string) CheckResult {
 	return CheckResult{}
 }
 
+// compOf finds a component by ref in d.
+func compOf(t *testing.T, d *Doc, ref string) Comp {
+	t.Helper()
+	for _, c := range d.Components {
+		if c.Ref == ref {
+			return c
+		}
+	}
+	t.Fatalf("component %s not in document", ref)
+	return Comp{}
+}
+
 // checkDeclaration finds a declared check and its profile by check id.
 func checkDeclaration(t *testing.T, id string) (Profile, Check) {
 	t.Helper()

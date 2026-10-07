@@ -68,6 +68,8 @@ type Outcome struct {
 	NotAssessed      bool     // the file cannot decide this; INFO checks only
 	NotRepresentable bool     // the input format has no place for the field
 	Note             string
+	Skipped          int      // components the check did not judge (perSupportableComponent)
+	SkippedTypes     []string // their distinct types, sorted; nil when none was skipped
 }
 
 // CheckResult is one check in the report.
@@ -84,6 +86,10 @@ type CheckResult struct {
 	Ref              string   `json:"ref"`
 	Remedy           string   `json:"remedy"`
 	Note             string   `json:"note"`
+	// ComponentsSkipped counts the components the check did not judge, SkippedTypes holds their
+	// distinct types, sorted; both are omitted when the check skipped none.
+	ComponentsSkipped int      `json:"componentsSkipped,omitempty"`
+	SkippedTypes      []string `json:"skippedTypes,omitempty"`
 }
 
 // CheckError is one evaluator that panicked.
@@ -111,11 +117,13 @@ func evaluate(c Check, d *Doc) (res CheckResult, cerr *CheckError) {
 			res.Failing = []string{}
 			res.FailingTruncated = false
 			res.Note = ""
+			res.ComponentsSkipped, res.SkippedTypes = 0, nil
 			cerr = &CheckError{Check: c.ID, Message: fmt.Sprint(r)}
 		}
 	}()
 	o := c.Eval(d)
 	res.Passed, res.Total, res.Note = o.Passed, o.Total, o.Note
+	res.ComponentsSkipped, res.SkippedTypes = o.Skipped, o.SkippedTypes
 	if o.NotRepresentable && c.Level == LevelRequired {
 		res.Level = notRepresentableLevel
 	}
