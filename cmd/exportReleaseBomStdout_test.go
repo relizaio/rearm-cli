@@ -14,10 +14,10 @@ import (
 )
 
 // What exportreleasebom and scorereleasebom leave on stdout when they fail before or after the
-// request (task SCORE-24, review items T-1 and T-5 of run 1): the pipe into rearm bomutils score
+// request (task SCORE-24, design 3.3 and 5.4): the pipe into rearm bomutils score
 // reads stdout, so it carries the document or nothing.
 
-// T-5: errors raised before the command runs (a flag cobra does not know, no session, no URI, a bad
+// T-12: errors raised before the command runs (a flag cobra does not know, no session, no URI, a bad
 // --auth) go to stderr through the real Execute, in a child process because they end it.
 func TestErrorsBeforeTheRequestLeaveStdoutEmpty(t *testing.T) {
 	if args := os.Getenv("REARM_TEST_RELEASEBOM_ARGS"); args != "" {
@@ -63,7 +63,7 @@ func TestErrorsBeforeTheRequestLeaveStdoutEmpty(t *testing.T) {
 	}
 }
 
-// T-1: a document whose answer is larger than the 64 MiB the client read before reaches stdout
+// T-10: a document whose answer is larger than the 64 MiB the client read before reaches stdout
 // whole; an answer over what the client reads is one error line naming the cause.
 func TestAnExportLargerThanTheOldReadLimitReachesStdoutWholeAndAnOversizedAnswerSaysSo(t *testing.T) {
 	// 40 MiB that JSON escaping doubles: an 80 MiB answer

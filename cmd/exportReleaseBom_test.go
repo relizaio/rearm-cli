@@ -197,7 +197,7 @@ func TestEachExportFlagChangesExactlyItsVariable(t *testing.T) {
 	}
 }
 
-// T-8 for scorereleasebom (review item T-4 of run 1): the same flags as the export, each to its
+// T-8 for scorereleasebom (design 3.4): the same flags as the export, each to its
 // variable; the metadata stays null whatever else is set.
 func TestEachScoreFlagChangesExactlyItsVariable(t *testing.T) {
 	base := map[string]interface{}{"release": "r-1", "tldOnly": true, "ignoreDev": false, "structure": "FLAT",
