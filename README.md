@@ -493,6 +493,8 @@ rearm login -u rearm_server_uri
 
 The CLI prints a link (and opens it in the browser where it can), you approve the sign-in in ReARM and choose which key the CLI acts as: a personal key created for this session, one of your existing personal keys, or a Free Form key you hold. The CLI stores only session tokens in `.rearm.env` (mode 0600), never a key secret. Access tokens are refreshed silently; the session slides 30 days on every use and ends 90 days after approval at the latest, so a CLI used at least once a month never asks again.
 
+Several `rearm` processes can share one login safely (long-running `rearm agent wait` loops, hooks, one-off commands). The server ties every access token to the session's current refresh token and replaces that token on each refresh, so the processes take turns: a refresh happens only while holding a lock on `.rearm.env.lock` beside the credentials file, after re-reading the file, and a process that finds a newer token there uses it instead of refreshing. A request refused with 401 is renewed the same way and retried once. `rearm login` and `rearm logout` write under the same lock. The lock file is never deleted and is released when the process exits. Every `rearm` on the host that shares the login must be this version or later: an older one neither locks nor re-reads, and can still invalidate the others' tokens. A session given only through `REARM_REFRESHTOKEN` / `REARM_ACCESSTOKEN` does not use the lock.
+
 Related commands:
 
 - `rearm whoami` - shows which key the CLI acts as and when the session ends.
