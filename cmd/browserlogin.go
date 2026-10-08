@@ -349,16 +349,7 @@ func browserLogin() error {
 		case rearm.DeviceExpired:
 			return errors.New("the sign-in request expired; run `rearm login` again")
 		case rearm.DeviceDelivered:
-			sessionRefreshToken = login.RefreshToken
-			sessionAccessToken = login.Tokens.AccessToken
-			sessionAccessTokenExp = login.Tokens.AccessTokenExpiry
-			sessionExpiresAt = login.Tokens.SessionExpiry
-			sessionHardExpiry = login.Tokens.SessionHardExpiry
-			sessionKeyId = login.APIKeyID
-			sessionOrg = login.Org
-			sessionUri = rearmUri
-			// under the lock, so a login never interleaves with another process's refresh write
-			if err := underCredentialsLock(persistSession); err != nil {
+			if err := storeDeliveredLogin(login); err != nil {
 				return err
 			}
 			path, _ := credentialsPath()
@@ -373,6 +364,21 @@ func browserLogin() error {
 		}
 	}
 	return errors.New("the sign-in request expired; run `rearm login` again")
+}
+
+// storeDeliveredLogin makes the delivered session this process's and writes it to the credentials
+// file under the lock, so a login never interleaves with another process's refresh write (one in
+// flight would otherwise land after it and put the old session's tokens back).
+func storeDeliveredLogin(login *rearm.DeviceLogin) error {
+	sessionRefreshToken = login.RefreshToken
+	sessionAccessToken = login.Tokens.AccessToken
+	sessionAccessTokenExp = login.Tokens.AccessTokenExpiry
+	sessionExpiresAt = login.Tokens.SessionExpiry
+	sessionHardExpiry = login.Tokens.SessionHardExpiry
+	sessionKeyId = login.APIKeyID
+	sessionOrg = login.Org
+	sessionUri = rearmUri
+	return underCredentialsLock(persistSession)
 }
 
 var logoutCmd = &cobra.Command{
