@@ -194,6 +194,8 @@ Flags stand for:
 - **--fail-on-not-ready** - Exit 3 when any requested profile is `NOT_READY` or `UNKNOWN` (the report is still written)
 - **--skip-files** - Leave file components (CycloneDX `type: file`, SPDX 2.3 `primaryPackagePurpose: FILE`) out of the component checks; CISA 2026 Coverage allows excluding non-code files. Default: files counted. The report records it: `options.skipFiles`, `input.componentsSkipped` (how many were left out) and, in text output, a first line `options: --skip-files, N file components left out`. Components nested in a file component are kept and judged on their own type
 
+To score the merged SBOM of a release or product release held in ReARM, use `rearm scorereleasebom` (scored on the server), or pipe `rearm exportreleasebom` into this command; see [Export or Score the Merged Release SBOM](../README.md#3c-use-case-export-or-score-the-merged-release-sbom).
+
 ### Profiles and their source documents
 
 | Profile | Document | Version / date | What is checked |

@@ -32,6 +32,7 @@ All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/
 3. Find Releases by Parameters:
    1. [Check If Artifact Hash Already Present In Some Release](#3a-use-case-check-if-deliverable-hash-already-present-in-some-release)
    2. [Get Release By Version](#3b-use-case-get-release-by-version)
+   3. [Export or Score the Merged Release SBOM](#3c-use-case-export-or-score-the-merged-release-sbom)
 4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
 5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-credentials-in-a-config-file)
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
@@ -420,6 +421,45 @@ Flags stand for:
 - **-k** - flag for api key (required).
 - **--component** - UUID of the Component or Product, or its name. A name is matched case-insensitively against the active components and products of the key's organization and must match exactly one; otherwise the command errors (required).
 - **--version** - exact version of the release whose OBOM to output (required).
+
+## 3c. Use Case: Export or Score the Merged Release SBOM
+
+`exportreleasebom` writes the merged CycloneDX SBOM of a release that the Export Release BOM dialog of the ReARM UI downloads; for a product release that is the product SBOM. The defaults are the dialog's: top-level dependencies only, flat structure, SBOMs of every kind, development, test and build-time SBOMs left out, support and internal metadata off. The document goes to stdout byte for byte and nothing else does (debug lines and errors go to stderr), so it can be piped; or to `--outfile`. Every export stores the merged BOM in ReARM's cache, as the UI export does. It works with an API key (`-i`/`-k`) and with a browser-login session (`rearm login`, `--auth session`); the key, or the person and key of the session, needs the Artifact Download permission on the release.
+
+Sample commands:
+
+```bash
+rearm exportreleasebom -i api_id -k api_key -u https://rearm.example.com \
+    --releaseid release_uuid --outfile product.cdx.json
+
+rearm exportreleasebom --component my-product --version 1.2.3 | rearm bomutils score --profile cisa-2026
+```
+
+Flags stand for:
+
+- **--releaseid** - UUID of the release. Name the release either by `--releaseid` or by `--component` and `--version`.
+- **--component** - UUID of the component or product, or its name when it is unique in the key's organization (with `--version`).
+- **--version** - exact version of the release on `--component`.
+- **--tldonly** - top-level dependencies only (default `true`; `--tldonly=false` carries transitive components).
+- **--ignoredev** - leave development dependencies out (default `false`).
+- **--structure** - `FLAT` (default) or `HIERARCHICAL`.
+- **--belongsto** - only SBOMs that belong to `DELIVERABLE`, `RELEASE` or `SCE` (default: all).
+- **--excludecoveragetypes** - SBOM coverage types to leave out, comma-separated or repeated: `DEV`, `TEST`, `BUILD_TIME` (default all three, as the dialog); `none` leaves nothing out.
+- **--excludefilecomponents** - leave components of type file out of the merged BOM (default `false`).
+- **--mediatype** - `JSON` (default), `CSV` or `EXCEL`. `EXCEL` needs `--outfile`.
+- **--includesupportmetadata** - include the support-status metadata (default `false`); refused where the organization does not disclose it.
+- **--includeinternalmetadata** - include ReARM's internal metadata (default `false`).
+- **--outfile** - write the document to this file (parent directories are created) and print its path, instead of writing the document to stdout.
+
+`scorereleasebom` scores the same merged SBOM on the server and writes the report JSON, the same report as `rearm bomutils score --format json` (see [Score an SBOM](docs/bomutils.md#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)), to stdout, without downloading the document. It takes the release and merge flags above (not `--mediatype`, `--outfile` or the metadata flags) and **--profile** (required, repeatable: `cisa-2026`, `ntia-2021`, `fda`). It exits 0 whenever a report came back, ready or not; a refused score prints `Error: score refused: <reason>: <message>` and exits 1.
+
+```bash
+rearm scorereleasebom --releaseid release_uuid --profile cisa-2026 --profile fda
+```
+
+Support metadata: `scorereleasebom` scores the document the organization's default gives (as the Score button of the UI does), while `exportreleasebom` leaves support metadata out unless `--includesupportmetadata` is passed. In an organization that discloses support metadata the two can therefore differ on the support checks of the `fda` profile.
+
+Errors (an unknown release or version, a missing permission, a bad flag value) print one `Error:` line on stderr and exit 1.
 
 ## 4. Use Case: Request Latest Release Per Component Or Product
 
