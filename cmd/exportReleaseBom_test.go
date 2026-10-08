@@ -131,31 +131,20 @@ func TestExportReleaseBomSendsTheDialogDefaults(t *testing.T) {
 	}
 }
 
-// T-8
-func TestEachExportFlagChangesExactlyItsVariable(t *testing.T) {
-	base := map[string]interface{}{"release": "r-1", "tldOnly": true, "ignoreDev": false, "structure": "FLAT",
-		"belongsTo": nil, "mediaType": "JSON", "excludeCoverageTypes": []string{"DEV", "TEST", "BUILD_TIME"},
-		"includeSupportMetadata": false, "includeInternalMetadata": false, "excludeFileComponents": false}
-	cases := []struct {
-		args    []string
-		changes map[string]interface{}
-	}{
-		{[]string{"--tldonly=false"}, map[string]interface{}{"tldOnly": false}},
-		{[]string{"--ignoredev"}, map[string]interface{}{"ignoreDev": true}},
-		{[]string{"--structure", "HIERARCHICAL"}, map[string]interface{}{"structure": "HIERARCHICAL"}},
-		{[]string{"--structure", "hierarchical"}, map[string]interface{}{"structure": "HIERARCHICAL"}},
-		{[]string{"--belongsto", "SCE"}, map[string]interface{}{"belongsTo": "SCE"}},
-		{[]string{"--excludecoveragetypes", "none"}, map[string]interface{}{"excludeCoverageTypes": nil}},
-		{[]string{"--excludecoveragetypes", "DEV", "--excludecoveragetypes", "TEST"}, map[string]interface{}{"excludeCoverageTypes": []string{"DEV", "TEST"}}},
-		{[]string{"--excludecoveragetypes", "DEV,TEST"}, map[string]interface{}{"excludeCoverageTypes": []string{"DEV", "TEST"}}},
-		{[]string{"--mediatype", "CSV"}, map[string]interface{}{"mediaType": "CSV"}},
-		{[]string{"--includesupportmetadata"}, map[string]interface{}{"includeSupportMetadata": true}},
-		{[]string{"--includeinternalmetadata"}, map[string]interface{}{"includeInternalMetadata": true}},
-		{[]string{"--excludefilecomponents"}, map[string]interface{}{"excludeFileComponents": true}},
-	}
+// flagCase is one flag set and the variables it changes from the command's defaults.
+type flagCase struct {
+	args    []string
+	changes map[string]interface{}
+}
+
+// assertEachFlagChangesExactlyItsVariable runs the command once per case after baseArgs and checks
+// that the request carries base with exactly the case's changes.
+func assertEachFlagChangesExactlyItsVariable(t *testing.T, newCmd func() *cobra.Command, answer map[string]interface{},
+	baseArgs []string, base map[string]interface{}, cases []flagCase) {
+	t.Helper()
 	for _, c := range cases {
-		s, _ := releaseBomWorld(t, exportAnswer(releaseBomDoc))
-		if _, stderr, code := runReleaseBomCmd(t, newExportReleaseBomCmd, append([]string{"--releaseid", "r-1"}, c.args...)...); code != 0 {
+		s, _ := releaseBomWorld(t, answer)
+		if _, stderr, code := runReleaseBomCmd(t, newCmd, append(append([]string(nil), baseArgs...), c.args...)...); code != 0 {
 			t.Fatalf("%v: exit %d: %s", c.args, code, stderr)
 		}
 		want := map[string]interface{}{}
@@ -169,6 +158,33 @@ func TestEachExportFlagChangesExactlyItsVariable(t *testing.T) {
 			t.Fatalf("%v:\nwant %v\ngot  %v", c.args, want, got)
 		}
 	}
+}
+
+// The selection and merge flags both commands share (design 3.3, 3.4).
+var releaseBomSelectionFlagCases = []flagCase{
+	{[]string{"--tldonly=false"}, map[string]interface{}{"tldOnly": false}},
+	{[]string{"--ignoredev"}, map[string]interface{}{"ignoreDev": true}},
+	{[]string{"--structure", "HIERARCHICAL"}, map[string]interface{}{"structure": "HIERARCHICAL"}},
+	{[]string{"--structure", "hierarchical"}, map[string]interface{}{"structure": "HIERARCHICAL"}},
+	{[]string{"--belongsto", "SCE"}, map[string]interface{}{"belongsTo": "SCE"}},
+	{[]string{"--excludecoveragetypes", "none"}, map[string]interface{}{"excludeCoverageTypes": nil}},
+	{[]string{"--excludecoveragetypes", "DEV", "--excludecoveragetypes", "TEST"}, map[string]interface{}{"excludeCoverageTypes": []string{"DEV", "TEST"}}},
+	{[]string{"--excludecoveragetypes", "DEV,TEST"}, map[string]interface{}{"excludeCoverageTypes": []string{"DEV", "TEST"}}},
+	{[]string{"--excludefilecomponents"}, map[string]interface{}{"excludeFileComponents": true}},
+}
+
+// T-8
+func TestEachExportFlagChangesExactlyItsVariable(t *testing.T) {
+	base := map[string]interface{}{"release": "r-1", "tldOnly": true, "ignoreDev": false, "structure": "FLAT",
+		"belongsTo": nil, "mediaType": "JSON", "excludeCoverageTypes": []string{"DEV", "TEST", "BUILD_TIME"},
+		"includeSupportMetadata": false, "includeInternalMetadata": false, "excludeFileComponents": false}
+	cases := append(append([]flagCase(nil), releaseBomSelectionFlagCases...),
+		flagCase{[]string{"--mediatype", "CSV"}, map[string]interface{}{"mediaType": "CSV"}},
+		flagCase{[]string{"--includesupportmetadata"}, map[string]interface{}{"includeSupportMetadata": true}},
+		flagCase{[]string{"--includeinternalmetadata"}, map[string]interface{}{"includeInternalMetadata": true}},
+	)
+	assertEachFlagChangesExactlyItsVariable(t, newExportReleaseBomCmd, exportAnswer(releaseBomDoc),
+		[]string{"--releaseid", "r-1"}, base, cases)
 
 	s, _ := releaseBomWorld(t, exportAnswer(releaseBomDoc))
 	runReleaseBomCmd(t, newExportReleaseBomCmd, "--component", "my-product", "--version", "1.2.3")
@@ -179,6 +195,17 @@ func TestEachExportFlagChangesExactlyItsVariable(t *testing.T) {
 	if _, has := got["release"]; has {
 		t.Fatalf("no release variable when named by component, got %v", got)
 	}
+}
+
+// T-8 for scorereleasebom (review item T-4 of run 1): the same flags as the export, each to its
+// variable; the metadata stays null whatever else is set.
+func TestEachScoreFlagChangesExactlyItsVariable(t *testing.T) {
+	base := map[string]interface{}{"release": "r-1", "tldOnly": true, "ignoreDev": false, "structure": "FLAT",
+		"belongsTo": nil, "excludeCoverageTypes": []string{"DEV", "TEST", "BUILD_TIME"},
+		"includeSupportMetadata": nil, "includeInternalMetadata": nil, "excludeFileComponents": false,
+		"profiles": []string{"cisa-2026"}}
+	assertEachFlagChangesExactlyItsVariable(t, newScoreReleaseBomCmd, scoreAnswer(`{"reportVersion":1}`),
+		[]string{"--releaseid", "r-1", "--profile", "cisa-2026"}, base, releaseBomSelectionFlagCases)
 }
 
 // T-9

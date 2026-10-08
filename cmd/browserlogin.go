@@ -141,7 +141,7 @@ func resolvedAuthMode() string {
 		return strings.ToLower(strings.TrimSpace(authMode))
 	case "":
 	default:
-		fmt.Println("Error: --auth must be key, session or github-oidc")
+		fmt.Fprintln(os.Stderr, "Error: --auth must be key, session or github-oidc")
 		os.Exit(1)
 	}
 	if apiKey != "" {
