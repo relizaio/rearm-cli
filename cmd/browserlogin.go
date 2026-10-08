@@ -97,22 +97,58 @@ func writeCredentials(values map[string]string) error {
 	return os.Chmod(path, 0o600)
 }
 
+// sessionValues is a browser login as the credentials file (or the REARM_* environment) holds it.
+type sessionValues struct {
+	refreshToken, accessToken, keyID, org, uri string
+	accessTokenExp, expiresAt, hardExpiry      time.Time
+}
+
+func sessionValuesFrom(v *viper.Viper) sessionValues {
+	s := sessionValues{refreshToken: v.GetString("refreshtoken"), accessToken: v.GetString("accesstoken"),
+		keyID: v.GetString("apikeyid"), org: v.GetString("org"), uri: v.GetString("uri")}
+	s.accessTokenExp, _ = time.Parse(time.RFC3339, v.GetString("accesstokenexpiry"))
+	s.expiresAt, _ = time.Parse(time.RFC3339, v.GetString("sessionexpiry"))
+	s.hardExpiry, _ = time.Parse(time.RFC3339, v.GetString("sessionhardexpiry"))
+	return s
+}
+
+// sessionFromFile: the session in use came from the credentials file (not from REARM_REFRESHTOKEN /
+// REARM_ACCESSTOKEN), so the client renews through the file's lock (credentialsStore).
+var sessionFromFile bool
+
 // loadSessionConfig picks the session values out of the viper config (file or REARM_* env).
 func loadSessionConfig(v *viper.Viper) {
-	sessionRefreshToken = v.GetString("refreshtoken")
-	sessionAccessToken = v.GetString("accesstoken")
-	sessionKeyId = v.GetString("apikeyid")
-	sessionOrg = v.GetString("org")
-	sessionUri = v.GetString("uri")
-	if s := v.GetString("accesstokenexpiry"); s != "" {
-		sessionAccessTokenExp, _ = time.Parse(time.RFC3339, s)
+	s := sessionValuesFrom(v)
+	sessionRefreshToken = s.refreshToken
+	sessionAccessToken = s.accessToken
+	sessionKeyId = s.keyID
+	sessionOrg = s.org
+	sessionUri = s.uri
+	if !s.accessTokenExp.IsZero() {
+		sessionAccessTokenExp = s.accessTokenExp
 	}
-	if s := v.GetString("sessionexpiry"); s != "" {
-		sessionExpiresAt, _ = time.Parse(time.RFC3339, s)
+	if !s.expiresAt.IsZero() {
+		sessionExpiresAt = s.expiresAt
 	}
-	if s := v.GetString("sessionhardexpiry"); s != "" {
-		sessionHardExpiry, _ = time.Parse(time.RFC3339, s)
+	if !s.hardExpiry.IsZero() {
+		sessionHardExpiry = s.hardExpiry
 	}
+	sessionFromFile = sessionOnFile() && isCredentialsFile(v.ConfigFileUsed()) &&
+		os.Getenv("REARM_REFRESHTOKEN") == "" && os.Getenv("REARM_ACCESSTOKEN") == ""
+}
+
+// isCredentialsFile says whether used is the credentials file the CLI writes.
+func isCredentialsFile(used string) bool {
+	if used == "" {
+		return false
+	}
+	path, err := credentialsPath()
+	if err != nil {
+		return false
+	}
+	a, errA := filepath.Abs(used)
+	b, errB := filepath.Abs(path)
+	return errA == nil && errB == nil && a == b
 }
 
 // sessionOnFile: a browser login is stored -- its refresh token, or, for a session that ends inside
@@ -164,10 +200,17 @@ func oidcOrg() string {
 	return sessionOrg
 }
 
-// persistSessionTokens receives every token set the client refreshes and writes it to the file.
-// The server rotates the refresh token on every refresh: the rotated one replaces the stored one
-// before anything else happens, because the previous token is retired (a short grace window on the
-// server covers a crash between here and the write; reuse after it revokes the session).
+// sessionStoreInUse: this process's session client was built with credentialsStore (set by
+// rearmClient), so the store's Save writes the file. It differs from sessionFromFile, which only says
+// where the session was read from: nothing renews through the store until a client is built with it.
+var sessionStoreInUse bool
+
+// persistSessionTokens receives every token set the client refreshes or adopts. With the store in use
+// the file is already written (under its lock) and only the globals follow. Without it (a session from
+// the environment) the file is written here, as before: the server rotates the refresh token on every
+// refresh, so the rotated one replaces the stored one before anything else happens, because the
+// previous token is retired (a short grace window on the server covers a crash between here and the
+// write; reuse after it revokes the session).
 func persistSessionTokens(t rearm.SessionTokens) {
 	sessionAccessToken = t.AccessToken
 	sessionAccessTokenExp = t.AccessTokenExpiry
@@ -179,6 +222,9 @@ func persistSessionTokens(t rearm.SessionTokens) {
 	}
 	if t.RefreshToken != "" {
 		sessionRefreshToken = t.RefreshToken
+	}
+	if sessionStoreInUse {
+		return
 	}
 	if err := persistSession(); err != nil {
 		fmt.Fprintln(os.Stderr, "Warning: could not write the credentials file; the session may need `rearm login` again:", err)
@@ -311,7 +357,8 @@ func browserLogin() error {
 			sessionKeyId = login.APIKeyID
 			sessionOrg = login.Org
 			sessionUri = rearmUri
-			if err := persistSession(); err != nil {
+			// under the lock, so a login never interleaves with another process's refresh write
+			if err := underCredentialsLock(persistSession); err != nil {
 				return err
 			}
 			path, _ := credentialsPath()
@@ -333,8 +380,27 @@ var logoutCmd = &cobra.Command{
 	Short: "Sign the CLI out of ReARM",
 	Long:  "Revokes the browser-login session on the server (a key created for it is deleted) and clears the credentials file.",
 	Run: func(cmd *cobra.Command, args []string) {
-		if sessionRefreshToken != "" {
-			c, err := rearm.NewWithSession(rearmUri, sessionRefreshToken, rearm.SessionTokens{}, nil, rearm.WithUserAgent("ReARM CLI"))
+		if err := logout(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println("Signed out.")
+	},
+}
+
+// logout revokes the session and clears the credentials file, all under the credentials lock: the
+// refresh token revoked is the one on file at that moment (another process may have rotated the one
+// this process loaded), and no refresh write can land after the clear. A running process's next
+// renewal then finds no session and says to log in again.
+func logout() error {
+	return underCredentialsLock(func() error {
+		refreshToken := sessionRefreshToken
+		if on, err := (credentialsStore{}).Load(); err == nil && on.RefreshToken != "" {
+			refreshToken = on.RefreshToken
+		}
+		if refreshToken != "" {
+			c, err := rearm.NewWithSession(rearmUri, refreshToken, rearm.SessionTokens{}, nil, rearm.WithUserAgent("ReARM CLI"),
+				rearm.WithHTTPClient(&http.Client{Timeout: 20 * time.Second}))
 			if err == nil {
 				err = c.Revoke(context.Background())
 			}
@@ -342,12 +408,8 @@ var logoutCmd = &cobra.Command{
 				fmt.Println("Warning: could not reach ReARM to revoke the session:", err)
 			}
 		}
-		if err := writeCredentials(map[string]string{"URI": rearmUri}); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		fmt.Println("Signed out.")
-	},
+		return writeCredentials(map[string]string{"URI": rearmUri})
+	})
 }
 
 var whoamiCmd = &cobra.Command{
