@@ -40,7 +40,7 @@ func rearmClient() *rearm.Client {
 		return apiClient
 	}
 	if strings.TrimSpace(rearmUri) == "" {
-		fmt.Println("Error: ReARM URI is required (--uri, REARM_URI, or `rearm login`)")
+		fmt.Fprintln(os.Stderr, "Error: ReARM URI is required (--uri, REARM_URI, or `rearm login`)")
 		os.Exit(1)
 	}
 	opts := []rearm.Option{
@@ -54,7 +54,7 @@ func rearmClient() *rearm.Client {
 	switch resolvedAuthMode() {
 	case authSession:
 		if !sessionOnFile() {
-			fmt.Println("Error: no browser-login session on file; run `rearm login`")
+			fmt.Fprintln(os.Stderr, "Error: no browser-login session on file; run `rearm login`")
 			os.Exit(1)
 		}
 		c, err = rearm.NewWithSession(rearmUri, sessionRefreshToken, rearm.SessionTokens{
@@ -70,7 +70,7 @@ func rearmClient() *rearm.Client {
 		c, err = rearm.New(rearmUri, apiKeyId, apiKey, opts...)
 	}
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 	apiClient = c
