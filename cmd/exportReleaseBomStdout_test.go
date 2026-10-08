@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,8 +18,19 @@ import (
 // request (task SCORE-24, design 3.3 and 5.4): the pipe into rearm bomutils score
 // reads stdout, so it carries the document or nothing.
 
-// T-12: errors raised before the command runs (a flag cobra does not know, no session, no URI, a bad
-// --auth) go to stderr through the real Execute, in a child process because they end it.
+// childHome: the home directory the child process runs with.
+type childHome int
+
+const (
+	homeEmpty      childHome = iota // a fresh empty home
+	homeWithConfig                  // a fresh home holding a .rearm.yaml
+	homeMissing                     // no HOME and no PATH, so the home directory cannot be found
+)
+
+// T-12: errors raised before the request (a flag cobra does not know, no session, no URI, a bad
+// --auth, no credentials at all, no home directory) and the --debug configuration lines go to stderr
+// through the real Execute, in a child process because they end it. Every line round 2 moved from
+// stdout to stderr has a case here (task SCORE-24, review item T-7).
 func TestErrorsBeforeTheRequestLeaveStdoutEmpty(t *testing.T) {
 	if args := os.Getenv("REARM_TEST_RELEASEBOM_ARGS"); args != "" {
 		var argv []string
@@ -29,36 +41,62 @@ func TestErrorsBeforeTheRequestLeaveStdoutEmpty(t *testing.T) {
 		Execute()
 		os.Exit(0)
 	}
-	home := t.TempDir()
-	env := []string{"HOME=" + home}
+	var env []string
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "REARM_") && !strings.HasPrefix(kv, "HOME=") && !strings.HasPrefix(kv, "ACTIONS_ID_TOKEN_") {
 			env = append(env, kv)
 		}
 	}
+	const noKey = "Error: rearm: API key id and secret are required"
 	for _, c := range []struct {
-		args  []string
-		error string
+		args   []string
+		home   childHome
+		errors []string
 	}{
-		{[]string{"scorereleasebom", "--releaseid", "r", "--profile", "fda", "--mediatype", "CSV"}, "unknown flag: --mediatype"},
-		{[]string{"exportreleasebom", "--releaseid", "r", "--outfile"}, "flag needs an argument"},
-		{[]string{"--auth", "session", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, "Error: no browser-login session on file"},
-		{[]string{"--auth", "session", "-u", "http://127.0.0.1:9", "scorereleasebom", "--releaseid", "r", "--profile", "fda"}, "Error: no browser-login session on file"},
-		{[]string{"exportreleasebom", "--releaseid", "r"}, "Error: ReARM URI is required"},
-		{[]string{"--auth", "bogus", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, "Error: --auth must be key, session or github-oidc"},
+		{[]string{"scorereleasebom", "--releaseid", "r", "--profile", "fda", "--mediatype", "CSV"}, homeEmpty, []string{"unknown flag: --mediatype"}},
+		{[]string{"exportreleasebom", "--releaseid", "r", "--outfile"}, homeEmpty, []string{"flag needs an argument"}},
+		{[]string{"--auth", "session", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeEmpty, []string{"Error: no browser-login session on file"}},
+		{[]string{"--auth", "session", "-u", "http://127.0.0.1:9", "scorereleasebom", "--releaseid", "r", "--profile", "fda"}, homeEmpty, []string{"Error: no browser-login session on file"}},
+		{[]string{"exportreleasebom", "--releaseid", "r"}, homeEmpty, []string{"Error: ReARM URI is required"}},
+		{[]string{"--auth", "bogus", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeEmpty, []string{"Error: --auth must be key, session or github-oidc"}},
+		// no key and no session: the client cannot be built, the first error a new user of the pipe meets
+		{[]string{"-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeEmpty, []string{noKey}},
+		{[]string{"-u", "http://127.0.0.1:9", "scorereleasebom", "--releaseid", "r", "--profile", "fda"}, homeEmpty, []string{noKey}},
+		// --debug names the configuration file it read, or why it read none
+		{[]string{"--debug", "true", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeWithConfig, []string{"Using config file: ", ".rearm.yaml", noKey}},
+		{[]string{"--debug", "true", "-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeEmpty, []string{`Config File ".rearm" Not Found`, noKey}},
+		{[]string{"-u", "http://127.0.0.1:9", "exportreleasebom", "--releaseid", "r"}, homeMissing, []string{"executable file not found"}},
 	} {
+		childEnv := append([]string(nil), env...)
+		switch c.home {
+		case homeMissing:
+			childEnv = append(childEnv, "PATH=")
+		default:
+			home := t.TempDir()
+			if c.home == homeWithConfig {
+				if err := os.WriteFile(filepath.Join(home, ".rearm.yaml"), []byte("{}\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			childEnv = append(childEnv, "HOME="+home)
+		}
 		argv, _ := json.Marshal(c.args)
 		child := exec.Command(os.Args[0], "-test.run=^TestErrorsBeforeTheRequestLeaveStdoutEmpty$")
-		child.Env = append(env, "REARM_TEST_RELEASEBOM_ARGS="+string(argv))
+		child.Env = append(childEnv, "REARM_TEST_RELEASEBOM_ARGS="+string(argv))
 		var stdout, stderr strings.Builder
 		child.Stdout, child.Stderr = &stdout, &stderr
 		err := child.Run()
 		if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 {
-			t.Fatalf("%v: want exit 1, got %v\nstdout: %s\nstderr: %s", c.args, err, stdout.String(), stderr.String())
+			t.Fatalf("%v (home %d): want exit 1, got %v\nstdout: %s\nstderr: %s", c.args, c.home, err, stdout.String(), stderr.String())
 		}
 		// the child's own test framework prints nothing on an os.Exit, so stdout is the command's alone
-		if stdout.String() != "" || !strings.Contains(stderr.String(), c.error) {
-			t.Fatalf("%v: want nothing on stdout and %q on stderr, got\nstdout: %q\nstderr: %q", c.args, c.error, stdout.String(), stderr.String())
+		if stdout.String() != "" {
+			t.Fatalf("%v (home %d): want nothing on stdout, got\nstdout: %q\nstderr: %q", c.args, c.home, stdout.String(), stderr.String())
+		}
+		for _, want := range c.errors {
+			if !strings.Contains(stderr.String(), want) {
+				t.Fatalf("%v (home %d): want %q on stderr, got %q", c.args, c.home, want, stderr.String())
+			}
 		}
 	}
 }
