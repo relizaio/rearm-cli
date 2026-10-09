@@ -57,6 +57,12 @@ func rearmClient() *rearm.Client {
 			fmt.Println("Error: no browser-login session on file; run `rearm login`")
 			os.Exit(1)
 		}
+		// a session from the credentials file renews under the file's lock, shared with every other rearm
+		// process of this login (task S401-1); one from the environment keeps the old path
+		sessionStoreInUse = sessionFromFile
+		if sessionStoreInUse {
+			opts = append(opts, rearm.WithSessionStore(credentialsStore{}))
+		}
 		c, err = rearm.NewWithSession(rearmUri, sessionRefreshToken, rearm.SessionTokens{
 			AccessToken:       sessionAccessToken,
 			AccessTokenExpiry: sessionAccessTokenExp,
