@@ -28,8 +28,9 @@ import (
 // known before origin is read (ARCHITECTURE round 3): the row's targetBranch, else --base, which is kept for the
 // checkout (pushBaseOf).
 //
-// Thin, by the operator's decision of 2026-10-01: one task read, two git reads (ls-remote, merge-base) and one
-// push, each printed. It does not link, merge, rebase, fetch or open anything.
+// Thin, by the operator's decision of 2026-10-01: one task read, three git reads (ls-remote, merge-base, and the
+// log of what it would push, WL-C3) and one push, each printed. It does not link, merge, rebase, fetch or open
+// anything.
 
 var (
 	pushSession string
@@ -519,6 +520,23 @@ func (p *pushRun) run(args []string) int {
 		return p.refuse(reason, remedy)
 	}
 
+	// No double quote in what this push sends (WL-C3; the rearm-actions templates break on one): the commits past
+	// the branch's tip that no origin branch this checkout knows has, so a base merged in is not refused for its
+	// own history, and a quote already on origin is left to verify.
+	read := func(args ...string) (string, error) {
+		out, _, err := p.git(args...)
+		return out, err
+	}
+	rng := tip + "..HEAD"
+	commits, err := commitsInRange(read, []string{"--not", "--remotes=origin", "--not"}, rng, "to push ("+rng+")")
+	if err != nil {
+		return readErr("%v", err)
+	}
+	if problems := quoteProblems(commits); len(problems) > 0 {
+		return p.refuse(capList(problems, 5)+".",
+			"reword without double quotes (the rearm-actions templates break on them): amend or rebase before pushing; nothing was pushed")
+	}
+
 	// Push and verify (§3.1 step 4): no force flag of any kind, then ls-remote must name HEAD.
 	ref := "refs/heads/" + branch
 	if _, stderr, err := p.git("push", "origin", "HEAD:"+ref); err != nil {
@@ -618,7 +636,11 @@ repository, and verifies the remote head with git ls-remote (task RD5-3). Never 
   4. Fast-forward only: origin's tip of that branch must be an ancestor of HEAD
      (git merge-base --is-ancestor); otherwise refused: merge origin/<branch> and retry.
      Equal: already pushed, exit 0.
-  5. git push origin HEAD:refs/heads/<branch>, then git ls-remote origin refs/heads/<branch> must
+  5. No double quote: a commit between origin's tip and HEAD whose message has one is refused
+     before anything is pushed, since the rearm-actions templates break on it; reword it (amend or
+     rebase). A commit origin already has on a branch this checkout knows (refs/remotes/origin/*),
+     such as the base merged in, is not refused here; task verify reports a quote in the PR's range.
+  6. git push origin HEAD:refs/heads/<branch>, then git ls-remote origin refs/heads/<branch> must
      be HEAD; a mismatch prints both shas and exits 1.
 
 Prints the git commands it ran, the PR, the branch and the sha. Any git message it prints has the
