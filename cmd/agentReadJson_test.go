@@ -51,6 +51,7 @@ func readJsonWorld(t *testing.T) {
 		taskShowSession, taskStatusFilter, taskChangedSince = "", "", ""
 		releaseShowSessionUuid, releaseShowClientSessionId = "", ""
 		supersedeSession, supersedeOld, supersedeBy = "", "", ""
+		unlinkSession, unlinkPr, unlinkNote = "", "", ""
 		unassignReason = ""
 		taskTagsClear, taskGroupKey = false, ""
 	})
@@ -150,6 +151,7 @@ func TestMutationsPrintCompactWithoutTheFlagAndJsonWithIt(t *testing.T) {
 		{agentTaskTagCmd, append([]string{"t-1", "--clear"}, session...)},
 		{agentTaskSupersedeCmd, append([]string{"t-1", "--old", "https://github.com/acme/x/pull/1",
 			"--by", "https://github.com/acme/x/pull/2"}, session...)},
+		{agentTaskUnlinkCmd, append([]string{"t-1", "--pr", "https://github.com/acme/x/pull/1"}, session...)},
 		{agentTaskUnassignCmd, append([]string{"t-1", "--reason", "stale"}, session...)},
 	} {
 		name := tc.cmd.CommandPath()
