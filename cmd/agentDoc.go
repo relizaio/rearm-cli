@@ -56,6 +56,7 @@ var (
 	docDryRun        bool
 	docBoard         string
 	docAdvisory      bool
+	docRole          string
 	docCheck         bool
 )
 
@@ -173,6 +174,8 @@ opening a new round.
 --advisory puts a round on a task another role holds, for example an architect's
 amendment answering a review item while the coder works the task. Only a prose type a
 role you have held on the board produces, on an active task; never an index type.
+When the board's path for the type has {role} and no --file is given, the path names the one
+role that produces the type, or --role when several do.
 
 --json prints one JSON value on stdout and nothing on stderr on success: the release, plus
 checks {verdict, counts, blocking, lines} (null for a document without elements) and, when
@@ -464,12 +467,13 @@ func runDocPublish() error {
 }
 
 // queryDocumentPath asks the server where a new document of this type goes on the board: its
-// template after overrides and scope defaults, with {key}, {round}, {type} and {component} filled
-// the way publish itself counts rounds, and the board's documents root (boards/<board>/ on a shared
-// repository) in front. A variable so tests can stand in for the server.
+// template after overrides and scope defaults, with {key}, {round}, {type}, {component} and {role}
+// filled the way publish itself counts rounds, and the board's documents root (boards/<board>/ on a
+// shared repository) in front. role names the role {role} stands for; empty leaves it to the server,
+// which takes the task holder's. A variable so tests can stand in for the server.
 var queryDocumentPath = defaultQueryDocumentPath
 
-func defaultQueryDocumentPath(boardUuid, spec, task, component string) (string, error) {
+func defaultQueryDocumentPath(boardUuid, spec, task, component, role string) (string, error) {
 	vars := map[string]interface{}{"boardUuid": boardUuid, "specification": spec}
 	if task != "" {
 		vars["task"] = task
@@ -477,8 +481,57 @@ func defaultQueryDocumentPath(boardUuid, spec, task, component string) (string, 
 	if component != "" {
 		vars["component"] = component
 	}
-	data, err := sendGraphQLRequest(rearm.AgentDocumentPath_Operation, vars)
+	// The role read is its own operation, so a server from before {role} still answers every other publish.
+	op := rearm.AgentDocumentPath_Operation
+	if role != "" {
+		vars["role"] = role
+		op = rearm.AgentDocumentPathForRole_Operation
+	}
+	data, err := sendGraphQLRequest(op, vars)
 	return pathFromResponse(data, err, spec)
+}
+
+// queryRoleConfigs reads the board's roles. A variable so tests can stand in for the server.
+var queryRoleConfigs = func(boardUuid string) ([]map[string]interface{}, error) {
+	data, err := sendGraphQLRequest(rearm.AgentTaskRoleConfigsProgrammatic_Operation, map[string]interface{}{"boardUuid": boardUuid})
+	if err != nil {
+		return nil, err
+	}
+	return asList(data["agentTaskRoleConfigsProgrammatic"]), nil
+}
+
+// advisoryPathRole is the role an advisory round's path names when the board's template for the type has {role}:
+// --role, else the one role on the board that produces the type, which is the only role the server can take as
+// the round's author. Empty when the publish is not advisory or the template has no {role}: the server then
+// fills it with the task holder's role, the author of a normal round.
+func advisoryPathRole(board map[string]interface{}, spec string) (string, error) {
+	if !docAdvisory {
+		return "", nil
+	}
+	templates, _ := board["documentPaths"].(map[string]interface{})
+	if !strings.Contains(briefPathTemplate(templates, spec), "{role}") {
+		return "", nil
+	}
+	if docRole != "" {
+		return docRole, nil
+	}
+	roles, err := queryRoleConfigs(str(board["uuid"]))
+	if err != nil {
+		return "", fmt.Errorf("could not read the board's roles for the {role} in its %s path: %w; pass --role or --file", spec, err)
+	}
+	var producers []string
+	for _, r := range roles {
+		for _, o := range asList(r["producesOutputs"]) {
+			if str(o["specification"]) == spec && !stringListHas(producers, str(r["name"])) {
+				producers = append(producers, str(r["name"]))
+			}
+		}
+	}
+	if len(producers) == 1 {
+		return producers[0], nil
+	}
+	return "", fmt.Errorf("the board's %s path names the role ({role}) and %d roles produce %s; pass --role with yours, or --file",
+		spec, len(producers), spec)
 }
 
 // pathFromResponse reads the server's answer. Its refusal -- a task-scoped type with no --task, a
@@ -508,8 +561,12 @@ func documentFile(board map[string]interface{}, spec string) (string, error) {
 		sayPublishNote(publishNoteOut(), versionPathLine(n))
 		return n.Path, nil
 	}
+	role, err := advisoryPathRole(board, spec)
+	if err != nil {
+		return "", err
+	}
 	boardUuid, _ := board["uuid"].(string)
-	return queryDocumentPath(boardUuid, spec, docTask, docComponent)
+	return queryDocumentPath(boardUuid, spec, docTask, docComponent, role)
 }
 
 func init() {
@@ -534,6 +591,9 @@ func init() {
 		"publish on a task another session holds, as an advisory round: a prose type a role you have"+
 			" held on this board produces. Assembled at once, announced on the board, and never an output"+
 			" of your own sign-off; ignored when you hold the task")
+	f.StringVar(&docRole, "role", "",
+		"with --advisory and no --file, the role you publish as, when the board's path for the type has {role}"+
+			" and more than one role produces it")
 
 	agentDocCmd.AddCommand(agentDocPublishCmd)
 }
