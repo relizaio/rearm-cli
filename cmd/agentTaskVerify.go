@@ -536,9 +536,8 @@ func verifyCodeMovedCheck(h *verifyHop, dir string) verifyCheck {
 	var still, unknown []string
 	for _, pr := range prs {
 		at := pr.url + " at " + shortSha(pr.head)
-		out, err := verifyGit(dir, "", "log", "-1", "--format=%cI", pr.head)
-		committed, perr := time.Parse(time.RFC3339, strings.TrimSpace(out))
-		if err != nil || perr != nil || h.assignedAt.IsZero() {
+		committed, err := commitTime(dir, pr.head)
+		if err != nil || h.assignedAt.IsZero() {
 			unknown = append(unknown, at)
 			continue
 		}
@@ -555,6 +554,26 @@ func verifyCodeMovedCheck(h *verifyHop, dir string) verifyCheck {
 	return verifyFail(checkCodeMoved, fmt.Sprintf("No linked PR moved since your assignment (%s): each head was committed "+
 		"before it.", strings.Join(still, ", ")),
 		"push your commits to the PR branches, or sign off with --no-code for a round that changed no code")
+}
+
+// commitTime is when the commit was committed, read from this repository: the date the code-moved and trailers checks
+// compare with the assignment.
+func commitTime(dir, sha string) (time.Time, error) {
+	out, err := verifyGit(dir, "", "log", "-1", "--format=%cI", sha)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339, strings.TrimSpace(out))
+}
+
+// earlierRound is whether the commit was committed before the assignment, by the code-moved check's rule (a commit
+// committed after it is this round's); no assignment time, or a date that cannot be read, is this round's.
+func earlierRound(h *verifyHop, dir, sha string) bool {
+	if h.assignedAt.IsZero() {
+		return false
+	}
+	committed, err := commitTime(dir, sha)
+	return err == nil && !committed.After(h.assignedAt)
 }
 
 func shortSha(sha string) string {
@@ -787,7 +806,8 @@ func parseTrailers(dir, message string) map[string][]string {
 
 // verifyTrailersCheck (check 5): every commit since the merge base carries the three trailers in its final
 // paragraph, merges included; the session trailer is this session's client id (or one of the --code-session ids), and the
-// agent trailer is the same on every commit.
+// agent trailer is the same on every commit. A commit committed before the assignment is an earlier round's, checked at
+// that round's sign-off under a session that may since have closed: any session trailer is accepted on it.
 func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	bases, missing := basesOf(prs)
 	if len(missing) > 0 {
@@ -797,8 +817,8 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	if len(wants) == 0 && h.clientId != "" {
 		wants = []string{h.clientId}
 	}
-	var problems []string
-	total, merges := 0, 0
+	var problems, earlierSessions []string
+	total, merges, earlier := 0, 0, 0
 	agents := map[string]string{}
 	for _, base := range bases {
 		commits, err := commitsSinceBase(dir, base)
@@ -821,7 +841,12 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 				problems = append(problems, fmt.Sprintf("%s lacks %s in its final paragraph", commitLabel(c), strings.Join(lacks, ", ")))
 				continue
 			}
-			if got := tr["rearm-agentic-session"][0]; len(wants) == 0 {
+			if got := tr["rearm-agentic-session"][0]; earlierRound(h, dir, c.sha) {
+				earlier++
+				if !containsString(earlierSessions, got) {
+					earlierSessions = append(earlierSessions, got)
+				}
+			} else if len(wants) == 0 {
 				problems = append(problems, fmt.Sprintf("%s carries ReARM-Agentic-Session %s, and this host knows no client id for the session to compare", commitLabel(c), got))
 			} else if !containsString(wants, got) {
 				problems = append(problems, fmt.Sprintf("%s carries ReARM-Agentic-Session %s, not %s", commitLabel(c), got, strings.Join(wants, " or ")))
@@ -841,11 +866,21 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 			"amend a commit you have not pushed; a pushed one is replaced by a new PR from the base (task supersedepr), never force-pushed"
 		if len(wants) == 0 {
 			remedy = "pass --code-session <client session id> when your code commits carry the session you opened on the controlling instance; " + remedy
+		} else if len(h.codeSessions) == 0 && !h.assignedAt.IsZero() {
+			remedy += "; commits from before your assignment are accepted under any session; when this round's commits carry " +
+				"a code session on another instance, pass --code-session <its client id>"
 		} else if len(h.codeSessions) == 0 {
 			remedy += "; when your code commits carry a code session on another instance, pass --code-session <its client id>"
 		} else if len(h.codeSessionsFrom) > 0 {
+			used := "the task's rounds used"
+			if !h.assignedAt.IsZero() {
+				used = "this round's commits used"
+			}
 			remedy += "; the session compared is the current session recorded for this repository on " + strings.Join(h.codeSessionsFrom, ", ") +
-				": pass --code-session for each code session the task's rounds used, which replaces it"
+				": pass --code-session for each code session " + used + ", which replaces it"
+		} else if !h.assignedAt.IsZero() {
+			remedy += "; commits from before your assignment are accepted under any session, so only this round's commits made under " +
+				"another instance's session need theirs: repeat --code-session for each"
 		} else {
 			remedy += "; a returning task's earlier rounds carry their own code sessions: repeat --code-session for each"
 		}
@@ -854,11 +889,17 @@ func verifyTrailersCheck(h *verifyHop, dir string, prs []verifyPR) verifyCheck {
 	if total == 0 {
 		return verifyPass(checkTrailers, "no commit since the merge base with "+strings.Join(bases, ", ")+".")
 	}
-	label := sessionsLabel(wants)
-	if len(h.codeSessionsFrom) > 0 {
-		label += " (the current session recorded here on " + strings.Join(h.codeSessionsFrom, ", ") + ")"
+	label := ""
+	if earlier < total {
+		label = ", " + sessionsLabel(wants)
+		if len(h.codeSessionsFrom) > 0 {
+			label += " (the current session recorded here on " + strings.Join(h.codeSessionsFrom, ", ") + ")"
+		}
 	}
-	return verifyPass(checkTrailers, fmt.Sprintf("%d commit(s) since the merge base with origin/%s (%d merge(s)) carry the three trailers, %s.",
+	if earlier > 0 {
+		label += fmt.Sprintf("; %d earlier-round commit(s), committed before your assignment, accepted with %s", earlier, sessionsLabel(earlierSessions))
+	}
+	return verifyPass(checkTrailers, fmt.Sprintf("%d commit(s) since the merge base with origin/%s (%d merge(s)) carry the three trailers%s.",
 		total, strings.Join(bases, ", origin/"), merges, label))
 }
 
@@ -1019,10 +1060,12 @@ Server facts, from the task read and this CLI's record of the hop:
 
 Git facts, in the current repository when its origin is one a linked PR names (else skipped):
   trailers         every commit since the merge base with the PR's base, merges included, ends in
-                   ReARM-Agentic-Session, ReARM-Agent and Co-Authored-By as one paragraph; the session
-                   is a --code-session id; without the flag, a current session recorded for this
+                   ReARM-Agentic-Session, ReARM-Agent and Co-Authored-By as one paragraph; one agent
+                   throughout; on a commit committed after the assignment, the session is a
+                   --code-session id; without the flag, a current session recorded for this
                    repository on another instance (session open, session current --set), else this
-                   session's client id; one agent throughout
+                   session's client id; a commit committed before it is an earlier round's, checked
+                   at that round's sign-off, and any session is accepted
   subjects         no commit message carries a double quote
   head             each linked PR's head (as CI reported it, else origin's refs/pull/<n>/head) is HEAD
   base             origin's tip of the base branch (git ls-remote) is merged into HEAD
@@ -1032,7 +1075,7 @@ Exit 0 when nothing fails, 1 when a check fails, 2 when a read failed. --json pr
 {task, checks: [{name, ok, skipped, reason, remedy}], ok}.
 
   rearm agent task verify RD5-1 --session <board-session> --code-session <code session client id>
-  rearm agent task verify RD5-1 --session <board-session> --code-session <round 1 id> --code-session <round 2 id>`,
+  rearm agent task verify RD5-1 --session <board-session> --code-session <code id 1> --code-session <code id 2>`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		os.Exit(runTaskVerify(args))
@@ -1045,6 +1088,6 @@ func init() {
 	f.StringVar(&verifyBase, "base", "", "the branch the PR merges into, when the PR row names none (unregistered here)")
 	f.BoolVar(&verifyNoCode, "no-code", false, "the sign-off will say this round changed no code (skips the moved-PR check, as the server does)")
 	f.BoolVar(&verifyJson, "json", false, "print the checks as JSON")
-	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session the task's rounds used. Left out: the current sessions recorded for this repository on other instances, else the board session's")
+	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session this round's commits used (commits from before the assignment are accepted under any session). Left out: the current sessions recorded for this repository on other instances, else the board session's")
 	agentTaskCmd.AddCommand(agentTaskVerifyCmd)
 }

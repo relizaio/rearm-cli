@@ -1,7 +1,7 @@
-package hack
+package pinscript
 
 // Tests for `make pin-client-go` (task RD4-8). They run the repository's
-// Makefile and hack/pin-client-go.sh in a throwaway consumer module against a
+// Makefile and pin-rearm-client-go-script/pin-client-go.sh in a throwaway consumer module against a
 // throwaway rearm-client-go repository: git's url.insteadOf sends
 // https://github.com/relizaio/rearm-client-go to a local repository, so go get
 // resolves real pseudo-versions without the network. They need git and make,
@@ -134,7 +134,7 @@ func newPinFixture(t *testing.T) *pinFixture {
 		t.Fatal(err)
 	}
 	f.write(filepath.Join(f.consumer, "Makefile"), string(makefile))
-	f.write(filepath.Join(f.consumer, "hack", "pin-client-go.sh"), string(script))
+	f.write(filepath.Join(f.consumer, "pin-rearm-client-go-script", "pin-client-go.sh"), string(script))
 	f.write(filepath.Join(f.consumer, "go.mod"), "module example.com/consumer\n\ngo 1.22\n")
 	f.write(filepath.Join(f.consumer, "go.sum"), "")
 	f.write(filepath.Join(f.consumer, "main.go"), "package main\n\nimport client \""+clientGo+"\"\n\nfunc main() { println(client.Label) }\n")
