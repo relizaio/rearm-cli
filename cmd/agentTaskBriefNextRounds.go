@@ -143,14 +143,15 @@ func renderNextRound(n briefNextRound) string {
 	return line
 }
 
-// pathSlug mirrors the server's Utils.slug, which fills {role} and {component}: accents dropped, lower case,
+// pathSlug mirrors the server's Utils.slug, which fills {role} and {component}: every combining mark dropped after
+// NFD (the server's \p{M}, spacing marks included, not just accents), lower case,
 // every run of anything but a-z and 0-9 one hyphen, none at either end. When nothing is left the server uses
 // the role's uuid prefix, and so does this.
 func pathSlug(name, uuid string) string {
 	var b strings.Builder
 	hyphen := false
 	for _, r := range norm.NFD.String(name) {
-		if unicode.Is(unicode.Mn, r) {
+		if unicode.Is(unicode.M, r) {
 			continue
 		}
 		r = unicode.ToLower(r)

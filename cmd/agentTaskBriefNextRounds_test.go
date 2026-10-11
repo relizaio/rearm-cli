@@ -235,6 +235,8 @@ func TestPathSlugMirrorsTheServer(t *testing.T) {
 		{"Security Reviewer", "", "security-reviewer"},
 		{"  QA / Tester  ", "", "qa-tester"},
 		{"Révieweur", "", "revieweur"},
+		{"a\u0903b", "", "ab"}, // a spacing combining mark: the server's \p{M} drops it, so must this
+		{"दर्शक", "", ""},
 		{"审查", "1a2b3c4d-0000-0000-0000-000000000000", "1a2b3c4d"},
 	} {
 		if got := pathSlug(tc.name, tc.uuid); got != tc.want {

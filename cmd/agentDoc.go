@@ -327,6 +327,10 @@ func runDocPublish() error {
 		return fmt.Errorf("the board cuts BOARD_ELEMENT_CHECK_REPORT rounds when a document with elements is published;" +
 			" run `rearm agent doc element-check` to re-run the element checks")
 	}
+	if docRole != "" && !docAdvisory {
+		return fmt.Errorf("--role names the role of an advisory round; give --advisory too, or drop --role" +
+			" (a round on the task you hold takes your assignment's role)")
+	}
 	if docCheck && (docIndexOnly() || docTask == "") {
 		return fmt.Errorf("--check previews the element checks of a task's document with a file: give --task," +
 			" and not --index-only")
@@ -521,6 +525,10 @@ func advisoryPathRole(board map[string]interface{}, spec string) (string, error)
 	}
 	var producers []string
 	for _, r := range roles {
+		// A deactivated role works no task, so it is no candidate author and must not make the choice ambiguous.
+		if active, ok := r["active"].(bool); ok && !active {
+			continue
+		}
 		for _, o := range asList(r["producesOutputs"]) {
 			if str(o["specification"]) == spec && !stringListHas(producers, str(r["name"])) {
 				producers = append(producers, str(r["name"]))
@@ -530,7 +538,7 @@ func advisoryPathRole(board map[string]interface{}, spec string) (string, error)
 	if len(producers) == 1 {
 		return producers[0], nil
 	}
-	return "", fmt.Errorf("the board's %s path names the role ({role}) and %d roles produce %s; pass --role with yours, or --file",
+	return "", fmt.Errorf("the board's %s path names the role ({role}) and %d active roles produce %s; pass --role with yours, or --file",
 		spec, len(producers), spec)
 }
 
