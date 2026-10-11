@@ -15,6 +15,9 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // The brief's next-round lines (task RD5-5): for each type the role produces on the task, the path of the
@@ -85,10 +88,11 @@ func briefSettledRound(lifecycle string) bool {
 }
 
 // briefNextRounds resolves each output type's next round. {round} is one more than the rounds of the type on
-// the task, a replaced version counting as its round. When the newest round of the type is one this hop
+// the task, a replaced version counting as its round, and {role} is role, the role the hop works as, slugged
+// with pathSlug. When the newest round of the type is one this hop
 // published (published lists the releases the session's doc publish recorded since the assignment), the line
 // names that round's path instead: a republish there is a new version of it, not a new round (task RD4-7).
-func briefNextRounds(outputs []string, templates map[string]interface{}, root, key, taskUuid string,
+func briefNextRounds(outputs []string, templates map[string]interface{}, root, key, taskUuid, role string,
 	docs []map[string]interface{}, published []string) []briefNextRound {
 	out := []briefNextRound{}
 	for _, spec := range outputs {
@@ -124,6 +128,7 @@ func briefNextRounds(outputs []string, templates map[string]interface{}, root, k
 		next := len(rounds) + 1
 		path := strings.ReplaceAll(briefPathTemplate(templates, spec), "{type}", strings.ToLower(spec))
 		path = strings.ReplaceAll(strings.ReplaceAll(path, "{key}", key), "{round}", fmt.Sprint(next))
+		path = strings.ReplaceAll(path, "{role}", role)
 		out = append(out, briefNextRound{Type: spec, Path: root + path, Round: next})
 	}
 	return out
@@ -136,4 +141,32 @@ func renderNextRound(n briefNextRound) string {
 		line += fmt.Sprintf(" (republish = new version of round %d)", n.Round)
 	}
 	return line
+}
+
+// pathSlug mirrors the server's Utils.slug, which fills {role} and {component}: every combining mark dropped after
+// NFD (the server's \p{M}, spacing marks included, not just accents), lower case,
+// every run of anything but a-z and 0-9 one hyphen, none at either end. When nothing is left the server uses
+// the role's uuid prefix, and so does this.
+func pathSlug(name, uuid string) string {
+	var b strings.Builder
+	hyphen := false
+	for _, r := range norm.NFD.String(name) {
+		if unicode.Is(unicode.M, r) {
+			continue
+		}
+		r = unicode.ToLower(r)
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if hyphen && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			hyphen = false
+			b.WriteRune(r)
+			continue
+		}
+		hyphen = true
+	}
+	if b.Len() == 0 && len(uuid) >= 8 {
+		return uuid[:8]
+	}
+	return b.String()
 }

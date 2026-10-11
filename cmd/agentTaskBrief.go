@@ -212,6 +212,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		roles, composed = fallback, false
 	}
 	var inputs, outputs []string
+	roleUuid := ""
 	found, pushesCode := false, false
 	for _, r := range asList(roles["agentTaskRoleConfigsProgrammatic"]) {
 		if !strings.EqualFold(str(r["name"]), role) {
@@ -219,6 +220,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		}
 		found = true
 		b.Role = str(r["name"])
+		roleUuid = str(r["uuid"])
 		b.ServedPrompt = str(r["servedPrompt"])
 		b.PromptVersion = str(r["promptVersion"])
 		outputs = briefTaskOutputs(r)
@@ -258,7 +260,8 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		b.Repository.Templates = t
 	}
 	templates, _ := brd["documentPaths"].(map[string]interface{})
-	b.NextRounds = briefNextRounds(outputs, templates, b.Repository.Root, b.Key, b.TaskUuid, asList(task["documents"]),
+	b.NextRounds = briefNextRounds(outputs, templates, b.Repository.Root, b.Key, b.TaskUuid, pathSlug(b.Role, roleUuid),
+		asList(task["documents"]),
 		hopOutputsFor(session, b.TaskUuid))
 	if st := lookupAgentState(session); st != nil && st.DocumentsRepoPath != "" {
 		b.Repository.LocalPath = st.DocumentsRepoPath
