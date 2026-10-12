@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +15,8 @@ import (
 // rearm agent task push (task RD5-3), against a temporary bare remote and a scripted client: a push that lands
 // and verifies; the branch found by the row's head sha, from the upstream, and by --branch, in that order; the
 // fast-forward refusal; already pushed; the merged, superseded and abandoned refusals; no linked PR; two linked
-// PRs and --pr; the verification mismatch; --json; the printed commands; and no credential in anything printed.
+// PRs and --pr; the verification mismatch; --json; the printed commands; no credential in anything printed; and
+// the double-quote refusal before the push.
 
 const (
 	pTask   = "66666666-6666-4666-8666-666666666666"
@@ -148,6 +150,7 @@ func TestPushLandsAndVerifies(t *testing.T) {
 	want := "base: main (from the PR row's targetBranch)\n" +
 		"ran: git ls-remote --heads origin\n" +
 		"ran: git merge-base --is-ancestor " + before + " HEAD\n" +
+		"ran: " + pushLog(before) + "\n" +
 		"ran: git push origin HEAD:refs/heads/feature\n" +
 		"ran: git ls-remote origin refs/heads/feature\n" +
 		"pushed " + head + " to " + pPR + " (branch feature, found by head sha): origin/feature was " + shortSha(before) +
@@ -176,6 +179,161 @@ func TestPushNeverForces(t *testing.T) {
 			strings.Contains(c, "--mirror") || strings.Contains(c, "--delete") {
 			t.Fatalf("a force or destructive flag in %q", c)
 		}
+	}
+}
+
+// A double quote breaks the rearm-actions templates the message is substituted into, and a pushed commit is never
+// reworded (nothing is force-pushed): push refuses one in what it would send, before sending anything.
+func TestPushRefusesADoubleQuoteBeforePushing(t *testing.T) {
+	w := newPushWorld(t)
+	before := w.remote("feature")
+	vGit(t, w.repo, "", "commit", "-q", "--allow-empty", "-m", "say hi\n\nthe \"hi\" case")
+	inBody := w.head()
+	vGit(t, w.repo, "", "commit", "-q", "--allow-empty", "-m", `fix the "x" case`)
+	inSubject := w.head()
+	out, code := w.run()
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "ran: "+pushLog(before)+"\n",
+		"refused: "+shortSha(inSubject)+` has a double quote in its subject: fix the "x" case; `+
+			shortSha(inBody)+" has a double quote in its body: say hi. "+
+			"Remedy: reword without double quotes (the rearm-actions templates break on them): amend or rebase before pushing; nothing was pushed\n")
+	if strings.Contains(out, "ran: git push") || w.remote("feature") != before {
+		t.Fatalf("pushed anyway:\n%s", out)
+	}
+
+	pushJson = true
+	out, code = w.run()
+	var r pushResult
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatal(err)
+	}
+	if code != 1 || r.Ok || r.Outcome != "refused" || r.RemoteBefore != before || r.RemoteAfter != "" ||
+		!strings.HasPrefix(r.Reason, shortSha(inSubject)+" has a double quote") {
+		t.Fatalf("exit %d: %+v", code, r)
+	}
+}
+
+// Only what this push sends is checked: a quoted commit already at origin's tip is not in the range, so the push
+// proceeds, and verify still reports the quote.
+func TestPushIgnoresAQuoteAlreadyOnOrigin(t *testing.T) {
+	w := newPushWorld(t)
+	vGit(t, w.repo, "", "commit", "-q", "--allow-empty", "-m", `say "hi"`)
+	quoted := w.head()
+	vGit(t, w.repo, "", "push", "-q", "origin", "HEAD:refs/heads/feature")
+	w.pr(0)["head"] = quoted
+	head := w.commit("after.txt")
+	out, code := w.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	wantIn(t, out, "ran: "+pushLog(quoted)+"\n", "ran: git push origin HEAD:refs/heads/feature\n")
+	if w.remote("feature") != head {
+		t.Fatalf("not pushed:\n%s", out)
+	}
+	c := verifySubjectsCheck(w.repo, []verifyPR{{url: pPR, base: "main"}})
+	if c.Ok || !strings.Contains(c.Reason, shortSha(quoted)+` has a double quote in its subject: say "hi"`) {
+		t.Fatalf("verify: %+v", c)
+	}
+}
+
+// A base merged in brings its own history, which origin already has and no reword can change: a quoted commit on
+// main (git revert's default subject) does not stop the push, while the branch's own commits are still read.
+func TestPushIgnoresAQuoteOnTheBaseMergedIn(t *testing.T) {
+	w := newPushWorld(t)
+	work := w.head()
+	vGit(t, w.repo, "", "checkout", "-q", "main")
+	vGit(t, w.repo, "", "commit", "-q", "--allow-empty", "-m", `Revert "add x"`)
+	vGit(t, w.repo, "", "push", "-q", "origin", "main")
+	vGit(t, w.repo, "", "checkout", "-q", "work")
+	vGit(t, w.repo, "", "merge", "-q", "--no-ff", "-m", "merge main", "origin/main")
+	if w.head() == work {
+		t.Fatal("no merge")
+	}
+	out, code := w.run()
+	if code != 0 || w.remote("feature") != w.head() {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+
+	before := w.remote("feature")
+	w.pr(0)["head"] = before
+	w.commit("more.txt")
+	vGit(t, w.repo, "", "commit", "-q", "--amend", "-m", `more "x"`)
+	out, code = w.run()
+	wantIn(t, out, "refused: "+shortSha(w.head())+` has a double quote in its subject: more "x".`)
+	if code != 1 || w.remote("feature") != before {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+}
+
+// pushLog is the printed read of what a push from origin's tip would send.
+func pushLog(tip string) string {
+	return "git log --no-show-signature -z --format=%H %P%n%B --not --remotes=origin --not --end-of-options " + tip + "..HEAD"
+}
+
+// The range follows --end-of-options: a revision that reads as an option is refused, not run.
+func TestCommitsInRangeNeverReadsTheRangeAsAnOption(t *testing.T) {
+	w := newPushWorld(t)
+	read := func(args ...string) (string, error) { return verifyGit(w.repo, "", args...) }
+	if commits, err := commitsInRange(read, nil, "--all", "to push"); err == nil {
+		t.Fatalf("--all was read as an option: %d commit(s)", len(commits))
+	} else if err.Error() != "could not list the commits to push" {
+		t.Fatal(err)
+	}
+	commits, err := commitsInRange(read, nil, "main..HEAD", "to push")
+	if err != nil || len(commits) != 2 || commits[0].message != "add fix.txt" || commits[1].message != "add feature.txt" || commits[0].merge {
+		t.Fatalf("%+v, %v", commits, err)
+	}
+}
+
+// A signed commit read where log.showSignature is on: the signature line, which carries double quotes, is not
+// part of the message.
+func TestCommitsInRangeLeavesTheSignatureOut(t *testing.T) {
+	if _, err := exec.LookPath("ssh-keygen"); err != nil {
+		t.Skip("no ssh-keygen to sign with")
+	}
+	w := newPushWorld(t)
+	key := filepath.Join(w.tmp, "key")
+	vGit(t, w.tmp, "", "version")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "t@example.com", "-f", key).CombinedOutput(); err != nil {
+		t.Skipf("ssh-keygen: %v %s", err, out)
+	}
+	pub, err := os.ReadFile(key + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signers := filepath.Join(w.tmp, "allowed")
+	if err := os.WriteFile(signers, []byte("t@example.com "+string(pub)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range [][2]string{{"gpg.format", "ssh"}, {"user.signingkey", key}, {"gpg.ssh.allowedSignersFile", signers}, {"log.showSignature", "true"}} {
+		vGit(t, w.repo, "", "config", kv[0], kv[1])
+	}
+	vGit(t, w.repo, "", "commit", "-q", "-S", "--allow-empty", "-m", "signed")
+	if shown := vGit(t, w.repo, "", "log", "-1", "--format=%B"); !strings.Contains(shown, `"`) {
+		t.Skipf("this git prints no quoted signature line: %s", shown)
+	}
+	read := func(args ...string) (string, error) { return verifyGit(w.repo, "", args...) }
+	commits, err := commitsInRange(read, nil, "HEAD~1..HEAD", "to push")
+	if err != nil || len(commits) != 1 || commits[0].message != "signed" {
+		t.Fatalf("%+v, %v", commits, err)
+	}
+}
+
+// The subject is git's %s, the first paragraph joined, so a quote on its second line is named as the subject's.
+func TestQuoteProblemsReadTheSubjectAsGitDoes(t *testing.T) {
+	got := quoteProblems([]verifyCommit{
+		{sha: "1111111111111111111111111111111111111111", message: "fix parser\nfor the \"x\" case\n\nbody"},
+		{sha: "2222222222222222222222222222222222222222", message: "clean\n\nquote \"in\" body", merge: true},
+		{sha: "3333333333333333333333333333333333333333", message: "no quote"},
+		{sha: "4444444444444444444444444444444444444444", message: " \n\nafter \"blank\" lines"},
+	})
+	want := []string{`1111111 has a double quote in its subject: fix parser for the "x" case`,
+		"2222222 (merge) has a double quote in its body: clean",
+		`4444444 has a double quote in its subject: after "blank" lines`}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %q", got)
 	}
 }
 
@@ -574,7 +732,7 @@ func TestPushJsonShape(t *testing.T) {
 			t.Fatalf("%s = %v, want %v\n%s", k, m[k], v, out)
 		}
 	}
-	if cmds, _ := m["commands"].([]any); len(cmds) != 4 || cmds[2] != "git push origin HEAD:refs/heads/feature" {
+	if cmds, _ := m["commands"].([]any); len(cmds) != 5 || cmds[3] != "git push origin HEAD:refs/heads/feature" {
 		t.Fatalf("commands: %v", m["commands"])
 	}
 

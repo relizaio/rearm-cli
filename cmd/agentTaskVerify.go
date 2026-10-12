@@ -682,23 +682,30 @@ func commitsSinceBase(dir, base string) ([]verifyCommit, error) {
 			return nil, fmt.Errorf("origin/%s is not in this repository", base)
 		}
 	}
-	list, err := verifyGit(dir, "", "rev-list", "--parents", ref+"..HEAD")
+	read := func(args ...string) (string, error) { return verifyGit(dir, "", args...) }
+	return commitsInRange(read, nil, ref+"..HEAD", "since "+base)
+}
+
+// commitsInRange is every commit in a revision range, merges included, read with one git log. The range follows
+// --end-of-options, so no revision built from input reads as an option; opts, revision options such as --not,
+// come before it. --no-show-signature keeps a log.showSignature line out of the message. what ends the error
+// when the range cannot be listed.
+func commitsInRange(read func(args ...string) (string, error), opts []string, rng, what string) ([]verifyCommit, error) {
+	args := append([]string{"log", "--no-show-signature", "-z", "--format=%H %P%n%B"}, opts...)
+	out, err := read(append(args, "--end-of-options", rng)...)
 	if err != nil {
-		return nil, fmt.Errorf("could not list the commits since %s", base)
+		return nil, fmt.Errorf("could not list the commits %s", what)
 	}
-	var out []verifyCommit
-	for _, line := range strings.Split(list, "\n") {
-		f := strings.Fields(line)
+	var commits []verifyCommit
+	for _, rec := range strings.Split(out, "\x00") {
+		head, message, _ := strings.Cut(strings.TrimLeft(rec, "\n"), "\n")
+		f := strings.Fields(head)
 		if len(f) == 0 {
 			continue
 		}
-		msg, err := verifyGit(dir, "", "log", "-1", "--format=%B", f[0])
-		if err != nil {
-			return nil, fmt.Errorf("could not read commit %s", shortSha(f[0]))
-		}
-		out = append(out, verifyCommit{sha: f[0], message: msg, merge: len(f) > 2})
+		commits = append(commits, verifyCommit{sha: f[0], message: strings.TrimRight(message, "\n"), merge: len(f) > 2})
 	}
-	return out, nil
+	return commits, nil
 }
 
 // basesOf groups the PRs by base: two PRs of one repository on one base read one range.
@@ -917,24 +924,46 @@ func verifySubjectsCheck(dir string, prs []verifyPR) verifyCheck {
 		if err != nil {
 			return verifyFail(checkSubjects, err.Error()+".", "git fetch origin "+base+", then verify again")
 		}
-		for _, c := range commits {
-			total++
-			if !strings.Contains(c.message, `"`) {
-				continue
-			}
-			subject, _, _ := strings.Cut(c.message, "\n")
-			where := "body"
-			if strings.Contains(subject, `"`) {
-				where = "subject"
-			}
-			problems = append(problems, fmt.Sprintf("%s has a double quote in its %s: %s", commitLabel(c), where, subject))
-		}
+		total += len(commits)
+		problems = append(problems, quoteProblems(commits)...)
 	}
 	if len(problems) > 0 {
 		return verifyFail(checkSubjects, capList(problems, 5)+".",
-			"reword without double quotes (the rearm-actions templates break on them): amend a commit you have not pushed; a pushed one is replaced by a new PR from the base")
+			"reword without double quotes (the rearm-actions templates break on them): amend a commit you have not pushed (task push refuses one before pushing it); a pushed one is replaced by a new PR from the base")
 	}
 	return verifyPass(checkSubjects, fmt.Sprintf("no double quote in the %d commit message(s) since the merge base.", total))
+}
+
+// quoteProblems names each commit whose message carries a double quote, and says whether the subject or only
+// the body has it; only the subject is printed.
+func quoteProblems(commits []verifyCommit) []string {
+	var problems []string
+	for _, c := range commits {
+		if !strings.Contains(c.message, `"`) {
+			continue
+		}
+		subject := subjectOf(c.message)
+		where := "body"
+		if strings.Contains(subject, `"`) {
+			where = "subject"
+		}
+		problems = append(problems, fmt.Sprintf("%s has a double quote in its %s: %s", commitLabel(c), where, subject))
+	}
+	return problems
+}
+
+// subjectOf is a message's subject as git's %s reads it, which is what the templates get: the first paragraph
+// after any blank lines, its lines joined by spaces.
+func subjectOf(message string) string {
+	var lines []string
+	for _, line := range strings.Split(message, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, strings.TrimRight(line, " \t\r"))
+		} else if len(lines) > 0 {
+			break
+		}
+	}
+	return strings.Join(lines, " ")
 }
 
 // lsRemote reads one ref's sha on origin, or "" when origin has no such ref.
@@ -1066,7 +1095,7 @@ Git facts, in the current repository when its origin is one a linked PR names (e
                    repository on another instance (session open, session current --set), else this
                    session's client id; a commit committed before it is an earlier round's, checked
                    at that round's sign-off, and any session is accepted
-  subjects         no commit message carries a double quote
+  subjects         no commit message carries a double quote (task push refuses one before pushing it)
   head             each linked PR's head (as CI reported it, else origin's refs/pull/<n>/head) is HEAD
   base             origin's tip of the base branch (git ls-remote) is merged into HEAD
 
