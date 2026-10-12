@@ -48,7 +48,8 @@ var DefaultFamilies = map[string]string{
 // ProseTypes are the specification types that are not an index type, in the server's enum order:
 // where a board's own family defines unless it says otherwise.
 var ProseTypes = []string{"CONOPS", "USE_CASES", "REQUIREMENTS", "FUNCTIONS", "PRODUCT_BREAKDOWN", "INTERFACES",
-	"DATA_MODEL", "ARCHITECTURE", "DETAILED_DESIGN", "UX_CONCEPT", "TEST_PLAN", "GLOSSARY", "DECISION_RECORD"}
+	"DATA_MODEL", "ARCHITECTURE", "DETAILED_DESIGN", "UX_CONCEPT", "TEST_PLAN", "GLOSSARY", "DECISION_RECORD",
+	"THREAT_MODEL"}
 
 // DefaultDefinedIn mirrors the server's ElementFamilies.DEFAULT_DEFINED_IN: family name to the types
 // that define its ids, in order of precedence.

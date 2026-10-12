@@ -167,7 +167,7 @@ func TestNextRoundCounting(t *testing.T) {
 			[]briefNextRound{{Type: "ARCHITECTURE", Path: "r/design/RD-1/architecture-2.md", Round: 2}}},
 	}
 	for _, tc := range cases {
-		if got := briefNextRounds(tc.outputs, tc.templates, "r/", "RD-1", "t-1", tc.docs, tc.published); !reflect.DeepEqual(got, tc.want) {
+		if got := briefNextRounds(tc.outputs, tc.templates, "r/", "RD-1", "t-1", "reviewer", tc.docs, tc.published); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: got %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
@@ -207,12 +207,40 @@ func TestPendingAndRejectedReleasesAreNotRounds(t *testing.T) {
 		}
 		for _, tc := range cases {
 			for _, published := range [][]string{nil, {"r-u"}} {
-				got := briefNextRounds([]string{"DETAILED_DESIGN"}, nil, "r/", "RD-1", "t-1", asList(tc.docs), published)
+				got := briefNextRounds([]string{"DETAILED_DESIGN"}, nil, "r/", "RD-1", "t-1", "coder", asList(tc.docs), published)
 				want := []briefNextRound{{Type: "DETAILED_DESIGN", Path: tc.path, Round: tc.round}}
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("%s %s, hop outputs %v: got %+v, want %+v", lifecycle, tc.name, published, got, want)
 				}
 			}
+		}
+	}
+}
+
+// {role} is the hop's role, slugged as the server slugs it (rearm-saas#813): two reviewers write apart, and the
+// round still counts every role's rounds of the type on the task, as the server's does.
+func TestNextRoundFillsTheRole(t *testing.T) {
+	templates := map[string]interface{}{"BOARD_REVIEW_ITEMS": "review-items/{key}/{role}/round-{round}.md"}
+	docs := []map[string]interface{}{nextDoc("r-1", "BOARD_REVIEW_ITEMS", 1, "1", "ASSEMBLED", "r/review-items/RD-1/code-reviewer/round-1.md")}
+	got := briefNextRounds([]string{"BOARD_REVIEW_ITEMS"}, templates, "r/", "RD-1", "t-1", pathSlug("Security Reviewer", ""), docs, nil)
+	want := []briefNextRound{{Type: "BOARD_REVIEW_ITEMS", Path: "r/review-items/RD-1/security-reviewer/round-2.md", Round: 2}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestPathSlugMirrorsTheServer(t *testing.T) {
+	for _, tc := range []struct{ name, uuid, want string }{
+		{"reviewer", "", "reviewer"},
+		{"Security Reviewer", "", "security-reviewer"},
+		{"  QA / Tester  ", "", "qa-tester"},
+		{"Révieweur", "", "revieweur"},
+		{"a\u0903b", "", "ab"}, // a spacing combining mark: the server's \p{M} drops it, so must this
+		{"दर्शक", "", ""},
+		{"审查", "1a2b3c4d-0000-0000-0000-000000000000", "1a2b3c4d"},
+	} {
+		if got := pathSlug(tc.name, tc.uuid); got != tc.want {
+			t.Errorf("pathSlug(%q) = %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }
