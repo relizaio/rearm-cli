@@ -788,7 +788,8 @@ var releasecompletionfinalizerCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		// cobra has already printed "Error: <err>" and the usage to stderr; stdout carries only a
+		// command's output (a document piped on, task SCORE-24)
 		os.Exit(1)
 	}
 }
@@ -998,7 +999,7 @@ func initConfig(cmd *cobra.Command) {
 		// Find home directory.
 		home, err := homedir.Dir()
 		if err != nil {
-			fmt.Println(err)
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		// Search config in home directory with name ".rearm" (without extension).
@@ -1008,13 +1009,14 @@ func initConfig(cmd *cobra.Command) {
 	v.SetEnvPrefix(envPrefix)
 
 	// Attempt to read the config file.
+	// debug lines on stderr, so stdout stays a command's output alone
 	if err := v.ReadInConfig(); err != nil {
 		if debug == "true" {
-			fmt.Println(err)
+			fmt.Fprintln(os.Stderr, err)
 		}
 	} else {
 		if debug == "true" {
-			fmt.Println("Using config file:", v.ConfigFileUsed())
+			fmt.Fprintln(os.Stderr, "Using config file:", v.ConfigFileUsed())
 		}
 	}
 

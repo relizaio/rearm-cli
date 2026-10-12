@@ -42,6 +42,7 @@ func init() {
 
 	rootCmd.AddCommand(bomUtils)
 	bomUtils.AddCommand(fixPurlCmd)
+	bomUtils.AddCommand(bomScoreCmd)
 }
 
 func readJSON() ([]byte, error) {

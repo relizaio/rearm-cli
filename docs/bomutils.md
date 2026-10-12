@@ -11,6 +11,7 @@ Base Command: `bomutils`
    - [Enrich Both Supplier and License](#923-enrich-both-supplier-and-license)
 3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
 4. [Merge Multiple BOMs](#94-merge-multiple-boms)
+5. [Score an SBOM against CISA, NTIA and FDA minimum elements](#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)
 
 ---
 
@@ -172,3 +173,101 @@ Flags stand for:
 - **--root-component-merge-mode** - How to handle root components: PRESERVE_UNDER_NEW_ROOT or FLATTEN_UNDER_NEW_ROOT (default: PRESERVE_UNDER_NEW_ROOT)
 - **--purl** - Set bom-ref and purl for the root merged component (optional)
 - **--outfile** - Output file path to write merged BOM (optional - writes to stdout when not specified)
+
+## 9.5 Score an SBOM against CISA, NTIA and FDA minimum elements
+
+The `score` command reads one SBOM file and says, per profile, whether it is ready (`READY`, `NOT_READY` or `UNKNOWN`), a score from 0 to 100, and which checks fail on which components. It runs locally: no ReARM server, no credentials, no network call, and no file is written except `--outfile`.
+
+Sample commands:
+
+```bash
+rearm bomutils score -f bom.cdx.json
+rearm bomutils score -f bom.spdx.json --profile cisa-2026 --profile fda --format json -o report.json
+cat bom.cdx.xml | rearm bomutils score --profile ntia-2021 --fail-on-not-ready
+```
+
+Flags stand for:
+- **-f, --infile** - Input SBOM file path; empty or `-` reads stdin
+- **-o, --outfile** - Output report file path; empty or `-` writes stdout
+- **--profile** - Profile to score, repeatable: `cisa-2026` (default), `ntia-2021`, `fda`. Profiles come out in the order given; a profile given twice is scored once
+- **--format** - `text` (default) or `json`
+- **--fail-on-not-ready** - Exit 3 when any requested profile is `NOT_READY` or `UNKNOWN` (the report is still written)
+- **--skip-files** - Leave file components (CycloneDX `type: file`, SPDX 2.3 `primaryPackagePurpose: FILE`) out of the component checks; CISA 2026 Coverage allows excluding non-code files. Default: files counted. The report records it: `options.skipFiles`, `input.componentsSkipped` (how many were left out) and, in text output, a first line `options: --skip-files, N file components left out`. Components nested in a file component are kept and judged on their own type
+
+To score the merged SBOM of a release or product release held in ReARM, use `rearm scorereleasebom` (scored on the server), or pipe `rearm exportreleasebom` into this command; see [Export or Score the Merged Release SBOM](../README.md#3c-use-case-export-or-score-the-merged-release-sbom).
+
+### Profiles and their source documents
+
+| Profile | Document | Version / date | What is checked |
+|---|---|---|---|
+| `cisa-2026` | CISA et al., "2026 Minimum Elements for a Software Bill of Materials (SBOM)", https://www.cisa.gov/sites/default/files/2026-07/2026_cisa_sbom_minimum_elements_508c.pdf | version 2.1, 2026-07-29 | the 17 data fields of Table 1 (REQUIRED); the six practices (Accommodation of Updates to SBOM Data, Coverage, Distribution and Delivery, Explicitly Identifying Unknown Information, Frequency, Machine-Processable Data) as INFO checks, always not assessed: one file cannot show a practice |
+| `ntia-2021` | NTIA, "The Minimum Elements For a Software Bill of Materials (SBOM)", https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf | 2021-07-12 | the seven fields of the Data Fields table |
+| `fda` | FDA, "Cybersecurity in Medical Devices: Quality Management System Considerations and Content of Premarket Submissions", section V.A.4(b), https://www.fda.gov/media/119933/download | 2026-02-03 | the eight baseline attributes of NTIA "Framing Software Component Transparency", 2nd edition (2021-10-21), section 2.2, which the guidance cites (the seven July 2021 fields plus Component Hash); the software level of support and the end-of-support date of each component; known vulnerabilities as an INFO check (delivered as VDR/VEX with the submission, not in the SBOM) |
+
+What the checks read, in short:
+- **SBOM author**: CycloneDX `metadata.authors[].name` or `metadata.manufacturer.name` (the organization that created the BOM). The deprecated `metadata.manufacture` names the maker of the described component, not the BOM's author, and does not count, nor does `metadata.supplier`. SPDX: a `Person:` or `Organization:` creator.
+- **Tool name and version**: CycloneDX legacy `metadata.tools[]`, `metadata.tools.components[]` and `.services[]`; every tool needs a version. SPDX: `Tool:` creators of the form `name-version` (the text after the last `-`).
+- **Component producer**: CycloneDX `manufacturer`, `supplier`, `authors[]` or `author`; SPDX `supplier` or `originator`.
+- **Component identifiers**: CycloneDX `purl`, `cpe`, `swid.tagId`, `swhid[]` or `omniborId[]`; SPDX external references of type `purl`, `cpe22Type`, `cpe23Type`, `swh` or `gitoid`.
+- **Dependency relationship**: the described component must declare its direct dependencies; entries of other components count for nothing.
+  - CycloneDX: a `dependencies[]` entry whose `ref` is `metadata.component`'s `bom-ref`, with a non-empty `dependsOn`. A component with no dependencies says so with a `compositions[]` entry of `aggregate: complete` whose `dependencies[]` lists that `bom-ref`; any other aggregate (`incomplete`, `unknown`, `not_specified`) states nothing. An `incomplete` statement next to a non-empty `dependsOn` still passes: the direct dependencies are declared.
+  - SPDX: a `DEPENDS_ON` or `CONTAINS` relationship from each described package to a package of the document, or the mirrors `DEPENDENCY_OF` / `CONTAINED_BY` from such a package to it. The described package states it has none with `DEPENDS_ON NONE` or `CONTAINS NONE`, or with the mirrors `NONE DEPENDENCY_OF` / `NONE CONTAINED_BY` the described package. The converse, `NONE DEPENDS_ON` or `NONE CONTAINS` the described package, says nothing depends on or contains it, and states nothing about its dependencies. A `CONTAINS` to a file, an end of `NOASSERTION`, an external document (`DocumentRef-`) or an unknown id, and a relationship whose depending side is not a package do not count. With several described packages, every one must declare.
+  - It fails, with a note, when there is no `metadata.component` (`no metadata.component`), when it has no `bom-ref` (`metadata.component has no bom-ref`), when the SPDX document describes no package (`no DESCRIBES relationship`), and when the root's entry is missing or has an empty `dependsOn` without a `complete` statement (`described component declares no direct dependencies: <refs>`): "none" must be stated, not inferred from an empty list.
+- **Level of support** (`fda`): the component property `reliza:support:levelOfSupport` is exactly `actively maintained`, `no longer maintained` or `abandoned`. **End-of-support date** (`fda`): the component property `cdx:lifecycle:milestone:endOfSupport`, or SPDX 2.3 `validUntilDate`, is an ISO 8601 date or date-time. ReARM writes both properties into release exports that include support metadata.
+- **The described component is not checked.** `metadata.component` (CycloneDX) or the described package (SPDX) is the subject of the SBOM: its fields are not component fields, and only its dependency declaration is checked (above). Its parts (components nested under `metadata.component`) are not in the component set either. The component set is every other CycloneDX component, nested ones included; for SPDX every package except the ones the document describes; with `--skip-files`, without file components.
+- A value that only says "unknown" (`NOASSERTION`, `NONE`, an empty or whitespace-only string) counts as missing.
+- A signature is checked for presence only (CycloneDX JSON top-level `signature`; XML a root-level `Signature` element in a foreign namespace such as XML-DSig), never verified.
+
+**What SPDX 2.x cannot carry.** SPDX 2.x has no place for the SBOM author signature, the generation context (lifecycle), the SBOM version or the level of support, and SPDX 2.1 and 2.2 none for the end-of-support date. Those checks fail with the note `not representable in SPDX <version>`, so an SPDX 2.x file is always `NOT_READY` under `cisa-2026` and `fda`.
+
+### Supported inputs
+
+| Format | Serializations | Versions |
+|---|---|---|
+| CycloneDX | JSON, XML | 1.0 to 1.7 |
+| SPDX | JSON, YAML, tag-value | 2.1, 2.2, 2.3 |
+
+Not supported: SPDX RDF/XML, SPDX 3.x, CycloneDX 2.0 and newer, CycloneDX protobuf, and files of neither format. A CycloneDX document without components (for example VEX only) is scored: every component check fails with `0/0`.
+
+### Verdict and score
+
+- A check is `PASS` when every component (or the document) has the field, else `FAIL`; a component check on a BOM without components fails. `NOT_ASSESSED` is for INFO checks only; `ERROR` is a check that failed to evaluate (printed to stderr and listed under `errors`).
+- Verdict: `NOT_READY` when a REQUIRED check fails; otherwise `UNKNOWN` when a REQUIRED check is in `ERROR`; otherwise `READY`. INFO checks never change a verdict.
+- Score: over the REQUIRED checks that pass or fail, the mean of `passed / total` per check, times 100, rounded down, so 100 means every counted check passed in full. One missing hash in 5000 components costs a fraction of one check, not the whole check.
+- The `structure` block (CycloneDX only) holds three INFO checks, `structure.purl-valid`, `structure.refs-resolve` and `structure.no-orphans`; they never change a verdict or a score.
+- `input.components` is the number of components scored, the `total` of every component check except the two fda support checks below; with `--skip-files`, `input.componentsSkipped` is the number left out.
+- `fda.component.support-level` and `fda.component.end-of-support` judge software packages only: they skip CycloneDX components of type `file`, `cryptographic-asset`, `data`, `machine-learning-model` and `device`; a component without a type is judged. In SPDX the level of support is not representable, so `fda.component.support-level` counts every package and skips none; `fda.component.end-of-support` skips SPDX 2.3 packages with `primaryPackagePurpose` `FILE` or `DEVICE` (in SPDX 2.2 it is not representable either). A check that skipped components reports `componentsSkipped` and `skippedTypes`, and the text output prints `skipped N components of type ... (not software packages)` under it. With `--skip-files` the file components are already left out before these checks. Every other check judges these components as before.
+
+### How results differ from sbomqs
+
+sbomqs v2.1.2 scores the same fields, and on the real-world files we compared most results agree. Where they differ, it is on purpose:
+
+| Topic | rearm | sbomqs | Why |
+|---|---|---|---|
+| Described component | left out of the component checks; only its dependency declaration is checked | scored as a component, so a field missing on the primary component alone fails | the described component is the subject of the SBOM, not a part of it |
+| Dependency relationship | the described component declares its direct dependencies (CycloneDX `dependsOn`; SPDX `DEPENDS_ON` or `CONTAINS`, or their mirrors) or states it has none (a `complete` composition naming it; SPDX `NONE`); an empty `dependsOn` alone fails; every described SPDX package must declare; a `dependsOn` whose refs do not resolve still counts, `structure.refs-resolve` reports the refs | an empty `dependsOn` alone fails as well; SPDX `CONTAINS` counts under its 2026 profile but not under its NTIA 2021 profile; a `complete` composition counts under its NTIA 2021 profile but not under its 2026 profile; SPDX `NONE` never counts; refs that do not resolve fail; one declaring package is enough when several are described | neither tool reads "none" into an empty list; rearm reads `CONTAINS` as the SPDX way of listing an image's or archive's parts and `NONE` as the SPDX way of stating none, in every profile; each subject must answer for its own dependencies; broken refs are a structure defect reported once |
+| Component licence | CycloneDX `licenses[]`; SPDX `licenseDeclared`, else `licenseConcluded` when the declared one is missing or `NOASSERTION` | SPDX `licenseDeclared` only | a concluded licence is still a licence of the component |
+| SBOM author | never taken from `metadata.tools` or `Tool:` creators | its NTIA 2021 profile gives full marks for an author inferred from the generation tool (its 2026 profile does not) | a tool is not the author of the SBOM |
+| Declared unknowns | `NOASSERTION`, `NONE` and blank count as missing in every field | counts SPDX `NOASSERTION` as a declared supplier and producer | a value that says "unknown" does not give the field |
+| `NOASSERTION` supplier | missing, in SPDX as in CycloneDX | present in SPDX; on the CycloneDX file of the same scan it counted 65 of 1845 components, on the SPDX file 1842 | the same scan should score the same in either format |
+| Level of support, end of support | scored by the fda profile on software packages: file, key-material, data, ML-model and device components are skipped, stated per check | not scored: neither its NTIA 2021 nor its 2026 profile has the fields, and its default score marks `comp_eol_eos` as ignored (`N/A`) even on files that carry them | the FDA guidance asks for both; a supplier does not maintain a key file or a data set |
+
+With `--skip-files` the per-component totals differ from sbomqs as well, which scores file components.
+
+### Exit codes
+
+- **0** - scored, whatever the verdict
+- **1** - unsupported or unparsable input: one line on stderr, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, nothing on stdout
+- **2** - an unknown `--profile` or `--format` value
+- **3** - with `--fail-on-not-ready`, a requested profile is `NOT_READY` or `UNKNOWN`
+
+### Sample output
+
+```
+cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 99
+  FAIL  Component Hash Value  120/123  (Table 1, Component Hash Value)
+        missing in: libbar@0.3, libfoo@2.1, pkg:npm/a@1.0.0
+  17 required: 16 pass, 1 fail, 0 error; 6 not assessed
+```
+
+With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count and `componentsSkipped` the number `--skip-files` left out) comes `options`, today `{"skipFiles": false}` or `true`. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note, and, when the check skipped components, `componentsSkipped` and `skippedTypes`.
