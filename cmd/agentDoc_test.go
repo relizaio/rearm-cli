@@ -301,8 +301,8 @@ func TestPendingOutputsAreKeyedByTaskAndReadUntilTheHopCloses(t *testing.T) {
 
 func TestPublishWithoutAFileAsksTheBoard(t *testing.T) {
 	var asked []string
-	queryDocumentPath = func(board, spec, task, component string) (string, error) {
-		asked = append(asked, board, spec, task, component)
+	queryDocumentPath = func(board, spec, task, component, role string) (string, error) {
+		asked = append(asked, board, spec, task, component, role)
 		return "docs/detailed_design/1a2b3c4d/round-2.md", nil
 	}
 	defer func() { queryDocumentPath = defaultQueryDocumentPath }()
@@ -316,13 +316,13 @@ func TestPublishWithoutAFileAsksTheBoard(t *testing.T) {
 	if got != "docs/detailed_design/1a2b3c4d/round-2.md" {
 		t.Errorf("the server's path is used, got %q", got)
 	}
-	if want := []string{"board-1", "DETAILED_DESIGN", "1a2b3c4d-0000-0000-0000-000000000000", ""}; strings.Join(asked, "|") != strings.Join(want, "|") {
+	if want := []string{"board-1", "DETAILED_DESIGN", "1a2b3c4d-0000-0000-0000-000000000000", "", ""}; strings.Join(asked, "|") != strings.Join(want, "|") {
 		t.Errorf("asked with %v, want %v", asked, want)
 	}
 }
 
 func TestAFileBypassesTheBoard(t *testing.T) {
-	queryDocumentPath = func(_, _, _, _ string) (string, error) {
+	queryDocumentPath = func(_, _, _, _, _ string) (string, error) {
 		t.Fatal("--file must not ask the board")
 		return "", nil
 	}
@@ -345,5 +345,59 @@ func TestTheServersRefusalIsPassedOnWithTheWayRoundIt(t *testing.T) {
 	got, err := pathFromResponse(map[string]interface{}{"agentBoardProgrammatic": map[string]interface{}{"documentPath": "docs/glossary/api.md"}}, nil, "GLOSSARY")
 	if err != nil || got != "docs/glossary/api.md" {
 		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+// An advisory round's path names its own role when the board's template has {role} (rearm-saas#813): --role,
+// else the one role producing the type; a non-advisory publish leaves it to the server, which takes the holder's.
+func TestAdvisoryPathRole(t *testing.T) {
+	roles := []map[string]interface{}{
+		{"name": "architect", "producesOutputs": []interface{}{map[string]interface{}{"specification": "ARCHITECTURE"}}},
+		{"name": "security-architect", "producesOutputs": []interface{}{map[string]interface{}{"specification": "THREAT_MODEL"}}},
+		{"name": "lead", "producesOutputs": []interface{}{map[string]interface{}{"specification": "ARCHITECTURE"}}},
+		{"name": "old-security", "active": false, "producesOutputs": []interface{}{map[string]interface{}{"specification": "THREAT_MODEL"}}},
+	}
+	orig := queryRoleConfigs
+	queryRoleConfigs = func(string) ([]map[string]interface{}, error) { return roles, nil }
+	defer func() {
+		queryRoleConfigs = orig
+		docAdvisory, docRole = false, ""
+	}()
+	withRole := map[string]interface{}{"uuid": "board-1", "documentPaths": map[string]interface{}{
+		"ARCHITECTURE": "design/{key}/{role}/architecture-{round}.md", "THREAT_MODEL": "design/{key}/{role}/tm-{round}.md"}}
+
+	docAdvisory, docRole = false, ""
+	if got, err := advisoryPathRole(withRole, "ARCHITECTURE"); err != nil || got != "" {
+		t.Errorf("not advisory: the server's holder role, got %q, %v", got, err)
+	}
+	docAdvisory = true
+	if got, err := advisoryPathRole(map[string]interface{}{"uuid": "board-1"}, "ARCHITECTURE"); err != nil || got != "" {
+		t.Errorf("no {role} in the template: nothing to name, got %q, %v", got, err)
+	}
+	if got, err := advisoryPathRole(withRole, "THREAT_MODEL"); err != nil || got != "security-architect" {
+		t.Errorf("the one active producer, a deactivated one not counted, got %q, %v", got, err)
+	}
+	if _, err := advisoryPathRole(withRole, "ARCHITECTURE"); err == nil || !strings.Contains(err.Error(), "--role") {
+		t.Errorf("two producers: ask for --role, got %v", err)
+	}
+	docRole = "lead"
+	if got, err := advisoryPathRole(withRole, "ARCHITECTURE"); err != nil || got != "lead" {
+		t.Errorf("--role wins, got %q, %v", got, err)
+	}
+
+	var asked string
+	queryDocumentPath = func(_, _, _, _, role string) (string, error) { asked = role; return "p.md", nil }
+	defer func() { queryDocumentPath = defaultQueryDocumentPath }()
+	docFile, docTask = "", ""
+	if _, err := documentFile(withRole, "ARCHITECTURE"); err != nil || asked != "lead" {
+		t.Errorf("the publish asks the board with the role, got %q, %v", asked, err)
+	}
+}
+
+func TestRoleWithoutAdvisoryIsRefused(t *testing.T) {
+	docSession, docType, docRole, docAdvisory = "s-1", "ARCHITECTURE", "architect", false
+	defer func() { docSession, docType, docRole, docAdvisory = "", "", "", false }()
+	if err := runDocPublish(); err == nil || !strings.Contains(err.Error(), "--advisory") {
+		t.Errorf("--role alone is refused, naming --advisory: %v", err)
 	}
 }

@@ -48,7 +48,8 @@ func hopVersionRound(board map[string]interface{}, spec string) (briefNextRound,
 		return briefNextRound{}, false, fmt.Errorf("task %s not found; pass --file", docTask)
 	}
 	templates, _ := board["documentPaths"].(map[string]interface{})
-	next := briefNextRounds([]string{spec}, templates, str(board["documentsRoot"]), str(task["key"]), docTask,
+	// No role: only a version line is taken from here, and its path is the published round's own.
+	next := briefNextRounds([]string{spec}, templates, str(board["documentsRoot"]), str(task["key"]), docTask, "",
 		asList(task["documents"]), published)
 	if len(next) == 1 && next[0].Version {
 		return next[0], true, nil
