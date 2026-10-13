@@ -267,6 +267,12 @@ func TestUnsupportedFormsAreWellFormedNotFailed(t *testing.T) {
 			t.Errorf("%s verify-signature without a key: %+v %v, want UNSUPPORTED_FORM", c.name, rep, err)
 		}
 	}
+	// excludes on the outer object of signers (the JSF multiple-signature place) is the excludes form.
+	outer := jsfMap(t, "signers-two.cdx.json")
+	signatureOf(outer)["signers"] = signatureOf(outer)["signers"].([]any)[:1]
+	signatureOf(outer)["excludes"] = []any{"metadata"}
+	signatureCase{"signers with outer excludes / pub.pem", encode(t, outer), jsfKey("pub.pem"), VerificationUnsupportedForm, "excludes",
+		StatusPass, "present, not verified (UNSUPPORTED_FORM: excludes)"}.run(t)
 	one := jsfMap(t, "signers-two.cdx.json")
 	sig := signatureOf(one)
 	sig["signers"] = sig["signers"].([]any)[:1]

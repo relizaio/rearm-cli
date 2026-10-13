@@ -210,6 +210,8 @@ func readJSONSignature(raw json.RawMessage) *SignatureState {
 		signer, alg, keyID, reason := readSigner(em)
 		if i == 0 {
 			s.signer, s.Algorithm, s.KeyID = signer, alg, keyID
+			// JSF multiple signatures name excludes on the outer object.
+			s.signer.excludes = s.signer.excludes || !isNull(m[jsfExcludes])
 		}
 		if reason != "" && s.Detail == "" {
 			s.Detail = reason
