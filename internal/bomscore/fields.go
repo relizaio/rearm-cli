@@ -151,13 +151,6 @@ func parseISODate(v string) bool {
 
 func hasSBOMAuthor(d *Doc) Outcome { return docOutcome(anyPresent(d.Authors)) }
 
-func hasSignature(d *Doc) Outcome {
-	if d.notRepresentable(FieldSignature) {
-		return docNotRepresentable(d)
-	}
-	return docOutcome(d.SignaturePresent)
-}
-
 func hasFormatName(d *Doc) Outcome { return docOutcome(isPresent(string(d.Format))) }
 
 func hasFormatVersion(d *Doc) Outcome { return docOutcome(isPresent(d.SpecVersion)) }

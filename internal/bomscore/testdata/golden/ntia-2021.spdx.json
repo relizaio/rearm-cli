@@ -10,7 +10,15 @@
     "serialization": "json",
     "components": 4,
     "componentsSkipped": 0,
-    "sha256": "baecc4b0b72a979dd9573c48101c2d4de99b71a603958a1b500459a48579f491"
+    "sha256": "baecc4b0b72a979dd9573c48101c2d4de99b71a603958a1b500459a48579f491",
+    "signature": {
+      "present": false,
+      "wellFormed": false,
+      "algorithm": "",
+      "keyId": "",
+      "verification": "NOT_REQUESTED",
+      "detail": ""
+    }
   },
   "options": {
     "skipFiles": false

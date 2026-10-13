@@ -15,7 +15,7 @@ var profileCISA2026 = Profile{
 	},
 	Checks: []Check{
 		cisaField("sbom-author", "SBOM Author", ScopeDocument, "", hasSBOMAuthor),
-		cisaField("sbom-author-signature", "SBOM Author Signature", ScopeDocument, "", hasSignature),
+		cisaField("sbom-author-signature", "SBOM Author Signature", ScopeDocument, remedySignature, hasSignature),
 		cisaField("sbom-data-format-name", "SBOM Data Format Name", ScopeDocument, "", hasFormatName),
 		cisaField("sbom-data-format-version", "SBOM Data Format Version", ScopeDocument, "", hasFormatVersion),
 		cisaField("sbom-generation-context", "SBOM Generation Context", ScopeDocument, "", hasGenerationContext),

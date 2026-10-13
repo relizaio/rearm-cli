@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -315,6 +316,7 @@ func runExportReleaseBom(o *releaseBomExportOptions, stdout, stderr io.Writer) i
 			fmt.Fprintln(stderr, "Error writing the document:", err)
 			return 1
 		}
+		printSigningNotice(mediaType, content, stderr)
 		return 0
 	}
 	if dir := filepath.Dir(o.outfile); dir != "." {
@@ -328,7 +330,70 @@ func runExportReleaseBom(o *releaseBomExportOptions, stdout, stderr io.Writer) i
 		return 1
 	}
 	fmt.Fprintln(stdout, o.outfile)
+	printSigningNotice(mediaType, content, stderr)
 	return 0
+}
+
+// The document properties the server stamps on a merged JSON export (SCORE-31 3.5).
+const (
+	propExportSigned         = "reliza:export:signed"
+	propExportSignatureKeyID = "reliza:export:signatureKeyId"
+	propExportUnsignedReason = "reliza:export:unsignedReason"
+	unsignedReasonNoKey      = "NO_KEY"
+	unsignedReasonSigning    = "SIGNING_ERROR"
+)
+
+// printSigningNotice writes one stderr line saying whether a JSON export is signed, read from its
+// metadata.properties. Nothing for CSV or EXCEL, a document that does not parse, or one without
+// reliza:export:signed (a server that does not sign). stdout is never touched.
+func printSigningNotice(mediaType string, content []byte, stderr io.Writer) {
+	if mediaType != releaseBomMediaJSON {
+		return
+	}
+	if line := signingNotice(content); line != "" {
+		fmt.Fprintln(stderr, line)
+	}
+}
+
+func signingNotice(content []byte) string {
+	var doc struct {
+		Metadata struct {
+			Properties []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"properties"`
+		} `json:"metadata"`
+	}
+	if json.Unmarshal(content, &doc) != nil {
+		return ""
+	}
+	props := map[string]string{}
+	for _, p := range doc.Metadata.Properties {
+		if _, seen := props[p.Name]; !seen {
+			props[p.Name] = p.Value
+		}
+	}
+	signed, ok := props[propExportSigned]
+	switch {
+	case !ok:
+		return ""
+	case signed == "true":
+		keyID := props[propExportSignatureKeyID]
+		if keyID == "" {
+			keyID = "<unknown>"
+		}
+		return "signed with organization key " + keyID
+	}
+	switch reason := props[propExportUnsignedReason]; reason {
+	case unsignedReasonNoKey:
+		return "not signed: no organization SBOM signing key is configured (Organization settings, SBOM export signing)"
+	case unsignedReasonSigning:
+		return "not signed: signing failed on the server (SIGNING_ERROR)"
+	case "":
+		return "not signed"
+	default:
+		return "not signed: " + reason
+	}
 }
 
 func runScoreReleaseBom(o *releaseBomScoreOptions, stdout, stderr io.Writer) int {

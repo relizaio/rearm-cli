@@ -44,6 +44,7 @@ var (
 	bomScoreFormat         string
 	bomScoreFailOnNotReady bool
 	bomScoreSkipFiles      bool
+	bomScoreSignatureKey   string
 )
 
 // BomScoreOptions are the inputs of one bomutils score run. Infile and Outfile empty or "-" mean
@@ -55,6 +56,8 @@ type BomScoreOptions struct {
 	Format         BomScoreFormat
 	FailOnNotReady bool
 	SkipFiles      bool
+	// SignatureKey is a PEM, JWK or JWKS file the root signature is verified with; empty: not verified.
+	SignatureKey string
 }
 
 var bomScoreCmd = &cobra.Command{
@@ -65,8 +68,13 @@ var bomScoreCmd = &cobra.Command{
 against the CISA 2026 minimum elements (cisa-2026), the NTIA 2021 minimum elements (ntia-2021) or the
 FDA premarket SBOM content (fda), and write a versioned report. Local only: no server, no credentials.
 
-Exit codes: 0 scored; 1 unsupported or unparsable input; 2 unknown --profile or --format value;
-3 with --fail-on-not-ready when a requested profile is NOT_READY or UNKNOWN (the report is still written).`,
+With --signature-key the root signature (CycloneDX JSON, JSF) is verified with that public key; a
+signature that does not verify fails the cisa-2026 signature check. Without it the check asks only
+for a present, well-formed signature.
+
+Exit codes: 0 scored; 1 unsupported or unparsable input, or an unreadable or unsupported
+--signature-key file; 2 unknown --profile or --format value; 3 with --fail-on-not-ready when a
+requested profile is NOT_READY or UNKNOWN (the report is still written).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		code := RunBomScore(BomScoreOptions{
 			Infile:         infile,
@@ -75,6 +83,7 @@ Exit codes: 0 scored; 1 unsupported or unparsable input; 2 unknown --profile or 
 			Format:         BomScoreFormat(bomScoreFormat),
 			FailOnNotReady: bomScoreFailOnNotReady,
 			SkipFiles:      bomScoreSkipFiles,
+			SignatureKey:   bomScoreSignatureKey,
 		}, os.Stdin, os.Stdout, os.Stderr)
 		if code != bomScoreExitScored {
 			os.Exit(code)
@@ -90,6 +99,8 @@ func init() {
 		"exit 3 when a requested profile is NOT_READY or UNKNOWN")
 	bomScoreCmd.Flags().BoolVar(&bomScoreSkipFiles, "skip-files", false,
 		"leave type: file components out of the component checks (CISA 2026 Coverage allows excluding non-code files)")
+	bomScoreCmd.Flags().StringVar(&bomScoreSignatureKey, "signature-key", "",
+		"verify the root JSF signature with this public key: PEM, JWK or JWKS file; the check fails when it does not verify")
 }
 
 // RunBomScore scores the input and writes the report; it returns the exit code. Its own errors
@@ -128,7 +139,7 @@ func RunBomScore(opts BomScoreOptions, stdin io.Reader, stdout, stderr io.Writer
 		return bomScoreExitRefused
 	}
 
-	report, err := bomscore.Score(input, profiles, Version, bomscore.Options{SkipFiles: opts.SkipFiles})
+	report, err := bomscore.Score(input, profiles, Version, bomscore.Options{SkipFiles: opts.SkipFiles, SignatureKey: opts.SignatureKey})
 	if err != nil {
 		var unknown *bomscore.UnknownProfileError
 		if errors.As(err, &unknown) {

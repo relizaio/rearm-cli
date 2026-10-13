@@ -96,7 +96,9 @@ func TestBomScoreText(t *testing.T) {
 	}
 	for _, line := range []string{
 		"cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 82\n",
-		"  FAIL  SBOM Author Signature  (Table 1, SBOM Author Signature)\n        note: not representable in SPDX 2.3\n",
+		"  FAIL  SBOM Author Signature  (Table 1, SBOM Author Signature)\n" +
+			"        remedy: configure an organization SBOM signing key in ReARM (Organization settings, SBOM export signing); exports are then signed\n" +
+			"        note: not representable in SPDX 2.3\n",
 		"fda  FDA Premarket SBOM (2026)  NOT_READY  score 90\n",
 		"  FAIL  Software level of support  0/4  (V.A.4(b))\n" +
 			"        missing in: pkg:golang/example.com/delta@v0.4.2, pkg:maven/org.beta/beta@2.0.0, pkg:npm/alpha@1.0.0, pkg:pypi/gamma@3.1.0\n" +
