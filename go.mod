@@ -7,7 +7,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/relizaio/rearm-client-go v0.3.1-0.20261012233938-bebcb0a55068
+	github.com/relizaio/rearm-client-go v0.3.2-0.20261013010456-9c023885fd9d
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
