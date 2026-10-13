@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,6 +61,34 @@ func TestBomScoreSignatureKey(t *testing.T) {
 		t.Errorf("tampered --fail-on-not-ready: exit %d stdout %.200q, want 3 and the report", run.code, run.stdout)
 	}
 
+	// ADR-9: under a key the check passes only on VERIFIED; a signature the engine cannot verify
+	// fails it, so --fail-on-not-ready exits 3.
+	for name, want := range map[string]struct {
+		verification bomscore.Verification
+		detail       string
+	}{
+		"rs256.cdx.json":       {bomscore.VerificationUnsupportedAlgorithm, "RS256"},
+		"excludes.cdx.json":    {bomscore.VerificationUnsupportedForm, "excludes"},
+		"signers-two.cdx.json": {bomscore.VerificationUnsupportedForm, "multiple signers (2)"},
+	} {
+		infile := filepath.Join(jsfFixtures, name)
+		note := "signature not verified with the given key (" + string(want.verification) + ": " + want.detail + ")"
+		run := runBomScore(cmd.BomScoreOptions{Infile: infile, Format: "json", SignatureKey: key, FailOnNotReady: true}, nil)
+		var report bomscore.Report
+		if run.code != 3 || json.Unmarshal([]byte(run.stdout), &report) != nil {
+			t.Errorf("%s --fail-on-not-ready: exit %d stderr %q, want 3 and a report", name, run.code, run.stderr)
+			continue
+		}
+		if check := signatureCheck(report); check == nil || check.Passed != 0 || check.Note != note {
+			t.Errorf("%s: signature check %+v, want passed 0 and note %q", name, check, note)
+		}
+		run = runBomScore(cmd.BomScoreOptions{Infile: infile, Format: "json", SignatureKey: key}, nil)
+		report = bomscore.Report{}
+		if run.code != 0 || json.Unmarshal([]byte(run.stdout), &report) != nil || report.Input.Signature.Verification != want.verification {
+			t.Errorf("%s without --fail-on-not-ready: exit %d verification %s, want 0 and %s", name, run.code, report.Input.Signature.Verification, want.verification)
+		}
+	}
+
 	missing := "/nonexistent/key.pem"
 	if run := runBomScore(cmd.BomScoreOptions{Infile: tampered, SignatureKey: missing}, nil); run.code != 1 || run.stdout != "" ||
 		!strings.Contains(run.stderr, missing) || strings.Count(run.stderr, "\n") != 1 {
@@ -81,5 +110,37 @@ func TestBomScoreSignatureKey(t *testing.T) {
 	want := "signature key " + rsaPEM + ": RSA public key is not a supported public key (PEM SubjectPublicKeyInfo of an Ed25519 or EC P-256/P-384/P-521 key)\n"
 	if run := runBomScore(cmd.BomScoreOptions{Infile: tampered, SignatureKey: rsaPEM}, nil); run.code != 1 || run.stdout != "" || run.stderr != want {
 		t.Errorf("RSA key: exit %d stdout %q stderr %q, want 1 and %q", run.code, run.stdout, run.stderr, want)
+	}
+}
+
+// signatureCheck finds the cisa-2026 signature check of a report.
+func signatureCheck(r bomscore.Report) *bomscore.CheckResult {
+	for _, p := range r.Profiles {
+		for i := range p.Checks {
+			if p.Checks[i].ID == "cisa-2026.sbom-author-signature" {
+				return &p.Checks[i]
+			}
+		}
+	}
+	return nil
+}
+
+// The --signature-key help line says the check is a gate on verification (ADR-9).
+func TestBomScoreSignatureKeyHelp(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go toolchain not on PATH")
+	}
+	bin := filepath.Join(t.TempDir(), "rearm")
+	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	c := exec.Command(bin, "bomutils", "score", "--help")
+	c.Env = append(os.Environ(), "HOME="+t.TempDir())
+	help, err := c.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(help), "passes only when the signature verifies") {
+		t.Errorf("score --help does not say the check passes only when the signature verifies:\n%s", help)
 	}
 }

@@ -19,14 +19,19 @@ package tests
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/gowebpki/jcs"
 	"github.com/relizaio/rearm/cmd"
 )
 
@@ -63,6 +68,10 @@ func TestBomVerifySignature(t *testing.T) {
 		{"keyId only with the JWKS", "keyid-only.cdx.json", jsf("keys.jwks.json"), 0, "verified with key " + kid + " from " + jsf("keys.jwks.json") + "; algorithm Ed25519\n"},
 		{"two signers", "signers-two.cdx.json", jsf("pub.pem"), 3, "not verified (UNSUPPORTED_FORM): multiple signers (2)\n"},
 		{"malformed", "malformed.cdx.json", "", 3, "not verified (FAILED): value missing\n"},
+		{"keyId only, signed by another key of the JWKS", "keyid-only-wrong-key.cdx.json", jsf("keys.jwks.json"), 3,
+			"not verified (FAILED): signature does not verify\n"},
+		{"keyId only, signed by another CURRENT key listed first", "keyid-only-wrong-key.cdx.json", jsf("both-current.jwks.json"), 3,
+			"not verified (FAILED): signature does not verify\n"},
 		{"es256 embedded", "signed-es256.cdx.json", "", 0,
 			"verified with the embedded publicKey: integrity under that key, not authorship; algorithm ES256, keyId 00000000-0000-4000-8000-000000000003\n"},
 	} {
@@ -158,5 +167,41 @@ func TestBomVerifySignatureLineIsOneLine(t *testing.T) {
 	run := runVerifySignature(cmd.BomVerifySignatureOptions{}, forged)
 	if run.code != 3 || strings.Count(run.stdout, "\n") != 1 || !strings.HasPrefix(run.stdout, "not verified (UNSUPPORTED_ALGORITHM): X\\u000averified") {
 		t.Errorf("exit %d stdout %q, want 3 and one line with the newline escaped", run.code, run.stdout)
+	}
+}
+
+// T-28: a root member name with a lone surrogate escape is not I-JSON and has no canonical form;
+// the document signed with that name as the escape of U+FFFD verifies, the changed one does not.
+func TestBomVerifySignatureRefusesInvalidText(t *testing.T) {
+	const (
+		fffdName      = "\x5cufffd" // the JSON escape of U+FFFD
+		loneSurrogate = "\x5cud800" // the JSON escape of a lone high surrogate
+		// RFC 8032 section 7.1 TEST 1 secret key, the key of pub.pem.
+		test1Secret = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+	)
+	doc, err := os.ReadFile(jsf("keyid-only.cdx.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = regexp.MustCompile(`,"value":"[A-Za-z0-9_-]+"`).ReplaceAll(doc, nil)
+	doc = append([]byte(`{"`+fffdName+`":1,`), doc[1:]...)
+	canonical, err := jcs.Transform(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed, err := hex.DecodeString(test1Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := base64.RawURLEncoding.EncodeToString(ed25519.Sign(ed25519.NewKeyFromSeed(seed), canonical))
+	signed := bytes.Replace(doc, []byte(`"signature":{`), []byte(`"signature":{"value":"`+value+`",`), 1)
+
+	if run := runVerifySignature(cmd.BomVerifySignatureOptions{Key: jsf("pub.pem")}, signed); run.code != 0 || !strings.HasPrefix(run.stdout, "verified with key ") {
+		t.Fatalf("as signed: exit %d stdout %q stderr %q, want 0 verified", run.code, run.stdout, run.stderr)
+	}
+	changed := bytes.Replace(signed, []byte(fffdName), []byte(loneSurrogate), 1)
+	if run := runVerifySignature(cmd.BomVerifySignatureOptions{Key: jsf("pub.pem")}, changed); run.code != 3 ||
+		!strings.HasPrefix(run.stdout, "not verified (FAILED): document is not canonicalizable") {
+		t.Errorf("lone surrogate in a root member name: exit %d stdout %q stderr %q, want 3 not verified (FAILED): document is not canonicalizable ...", run.code, run.stdout, run.stderr)
 	}
 }

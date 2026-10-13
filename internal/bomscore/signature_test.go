@@ -3,6 +3,7 @@ package bomscore
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -27,6 +28,11 @@ const (
 	wantMalformedNote = "signature present but malformed"
 	wantNotVerifyNote = "signature does not verify with the given key"
 )
+
+// wantUnverifiedNote is the ADR-9 note of a signature the engine cannot verify under a given key.
+func wantUnverifiedNote(v Verification, detail string) string {
+	return "signature not verified with the given key (" + string(v) + ": " + detail + ")"
+}
 
 // jsfKey is the path of a key file under testdata/jsf, as a user would give it.
 func jsfKey(name string) string { return filepath.Join(jsfDir, name) }
@@ -237,12 +243,49 @@ func TestVerificationOutcomes(t *testing.T) {
 			"value is " + itoa(len(der)) + " bytes, ES256 needs 64", StatusFail, wantNotVerifyNote},
 		{"signed-es256 / pub.pem", readJSF(t, "signed-es256.cdx.json"), pub, VerificationKeyMismatch, "embedded publicKey differs from the given key", StatusFail, wantNotVerifyNote},
 		{"keyid-only as ES256 / pub.pem", encode(t, keyIDOnlyES), pub, VerificationFailed, "key curve Ed25519 does not match ES256", StatusFail, wantNotVerifyNote},
-		{"rs256 / pub.pem", readJSF(t, "rs256.cdx.json"), pub, VerificationUnsupportedAlgorithm, "RS256", StatusPass, "present, not verified (UNSUPPORTED_ALGORITHM: RS256)"},
-		{"full.cdx.xml / pub.pem", readFixture(t, "full.cdx.xml"), pub, VerificationUnsupportedForm, "XML signature (XML-DSig) is not verified", StatusPass,
-			"present, not verified (UNSUPPORTED_FORM: XML signature (XML-DSig) is not verified)"},
+		{"rs256 / pub.pem", readJSF(t, "rs256.cdx.json"), pub, VerificationUnsupportedAlgorithm, "RS256", StatusFail,
+			"signature not verified with the given key (UNSUPPORTED_ALGORITHM: RS256)"},
+		{"full.cdx.xml / pub.pem", readFixture(t, "full.cdx.xml"), pub, VerificationUnsupportedForm, "XML signature (XML-DSig) is not verified", StatusFail,
+			"signature not verified with the given key (UNSUPPORTED_FORM: XML signature (XML-DSig) is not verified)"},
 		{"full.spdx.json / pub.pem", readFixture(t, "full.spdx.json"), pub, VerificationFailed, "no signature (not representable in SPDX 2.x)", StatusFail, "not representable in SPDX 2.3"},
 	} {
 		c.run(t)
+	}
+
+	// ADR-9: the signer writes the algorithm and the form, so declaring one the engine does not
+	// verify never turns a tampered document (or one never signed) into a pass under a key.
+	tampered := func(f func(m map[string]any)) []byte {
+		m := jsfMap(t, "tampered.cdx.json")
+		f(m)
+		return encode(t, m)
+	}
+	setAlgorithm := func(alg string) func(m map[string]any) {
+		return func(m map[string]any) { signatureOf(m)["algorithm"] = alg }
+	}
+	for _, c := range []struct {
+		name         string
+		data         []byte
+		verification Verification
+		detail       string
+	}{
+		{"tampered, algorithm RS256", tampered(setAlgorithm("RS256")), VerificationUnsupportedAlgorithm, "RS256"},
+		{"tampered, algorithm EdDSA", tampered(setAlgorithm("EdDSA")), VerificationUnsupportedAlgorithm, "EdDSA"},
+		{"tampered, algorithm none", tampered(setAlgorithm("none")), VerificationUnsupportedAlgorithm, "none"},
+		{"tampered, excludes added", tampered(func(m map[string]any) { signatureOf(m)["excludes"] = []any{"metadata"} }),
+			VerificationUnsupportedForm, "excludes"},
+		{"tampered, two signers", tampered(func(m map[string]any) {
+			sig := signatureOf(m)
+			m["signature"] = map[string]any{"signers": []any{sig, sig}}
+		}), VerificationUnsupportedForm, "multiple signers (2)"},
+		{"tampered, chain", tampered(func(m map[string]any) { m["signature"] = map[string]any{"chain": []any{signatureOf(m)}} }),
+			VerificationUnsupportedForm, "signature chain"},
+		{"never signed, algorithm XYZ", tampered(func(m map[string]any) { m["signature"] = map[string]any{"algorithm": "XYZ", "value": "AA"} }),
+			VerificationUnsupportedAlgorithm, "XYZ"},
+	} {
+		for _, key := range []string{pub, jwks} {
+			signatureCase{c.name + " / " + filepath.Base(key), c.data, key, c.verification, c.detail, StatusFail,
+				wantUnverifiedNote(c.verification, c.detail)}.run(t)
+		}
 	}
 }
 
@@ -261,8 +304,11 @@ func TestUnsupportedFormsAreWellFormedNotFailed(t *testing.T) {
 		if check.Status != StatusPass || check.Note != wantNoKeyNote || !r.Input.Signature.WellFormed {
 			t.Errorf("%s without a key: %s %q %+v, want PASS, well-formed", c.name, check.Status, check.Note, r.Input.Signature)
 		}
-		signatureCase{c.name + " / pub.pem", data, jsfKey("pub.pem"), VerificationUnsupportedForm, c.detail, StatusPass,
-			"present, not verified (UNSUPPORTED_FORM: " + c.detail + ")"}.run(t)
+		signatureCase{c.name + " / pub.pem", data, jsfKey("pub.pem"), VerificationUnsupportedForm, c.detail, StatusFail,
+			"signature not verified with the given key (UNSUPPORTED_FORM: " + c.detail + ")"}.run(t)
+		if r, _ := scoreSignature(t, data, jsfKey("pub.pem")); !r.Input.Signature.WellFormed {
+			t.Errorf("%s with pub.pem: marked malformed %+v", c.name, r.Input.Signature)
+		}
 		if rep, err := VerifySignature(data, ""); err != nil || rep.Verification != VerificationUnsupportedForm || !rep.WellFormed {
 			t.Errorf("%s verify-signature without a key: %+v %v, want UNSUPPORTED_FORM", c.name, rep, err)
 		}
@@ -272,12 +318,24 @@ func TestUnsupportedFormsAreWellFormedNotFailed(t *testing.T) {
 	signatureOf(outer)["signers"] = signatureOf(outer)["signers"].([]any)[:1]
 	signatureOf(outer)["excludes"] = []any{"metadata"}
 	signatureCase{"signers with outer excludes / pub.pem", encode(t, outer), jsfKey("pub.pem"), VerificationUnsupportedForm, "excludes",
-		StatusPass, "present, not verified (UNSUPPORTED_FORM: excludes)"}.run(t)
+		StatusFail, "signature not verified with the given key (UNSUPPORTED_FORM: excludes)"}.run(t)
 	one := jsfMap(t, "signers-two.cdx.json")
 	sig := signatureOf(one)
 	sig["signers"] = sig["signers"].([]any)[:1]
 	signatureCase{"signers with one entry / pub.pem", encode(t, one), jsfKey("pub.pem"), VerificationVerified,
 		"verified with key 00000000-0000-4000-8000-000000000001", StatusPass, "verified with key 00000000-0000-4000-8000-000000000001"}.run(t)
+}
+
+// T-27: with a keyId and no embedded publicKey, only the JWKS entry the kid selects may verify; a
+// key listed under another kid never does, CURRENT or not, first or not.
+func TestOnlyTheSelectedJWKSKeyVerifies(t *testing.T) {
+	wrongKey := readJSF(t, "keyid-only-wrong-key.cdx.json")
+	for _, keys := range []string{"keys.jwks.json", "both-current.jwks.json"} {
+		signatureCase{"keyid-only-wrong-key / " + keys, wrongKey, jsfKey(keys), VerificationFailed, "signature does not verify",
+			StatusFail, wantNotVerifyNote}.run(t)
+	}
+	signatureCase{"keyid-only / both-current.jwks", readJSF(t, "keyid-only.cdx.json"), jsfKey("both-current.jwks.json"), VerificationVerified,
+		"verified with the given key (signature embeds no publicKey)", StatusPass, "verified with key 00000000-0000-4000-8000-000000000001"}.run(t)
 }
 
 // Forgeries and mismatches never verify; each names why.
@@ -311,15 +369,15 @@ func TestVerificationRejectsForgeries(t *testing.T) {
 		}), pub, VerificationFailed, noVerify, StatusFail, wantNotVerifyNote},
 		{"root member added", signed(func(m map[string]any) { m["extra"] = true }), pub, VerificationFailed, noVerify, StatusFail, wantNotVerifyNote},
 		{"excludes added after signing", signed(func(m map[string]any) { signatureOf(m)["excludes"] = []any{"components"} }),
-			pub, VerificationUnsupportedForm, "excludes", StatusPass, "present, not verified (UNSUPPORTED_FORM: excludes)"},
+			pub, VerificationUnsupportedForm, "excludes", StatusFail, wantUnverifiedNote(VerificationUnsupportedForm, "excludes")},
 		{"algorithm ES256 on an Ed25519 key", signed(func(m map[string]any) { signatureOf(m)["algorithm"] = "ES256" }),
 			pub, VerificationFailed, "key curve Ed25519 does not match ES256", StatusFail, wantNotVerifyNote},
 		{"algorithm none", signed(func(m map[string]any) { signatureOf(m)["algorithm"] = "none" }),
-			pub, VerificationUnsupportedAlgorithm, "none", StatusPass, "present, not verified (UNSUPPORTED_ALGORITHM: none)"},
+			pub, VerificationUnsupportedAlgorithm, "none", StatusFail, wantUnverifiedNote(VerificationUnsupportedAlgorithm, "none")},
 		{"algorithm EdDSA", signed(func(m map[string]any) { signatureOf(m)["algorithm"] = "EdDSA" }),
-			pub, VerificationUnsupportedAlgorithm, "EdDSA", StatusPass, "present, not verified (UNSUPPORTED_ALGORITHM: EdDSA)"},
+			pub, VerificationUnsupportedAlgorithm, "EdDSA", StatusFail, wantUnverifiedNote(VerificationUnsupportedAlgorithm, "EdDSA")},
 		{"algorithm in lower case", signed(func(m map[string]any) { signatureOf(m)["algorithm"] = "ed25519" }),
-			pub, VerificationUnsupportedAlgorithm, "ed25519", StatusPass, "present, not verified (UNSUPPORTED_ALGORITHM: ed25519)"},
+			pub, VerificationUnsupportedAlgorithm, "ed25519", StatusFail, wantUnverifiedNote(VerificationUnsupportedAlgorithm, "ed25519")},
 		{"keyid-only under a key with its kid but another x", readJSF(t, "keyid-only.cdx.json"), jsfKey("wrong-key.jwks.json"),
 			VerificationFailed, noVerify, StatusFail, wantNotVerifyNote},
 		{"kid not in the JWKS", signed(func(m map[string]any) { signatureOf(m)["keyId"] = "k-9"; delete(signatureOf(m), "publicKey") }),
@@ -354,6 +412,77 @@ func TestVerificationRejectsForgeries(t *testing.T) {
 	} {
 		signatureOf(es)["value"] = b64u(value)
 		signatureCase{"ES256 " + name, encode(t, es), jsfKey("pub-es256.pem"), VerificationFailed, noVerify, StatusFail, wantNotVerifyNote}.run(t)
+	}
+}
+
+// fffdName is the six bytes backslash, u, f, f, f, d: the JSON escape of U+FFFD, valid I-JSON.
+const fffdName = "\x5cufffd"
+
+// loneSurrogate is the JSON escape of the high surrogate D800 alone: not I-JSON.
+const loneSurrogate = "\x5cud800"
+
+// invalidTextDocuments builds three compact documents signed with the TEST 1 key, each carrying an
+// extra member whose name holds U+FFFD written as the escape fffdName: at the root, in the signature,
+// in the one entry of signers. Each verifies under pub.pem as built.
+func invalidTextDocuments(t testing.TB) map[string][]byte {
+	t.Helper()
+	key := loadVectorKeys(t).current
+	signer := vecSigner{Algorithm: "Ed25519", KeyID: kidCurrent}
+	single := vectorDocument(kidCurrent)
+	single.Signature = signer
+	list := vectorDocument(kidCurrent)
+	list.Signature = vecSigners{Signers: []vecSigner{signer}}
+	docs := map[string][]byte{}
+	for _, c := range []struct{ name, at, extra string }{
+		{"root member", `{`, `"` + fffdName + `":1,`},
+		{"signature member", `"signature":{`, `"x` + fffdName + `":1,`},
+		{"signers[0] member", `"signers":[{`, `"x` + fffdName + `":1,`},
+	} {
+		doc := single
+		if c.name == "signers[0] member" {
+			doc = list
+		}
+		b := marshalCompact(t, doc)
+		if c.at != "{" && bytes.Count(b, []byte(c.at)) != 1 {
+			t.Fatalf("%s: %s not found once", c.name, c.at)
+		}
+		b = bytes.Replace(b, []byte(c.at), []byte(c.at+c.extra), 1) // the first { opens the root
+		canonical, err := signingInput(b)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		valueAt := `"signature":{`
+		if c.name == "signers[0] member" {
+			valueAt = `"signers":[{`
+		}
+		value := `"value":"` + b64u(ed25519.Sign(key, canonical)) + `",`
+		docs[c.name] = bytes.Replace(b, []byte(valueAt), []byte(valueAt+value), 1)
+	}
+	return docs
+}
+
+// T-28: a member name that is not I-JSON (a lone surrogate escape, an invalid UTF-8 byte) at the
+// root, in the signature or in signers[0] has no canonical form: FAILED, never the signed U+FFFD
+// name (ADR-10).
+func TestSigningInputRefusesInvalidText(t *testing.T) {
+	pub := jsfKey("pub.pem")
+	for name, doc := range invalidTextDocuments(t) {
+		if rep, err := VerifySignature(doc, pub); err != nil || rep.Verification != VerificationVerified {
+			t.Fatalf("%s as signed: %+v %v, want VERIFIED", name, rep, err)
+		}
+		for spelling, replacement := range map[string][]byte{"lone surrogate": []byte(loneSurrogate), "invalid UTF-8": {0xFF}} {
+			changed := bytes.Replace(doc, []byte(fffdName), replacement, 1)
+			if bytes.Equal(changed, doc) {
+				t.Fatalf("%s: name not changed", name)
+			}
+			rep, err := VerifySignature(changed, pub)
+			if err != nil || rep.Verification != VerificationFailed || !strings.HasPrefix(rep.Detail, "document is not canonicalizable (RFC 8785): ") {
+				t.Errorf("%s, %s: %+v %v, want FAILED, document is not canonicalizable (RFC 8785): ...", name, spelling, rep, err)
+			}
+			if _, check := scoreSignature(t, changed, pub); check.Status != StatusFail || check.Note != wantNotVerifyNote {
+				t.Errorf("%s, %s: check %s %q, want FAIL %q", name, spelling, check.Status, check.Note, wantNotVerifyNote)
+			}
+		}
 	}
 }
 
@@ -457,6 +586,8 @@ func FuzzVerifySignature(f *testing.F) {
 			signedInputs[string(c)] = true
 		}
 	}
+	// T-28: the root-name lone-surrogate document (it must not verify).
+	f.Add(bytes.Replace(invalidTextDocuments(f)["root member"], []byte(fffdName), []byte(loneSurrogate), 1))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		for _, key := range []string{"", jsfKey("pub.pem")} {
 			rep, err := VerifySignature(data, key)

@@ -196,7 +196,7 @@ Flags stand for:
 - **--format** - `text` (default) or `json`
 - **--fail-on-not-ready** - Exit 3 when any requested profile is `NOT_READY` or `UNKNOWN` (the report is still written)
 - **--skip-files** - Leave file components (CycloneDX `type: file`, SPDX 2.3 `primaryPackagePurpose: FILE`) out of the component checks; CISA 2026 Coverage allows excluding non-code files. Default: files counted. The report records it: `options.skipFiles`, `input.componentsSkipped` (how many were left out) and, in text output, a first line `options: --skip-files, N file components left out`. Components nested in a file component are kept and judged on their own type
-- **--signature-key** - Verify the root signature with this public key file (PEM, JWK or JWKS); a signature that does not verify fails the `cisa-2026` signature check. See [Signature verification](#signature-verification---signature-key)
+- **--signature-key** - Verify the root signature with this public key file (PEM, JWK or JWKS); the `cisa-2026` signature check passes only when the signature verifies with it. See [Signature verification](#signature-verification---signature-key)
 
 To score the merged SBOM of a release or product release held in ReARM, use `rearm scorereleasebom` (scored on the server), or pipe `rearm exportreleasebom` into this command; see [Export or Score the Merged Release SBOM](../README.md#3c-use-case-export-or-score-the-merged-release-sbom).
 
@@ -260,7 +260,7 @@ With `--skip-files` the per-component totals differ from sbomqs as well, which s
 
 ### Signature verification (--signature-key)
 
-With `--signature-key <file>` the root JSF signature of a CycloneDX JSON document is verified. The signed input is the whole document with the root `signature` in place and only its `value` removed, canonicalised with RFC 8785 (JCS: keys sorted, no whitespace, ECMAScript number form), so indentation and key order do not matter. `Ed25519` is verified over those bytes; `ES256`, `ES384` and `ES512` over their SHA-256, SHA-384 and SHA-512 on P-256, P-384 and P-521, with `value` the raw `r || s` of JWS (not ASN.1 DER).
+With `--signature-key <file>` the root JSF signature of a CycloneDX JSON document is verified. The signed input is the whole document with the root `signature` in place and only its `value` removed, canonicalised with RFC 8785 (JCS: keys sorted, no whitespace, ECMAScript number form), so indentation and key order do not matter. A document that is not I-JSON (RFC 7493: invalid UTF-8, a lone surrogate escape, a member name given twice) has no canonical form and is reported `FAILED` with `document is not canonicalizable (RFC 8785): ...`. `Ed25519` is verified over those bytes; `ES256`, `ES384` and `ES512` over their SHA-256, SHA-384 and SHA-512 on P-256, P-384 and P-521, with `value` the raw `r || s` of JWS (not ASN.1 DER).
 
 The key file is one of:
 - a PEM `PUBLIC KEY` (SubjectPublicKeyInfo) of an Ed25519 or EC P-256/P-384/P-521 key; a private key, a certificate or another key type is refused;
@@ -276,17 +276,17 @@ When the signature embeds a `publicKey`, it must be the key given, so a document
 | `FAILED` | it does not verify (a changed document, a wrong `value` length or curve), the signature is malformed, or there is none | FAIL |
 | `KEY_MISMATCH` | the embedded `publicKey` is not the given key, or the key file holds no key for the signature's `keyId` | FAIL |
 | `KEY_REVOKED` | the selected JWKS key is `REVOKED` | FAIL |
-| `UNSUPPORTED_ALGORITHM` | an algorithm other than `Ed25519`, `ES256`, `ES384`, `ES512` (for example `RS256`) | PASS, note `present, not verified (...)` |
-| `UNSUPPORTED_FORM` | `signers` with two or more entries, `chain`, `excludes`, `certificatePath`, or an XML signature: valid shapes this command does not verify | PASS, note `present, not verified (...)` |
+| `UNSUPPORTED_ALGORITHM` | an algorithm other than `Ed25519`, `ES256`, `ES384`, `ES512` (for example `RS256`) | FAIL, note `signature not verified with the given key (...)` |
+| `UNSUPPORTED_FORM` | `signers` with two or more entries, `chain`, `excludes`, `certificatePath`, or an XML signature: valid shapes this command does not verify | FAIL, note `signature not verified with the given key (...)` |
 
-A signature that does not verify with a key you gave fails the REQUIRED check with the note `signature does not verify with the given key`: you asked the question, and a document that fails it is not ready. Without a key the check never depends on verification. The text report starts with `signature: <verification>, <detail>`; the JSON report echoes the path as `options.signatureKey`.
+With a key given the REQUIRED check passes only on `VERIFIED`. A signature that does not verify fails it with the note `signature does not verify with the given key`: you asked the question, and a document that fails it is not ready. A signature the engine cannot verify (another algorithm, another JSF form, XML) fails it too, with the note `signature not verified with the given key (<verification>: <detail>)`: the signer writes the algorithm and the form, so neither may turn a failure into a pass. To check only that an XML signature is present, leave the key out. Without a key the check never depends on verification. The text report starts with `signature: <verification>, <detail>`; the JSON report echoes the path as `options.signatureKey`.
 
 ### Exit codes
 
 - **0** - scored, whatever the verdict
 - **1** - unsupported or unparsable input: one line on stderr, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, nothing on stdout; or a `--signature-key` file that is missing, unreadable or not a supported public key: one line on stderr starting `signature key <path>: `
 - **2** - an unknown `--profile` or `--format` value
-- **3** - with `--fail-on-not-ready`, a requested profile is `NOT_READY` or `UNKNOWN` (a signature that does not verify with `--signature-key` makes `cisa-2026` `NOT_READY`)
+- **3** - with `--fail-on-not-ready`, a requested profile is `NOT_READY` or `UNKNOWN` (with `--signature-key`, a signature that is not `VERIFIED` makes `cisa-2026` `NOT_READY`)
 
 ### Sample output
 

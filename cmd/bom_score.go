@@ -68,9 +68,10 @@ var bomScoreCmd = &cobra.Command{
 against the CISA 2026 minimum elements (cisa-2026), the NTIA 2021 minimum elements (ntia-2021) or the
 FDA premarket SBOM content (fda), and write a versioned report. Local only: no server, no credentials.
 
-With --signature-key the root signature (CycloneDX JSON, JSF) is verified with that public key; a
-signature that does not verify fails the cisa-2026 signature check. Without it the check asks only
-for a present, well-formed signature.
+With --signature-key the root signature (CycloneDX JSON, JSF) is verified with that public key; the
+cisa-2026 signature check passes only when the signature verifies with it (a signature the engine
+cannot verify, such as another algorithm, another JSF form or XML, fails it). Without it the check
+asks only for a present, well-formed signature.
 
 Exit codes: 0 scored; 1 unsupported or unparsable input, or an unreadable or unsupported
 --signature-key file; 2 unknown --profile or --format value; 3 with --fail-on-not-ready when a
@@ -100,7 +101,7 @@ func init() {
 	bomScoreCmd.Flags().BoolVar(&bomScoreSkipFiles, "skip-files", false,
 		"leave type: file components out of the component checks (CISA 2026 Coverage allows excluding non-code files)")
 	bomScoreCmd.Flags().StringVar(&bomScoreSignatureKey, "signature-key", "",
-		"verify the root JSF signature with this public key: PEM, JWK or JWKS file; the check fails when it does not verify")
+		"verify the root JSF signature with this public key: PEM, JWK or JWKS file; the cisa-2026 signature check passes only when the signature verifies with it")
 }
 
 // RunBomScore scores the input and writes the report; it returns the exit code. Its own errors

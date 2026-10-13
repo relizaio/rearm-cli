@@ -67,7 +67,7 @@ const (
 	kidES256   = "00000000-0000-4000-8000-000000000003"
 )
 
-func mustHex(t *testing.T, s string) []byte {
+func mustHex(t testing.TB, s string) []byte {
 	t.Helper()
 	b, err := hex.DecodeString(s)
 	if err != nil {
@@ -84,7 +84,7 @@ type vectorKeys struct {
 	es256            *ecdsa.PrivateKey
 }
 
-func loadVectorKeys(t *testing.T) vectorKeys {
+func loadVectorKeys(t testing.TB) vectorKeys {
 	t.Helper()
 	es, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), mustHex(t, rfc6979P256X))
 	if err != nil {
@@ -171,7 +171,7 @@ type vecDocument struct {
 }
 
 // marshalCompact writes JSON without HTML escaping and without a trailing newline.
-func marshalCompact(t *testing.T, v any) []byte {
+func marshalCompact(t testing.TB, v any) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -318,6 +318,8 @@ func generateVectors(t *testing.T, k vectorKeys, es256Kept string) map[string][]
 	files["signed-es256.cdx.json"] = marshalCompact(t, esDoc)
 
 	files["keyid-only.cdx.json"] = signEd25519(t, vectorDocument(kidCurrent), &vecSigner{Algorithm: "Ed25519", KeyID: kidCurrent}, k.current)
+	// T-27: names the current kid, signed with the TEST 2 key; only the kid-selected key may verify.
+	files["keyid-only-wrong-key.cdx.json"] = signEd25519(t, vectorDocument(kidCurrent), &vecSigner{Algorithm: "Ed25519", KeyID: kidCurrent}, k.revoked)
 	files["revoked-signed.cdx.json"] = signEd25519(t, vectorDocument(kidRevoked), &vecSigner{Algorithm: "Ed25519", KeyID: kidRevoked, PublicKey: revJWK}, k.revoked)
 	files["embedded-wrong-key.cdx.json"] = signEd25519(t, vectorDocument(kidCurrent), &vecSigner{Algorithm: "Ed25519", KeyID: kidCurrent, PublicKey: revJWK}, k.current)
 
@@ -403,6 +405,11 @@ func generateVectors(t *testing.T, k vectorKeys, es256Kept string) map[string][]
 	}}), '\n')
 	files["wrong-key.jwks.json"] = append(marshalCompact(t, map[string][]jwksEntry{"keys": {
 		entry(revJWK, kidCurrent, "CURRENT", ""),
+	}}), '\n')
+	// T-27: both keys CURRENT, the TEST 2 key listed first.
+	files["both-current.jwks.json"] = append(marshalCompact(t, map[string][]jwksEntry{"keys": {
+		entry(revJWK, kidRevoked, "CURRENT", ""),
+		entry(curJWK, kidCurrent, "CURRENT", ""),
 	}}), '\n')
 	return files
 }

@@ -64,6 +64,9 @@ const (
 	noteSignatureNotVerified = "present, not verified (no key given)"
 	noteSignatureMalformed   = "signature present but malformed"
 	noteSignatureNotVerify   = "signature does not verify with the given key"
+	// noteSignatureUnverified prefixes "(<verification>: <detail>)" when a key was given and the
+	// engine could not verify (ADR-9).
+	noteSignatureUnverified = "signature not verified with the given key"
 )
 
 // The malformed reasons, in the order they are tried.
@@ -317,7 +320,8 @@ func (s *SignatureState) unsupportedForm() string {
 
 // objectMembers decodes one JSON object into its members and refuses a member name given twice:
 // RFC 8785 input is I-JSON, and a map would keep only the last of the two, so the signed input and
-// what another reader sees could differ.
+// what another reader sees could differ. signingInput hands it JCS output, which has already refused
+// duplicates; the check stays as a second line.
 func objectMembers(raw []byte) (map[string]json.RawMessage, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	tok, err := dec.Token()
@@ -355,8 +359,17 @@ func objectMembers(raw []byte) (map[string]json.RawMessage, error) {
 // signingInput is the JSF signing input of a document (design SCORE-34 ADR-2): the whole document
 // as read, with the root signature in place and only its value removed (for signers or chain with
 // one entry, that entry's value), canonicalised with RFC 8785 JCS.
+//
+// The raw bytes are canonicalised once before the member split (design SCORE-34 ADR-10): JCS
+// refuses a document that is not I-JSON (invalid UTF-8, a lone surrogate escape, a duplicate member)
+// at every depth, where encoding/json would silently turn a bad member name into U+FFFD. JCS is
+// idempotent, so the bytes of a valid document are unchanged.
 func signingInput(input []byte) ([]byte, error) {
-	top, err := objectMembers(bytes.TrimPrefix(input, utf8BOM))
+	canonical, err := jcs.Transform(bytes.TrimPrefix(input, utf8BOM))
+	if err != nil {
+		return nil, err
+	}
+	top, err := objectMembers(canonical)
 	if err != nil {
 		return nil, err
 	}
@@ -566,8 +579,10 @@ func verify(input []byte, d *Doc, keys *KeySet) {
 	set(VerificationVerified, verified)
 }
 
-// hasSignature: cisa-2026.sbom-author-signature. Present and well-formed passes; with a key given,
-// a FAILED, KEY_MISMATCH or KEY_REVOKED verification fails the check (operator point O-5).
+// hasSignature: cisa-2026.sbom-author-signature. Without a key, present and well-formed passes. With
+// a key given the check passes if and only if the signature is VERIFIED (design SCORE-34 ADR-9,
+// operator point O-5): the algorithm and the form are the signer's to write, so neither may turn
+// "does not verify" into a pass.
 func hasSignature(d *Doc) Outcome {
 	if d.notRepresentable(FieldSignature) {
 		return docNotRepresentable(d)
@@ -589,7 +604,7 @@ func hasSignature(d *Doc) Outcome {
 	case VerificationFailed, VerificationKeyMismatch, VerificationKeyRevoked:
 		o = Outcome{Passed: 0, Total: 1, Note: noteSignatureNotVerify}
 	case VerificationUnsupportedAlgorithm, VerificationUnsupportedForm:
-		o.Note = "present, not verified (" + string(s.Verification) + ": " + s.Detail + ")"
+		o = Outcome{Passed: 0, Total: 1, Note: noteSignatureUnverified + " (" + string(s.Verification) + ": " + s.Detail + ")"}
 	default:
 		o.Note = noteSignatureNotVerified
 	}
