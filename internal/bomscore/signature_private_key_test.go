@@ -1,6 +1,8 @@
 package bomscore
 
 import (
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -238,5 +240,114 @@ func TestLeakPrecedesOtherOutcomes(t *testing.T) {
 		if r, _ := scoreSignature(t, data, pub); r.Input.Signature.Verification != c.verification || r.Input.Signature.Detail != c.detail {
 			t.Errorf("%s / pub.pem: %s %q, want %s %q", c.name, r.Input.Signature.Verification, r.Input.Signature.Detail, c.verification, c.detail)
 		}
+	}
+}
+
+// mixedEntries builds a signature of the two entries of signers-two.cdx.json under list (signers or
+// chain): the entry leakAt carries d in its publicKey, the other is changed by malform (nil leaves
+// it as it is).
+func mixedEntries(t *testing.T, list string, leakAt int, malform func(entry map[string]any)) []byte {
+	t.Helper()
+	m := jsfMap(t, "signers-two.cdx.json")
+	sig := signatureOf(m)
+	entries := sig["signers"].([]any)
+	delete(sig, "signers")
+	sig[list] = entries
+	for i, e := range entries {
+		entry := e.(map[string]any)
+		switch {
+		case i == leakAt:
+			entry["publicKey"].(map[string]any)["d"] = "AA"
+		case malform != nil:
+			malform(entry)
+		}
+	}
+	return encode(t, m)
+}
+
+// Test run 1 T-1: shape first across entries (ADR-2: d is not a malformed reason, and a signature
+// that is malformed is reported malformed). A signers or chain signature with one malformed entry
+// and one entry whose publicKey carries d is malformed whichever entry comes first: FAILED with the
+// malformed reason under a key and in verify-signature, NOT_REQUESTED with that reason without a
+// key, and the check FAILs as malformed, never KEY_LEAKED.
+func TestShapePrecedesLeakAcrossEntries(t *testing.T) {
+	pub, jwks := jsfKey("pub.pem"), jsfKey("keys.jwks.json")
+	noX := func(entry map[string]any) { delete(entry["publicKey"].(map[string]any), "x") }
+	for _, list := range []string{"signers", "chain"} {
+		// Control: both entries well-formed, one carries d: the pair is KEY_LEAKED, so the rows
+		// below differ from it by the malformed entry only.
+		for leakAt := 0; leakAt < 2; leakAt++ {
+			data := mixedEntries(t, list, leakAt, nil)
+			signatureCase{fmt.Sprintf("%s, d on entry %d, no malformed entry", list, leakAt), data, pub,
+				VerificationKeyLeaked, wantLeakDetail, StatusFail, wantLeakWithKey}.run(t)
+		}
+		for _, m := range []struct {
+			name, reason string
+			malform      func(entry map[string]any)
+		}{
+			{"publicKey without x", "publicKey malformed (x missing)", noX},
+			{"value missing", "value missing", func(entry map[string]any) { delete(entry, "value") }},
+			// The malformed entry carries d too: still malformed.
+			{"publicKey with d and without x", "publicKey malformed (x missing)", func(entry map[string]any) {
+				noX(entry)
+				entry["publicKey"].(map[string]any)["d"] = "AA"
+			}},
+		} {
+			for leakAt := 0; leakAt < 2; leakAt++ {
+				name := fmt.Sprintf("%s, d on entry %d, the other %s", list, leakAt, m.name)
+				data := mixedEntries(t, list, leakAt, m.malform)
+
+				r, check := scoreSignature(t, data, "")
+				if s := r.Input.Signature; !s.Present || s.WellFormed || s.Verification != VerificationNotRequested || s.Detail != m.reason {
+					t.Errorf("%s without a key: input.signature %+v, want present, malformed, NOT_REQUESTED, detail %q", name, s, m.reason)
+				}
+				if check.Status != StatusFail || check.Note != wantMalformedNote {
+					t.Errorf("%s without a key: %s %q, want FAIL %q", name, check.Status, check.Note, wantMalformedNote)
+				}
+
+				for _, key := range []string{pub, jwks} {
+					signatureCase{name + " / " + filepath.Base(key), data, key, VerificationFailed, m.reason, StatusFail, wantMalformedNote}.run(t)
+					if r, _ := scoreSignature(t, data, key); r.Input.Signature.WellFormed {
+						t.Errorf("%s / %s: input.signature %+v, want malformed", name, filepath.Base(key), r.Input.Signature)
+					}
+				}
+
+				rep, err := VerifySignature(data, "")
+				if err != nil || !rep.Present || rep.WellFormed || rep.Verification != VerificationFailed || rep.Detail != m.reason {
+					t.Errorf("VerifySignature(%s, no key): %+v %v, want malformed, FAILED %q", name, rep, err, m.reason)
+				}
+			}
+		}
+	}
+}
+
+// Across the entries of a JWKS the first refused entry, in list order, names the refusal, whether it
+// is malformed or private (design 3.1: entries are read one by one and any entry error refuses the
+// file; ADR-1: the first entry carrying d, in list order). Within one entry kty comes first (the
+// "JWKS entry with d without kty" row of TestPrivateJWKKeyFilesAreRefused).
+func TestJWKSEntriesAreRefusedInListOrder(t *testing.T) {
+	dir := t.TempDir()
+	const (
+		clean   = `{"kty":"OKP","crv":"Ed25519","x":"` + currentJWKX + `"}`
+		private = `{"kty":"OKP","crv":"Ed25519","x":"` + currentJWKX + `","d":"AA"}`
+		badX    = `{"kty":"OKP","crv":"Ed25519","x":"AA"}`
+		noKty   = `{"crv":"Ed25519","x":"` + currentJWKX + `"}`
+		wantBad = "JWK OKP x is not 32 bytes of base64url"
+		wantKty = "JWK has no kty"
+	)
+	for _, c := range []struct {
+		name    string
+		entries []string
+		want    string
+	}{
+		{"bad x then private", []string{badX, private}, "keys[0]: " + wantBad},
+		{"private then bad x", []string{private, badX}, "keys[0]: " + wantPrivateJWK},
+		{"no kty then private", []string{noKty, private}, "keys[0]: " + wantKty},
+		{"private then no kty", []string{private, noKty}, "keys[0]: " + wantPrivateJWK},
+		{"clean, bad x, private", []string{clean, badX, private}, "keys[1]: " + wantBad},
+		{"clean, private, bad x", []string{clean, private, badX}, "keys[1]: " + wantPrivateJWK},
+	} {
+		content := []byte(`{"keys":[` + strings.Join(c.entries, ",") + `]}`)
+		assertKeyFileRefused(t, c.name, writeKeyFile(t, dir, "order-"+strings.ReplaceAll(c.name, " ", "-")+".json", content), c.want)
 	}
 }

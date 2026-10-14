@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -176,6 +177,89 @@ func TestPrivateKeyHelp(t *testing.T) {
 		for _, want := range wants {
 			if !strings.Contains(text, want) {
 				t.Errorf("%s --help does not say %q:\n%s", command, want, text)
+			}
+		}
+	}
+}
+
+// writeMixedEntries writes signers-two.cdx.json with its two entries under list (signers or chain):
+// the entry leakAt carries d in its publicKey, the other has no x in its publicKey (malformed).
+func writeMixedEntries(t *testing.T, dir, list string, leakAt int) string {
+	t.Helper()
+	b, err := os.ReadFile(jsf("signers-two.cdx.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	sig := doc["signature"].(map[string]any)
+	entries := sig["signers"].([]any)
+	delete(sig, "signers")
+	sig[list] = entries
+	for i, e := range entries {
+		publicKey := e.(map[string]any)["publicKey"].(map[string]any)
+		if i == leakAt {
+			publicKey["d"] = "AA"
+		} else {
+			delete(publicKey, "x")
+		}
+	}
+	if b, err = json.Marshal(doc); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, list+"-d-on-entry-"+strconv.Itoa(leakAt)+".cdx.json")
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// Test run 1 T-1, through the commands: a signers or chain signature with one malformed entry and one
+// entry whose publicKey carries d is malformed whichever entry comes first (ADR-2, shape first):
+// verify-signature says FAILED with the malformed reason, with and without --key; score reports
+// it malformed, FAILED under a key and NOT_REQUESTED without, and the check FAILs as malformed.
+func TestShapePrecedesLeakThroughCommands(t *testing.T) {
+	const (
+		reason        = "publicKey malformed (x missing)"
+		notVerified   = "not verified (FAILED): " + reason + "\n"
+		malformedNote = "signature present but malformed"
+	)
+	dir := t.TempDir()
+	pub := jsf("pub.pem")
+	for _, list := range []string{"signers", "chain"} {
+		for leakAt := 0; leakAt < 2; leakAt++ {
+			doc := writeMixedEntries(t, dir, list, leakAt)
+			name := filepath.Base(doc)
+			for _, key := range []string{"", pub} {
+				run := runVerifySignature(cmd.BomVerifySignatureOptions{Infile: doc, Key: key}, nil)
+				if run.code != 3 || run.stdout != notVerified || run.stderr != "" {
+					t.Errorf("verify-signature %s key %q: exit %d stdout %q stderr %q; want 3 %q", name, key, run.code, run.stdout, run.stderr, notVerified)
+				}
+
+				run = runVerifySignature(cmd.BomVerifySignatureOptions{Infile: doc, Key: key, Format: cmd.BomScoreFormatJSON}, nil)
+				var obj map[string]any
+				if run.code != 3 || json.Unmarshal([]byte(run.stdout), &obj) != nil ||
+					obj["wellFormed"] != false || obj["verification"] != "FAILED" || obj["detail"] != reason {
+					t.Errorf("verify-signature --format json %s key %q: exit %d stdout %s, want 3, malformed, FAILED %q", name, key, run.code, run.stdout, reason)
+				}
+
+				run = runBomScore(cmd.BomScoreOptions{Infile: doc, Format: cmd.BomScoreFormatJSON, SignatureKey: key}, nil)
+				var report bomscore.Report
+				if run.code != 0 || json.Unmarshal([]byte(run.stdout), &report) != nil {
+					t.Fatalf("score %s key %q: exit %d stderr %q, want 0 and a report", name, key, run.code, run.stderr)
+				}
+				want := bomscore.VerificationFailed
+				if key == "" {
+					want = bomscore.VerificationNotRequested
+				}
+				if s := report.Input.Signature; !s.Present || s.WellFormed || s.Verification != want || s.Detail != reason {
+					t.Errorf("score %s key %q: input.signature %+v, want malformed, %s %q", name, key, s, want, reason)
+				}
+				if check := signatureCheck(report); check == nil || check.Status != bomscore.StatusFail || check.Note != malformedNote {
+					t.Errorf("score %s key %q: signature check %+v, want FAIL %q", name, key, check, malformedNote)
+				}
 			}
 		}
 	}
