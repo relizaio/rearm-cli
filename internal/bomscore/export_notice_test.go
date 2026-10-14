@@ -75,6 +75,17 @@ func cat(parts ...[]string) []string {
 	return out
 }
 
+// members joins JSON object members with a comma, skipping empty ones.
+func members(m ...string) string {
+	var kept []string
+	for _, s := range m {
+		if s != "" {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, ",")
+}
+
 func wantNotice(t *testing.T, label string, doc []byte, want string) {
 	t.Helper()
 	if got := ExportSigningNotice(doc); got != want {
@@ -231,15 +242,23 @@ func TestExportSigningNoticeExactNames(t *testing.T) {
 		wantNotice(t, "entry "+e+" after the NO_KEY stamp", noticeDoc(cat(stampNoKey(t), []string{e}), ""), lineNoKey)
 	}
 
-	// The stamp is read on metadata.properties only.
+	// The stamp is read on metadata.properties only. Each location is tried with metadata.properties
+	// absent, empty and holding a non-stamp entry: a served export always has the member, so a
+	// reader that looked elsewhere whenever it is present would print the signed line here.
 	stamp := "[" + strings.Join(stampSigned(t, noticeKey1), ",") + "]"
-	for label, doc := range map[string]string{
-		"components[0].properties":      `{"metadata":{"properties":[]},"components":[{"name":"a","properties":` + stamp + `}]` + rootSig(t, noticeKey1) + `}`,
-		"metadata.component.properties": `{"metadata":{"component":{"name":"a","properties":` + stamp + `}}` + rootSig(t, noticeKey1) + `}`,
-		"services[0].properties":        `{"metadata":{},"services":[{"name":"a","properties":` + stamp + `}]` + rootSig(t, noticeKey1) + `}`,
-		"root properties":               `{"metadata":{},"properties":` + stamp + rootSig(t, noticeKey1) + `}`,
+	for mpLabel, mp := range map[string]string{
+		"absent":          ``,
+		"empty":           `"properties":[]`,
+		"without a stamp": `"properties":[{"name":"reliza:export:bomRefsDeduplicated","value":"2"}]`,
 	} {
-		wantNotice(t, "stamp on "+label, []byte(doc), "")
+		for label, doc := range map[string]string{
+			"components[0].properties":      `{"metadata":{` + mp + `},"components":[{"name":"a","properties":` + stamp + `}]` + rootSig(t, noticeKey1) + `}`,
+			"metadata.component.properties": `{"metadata":{` + members(mp, `"component":{"name":"a","properties":`+stamp+`}`) + `}` + rootSig(t, noticeKey1) + `}`,
+			"services[0].properties":        `{"metadata":{` + mp + `},"services":[{"name":"a","properties":` + stamp + `}]` + rootSig(t, noticeKey1) + `}`,
+			"root properties":               `{"metadata":{` + mp + `},"properties":` + stamp + rootSig(t, noticeKey1) + `}`,
+		} {
+			wantNotice(t, "stamp on "+label+", metadata.properties "+mpLabel, []byte(doc), "")
+		}
 	}
 
 	// The tester's export of SCORE-33 run 1 (tests/SCORE-33/run-1-probe-out.tar.gz,
@@ -443,6 +462,11 @@ func TestExportSigningNoticeNoStamp(t *testing.T) {
 		"XML": `<?xml version="1.0"?><bom xmlns="http://cyclonedx.org/schema/bom/1.6"><metadata><properties>` +
 			`<property name="reliza:export:signed">false</property><property name="reliza:export:unsignedReason">NO_KEY</property>` +
 			`</properties></metadata></bom>`,
+		// The off-path stamps above again beside a metadata.properties member, as on a served
+		// export, so a reader falling back to them when metadata.properties is present is seen.
+		"root properties beside metadata.properties":   `{"metadata":{"properties":[]},"properties":[{"name":"reliza:export:signed","value":"false"}]}`,
+		"Metadata member beside metadata.properties":   `{"metadata":{"properties":[]},"Metadata":{"properties":[{"name":"reliza:export:signed","value":"false"}]}}`,
+		"Properties member beside metadata.properties": `{"metadata":{"properties":[],"Properties":[{"name":"reliza:export:signed","value":"false"}]}}`,
 	} {
 		wantNotice(t, label, []byte(doc), "")
 	}
