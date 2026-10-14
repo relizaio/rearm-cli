@@ -90,7 +90,7 @@ func loadJSON(data []byte) (*Doc, error) {
 			if err := json.Unmarshal(top["specVersion"], &specVersion); err != nil || !cdxSpecVersions[specVersion] {
 				return nil, unsupported(reasonCDXSpecVersion)
 			}
-			return loadCDXJSON(data)
+			return loadCDXJSON(data, top[rootSignature])
 		}
 	}
 	if raw, ok := top["spdxVersion"]; ok {

@@ -43,6 +43,8 @@ type Input struct {
 	Components        int           `json:"components"`
 	ComponentsSkipped int           `json:"componentsSkipped"`
 	SHA256            string        `json:"sha256"`
+	// Signature is the root signature's state, always emitted (reportVersion stays 1: additive).
+	Signature SignatureReport `json:"signature"`
 }
 
 // Options are the scoring options of one Score call; the report echoes them.
@@ -50,6 +52,9 @@ type Options struct {
 	// SkipFiles leaves file components (CycloneDX type file, SPDX 2.3 primaryPackagePurpose FILE)
 	// out of the component checks.
 	SkipFiles bool `json:"skipFiles"`
+	// SignatureKey is the path of a PEM, JWK or JWKS file the root signature is verified with;
+	// omitted when empty, so a report without it is unchanged.
+	SignatureKey string `json:"signatureKey,omitempty"`
 }
 
 type ProfileReport struct {
@@ -84,7 +89,7 @@ func (e *UnknownProfileError) Error() string {
 // Score scores input under the given profiles, in the order given (a key given twice is scored
 // once, at its first position). engineVersion is the CLI version the report names; opts are echoed
 // in the report. A refused input returns a *RefusalError and no report; an unknown profile key an
-// *UnknownProfileError.
+// *UnknownProfileError; an unusable Options.SignatureKey file the LoadKeySet error.
 func Score(input []byte, profileKeys []string, engineVersion string, opts Options) (Report, error) {
 	var selected []Profile
 	seen := map[ProfileKey]bool{}
@@ -108,6 +113,15 @@ func Score(input []byte, profileKeys []string, engineVersion string, opts Option
 	if opts.SkipFiles {
 		skipped = d.skipFiles()
 	}
+	d.ensureSignature()
+	d.Signature.Verification = VerificationNotRequested
+	if opts.SignatureKey != "" {
+		keys, err := LoadKeySet(opts.SignatureKey)
+		if err != nil {
+			return Report{}, err
+		}
+		verify(input, d, keys)
+	}
 	sum := sha256.Sum256(input)
 	r := Report{
 		ReportVersion: ReportVersion,
@@ -119,6 +133,7 @@ func Score(input []byte, profileKeys []string, engineVersion string, opts Option
 			Components:        len(d.Components),
 			ComponentsSkipped: skipped,
 			SHA256:            hex.EncodeToString(sum[:]),
+			Signature:         d.Signature.report(),
 		},
 		Options:   opts,
 		Profiles:  []ProfileReport{},
@@ -204,11 +219,19 @@ func (r Report) JSON() ([]byte, error) {
 }
 
 // Text renders one block per profile, then the structure block when it has a failing check. With
-// --skip-files an options line comes first; without it nothing is added.
+// --skip-files an options line comes first, with a signature key a signature line; without them
+// nothing is added.
 func (r Report) Text() string {
 	var b strings.Builder
 	if r.Options.SkipFiles {
 		fmt.Fprintf(&b, "options: --skip-files, %d file components left out\n", r.Input.ComponentsSkipped)
+	}
+	if r.Options.SignatureKey != "" {
+		fmt.Fprintf(&b, "signature: %s", r.Input.Signature.Verification)
+		if r.Input.Signature.Detail != "" {
+			fmt.Fprintf(&b, ", %s", r.Input.Signature.Detail)
+		}
+		b.WriteString("\n")
 	}
 	for i, p := range r.Profiles {
 		if i > 0 {
