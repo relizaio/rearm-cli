@@ -220,7 +220,7 @@ What the checks read, in short:
 - **Level of support** (`fda`): the component property `reliza:support:levelOfSupport` is exactly `actively maintained`, `no longer maintained` or `abandoned`. **End-of-support date** (`fda`): the component property `cdx:lifecycle:milestone:endOfSupport`, or SPDX 2.3 `validUntilDate`, is an ISO 8601 date or date-time. ReARM writes both properties into release exports that include support metadata.
 - **The described component is not checked.** `metadata.component` (CycloneDX) or the described package (SPDX) is the subject of the SBOM: its fields are not component fields, and only its dependency declaration is checked (above). Its parts (components nested under `metadata.component`) are not in the component set either. The component set is every other CycloneDX component, nested ones included; for SPDX every package except the ones the document describes; with `--skip-files`, without file components.
 - A value that only says "unknown" (`NOASSERTION`, `NONE`, an empty or whitespace-only string) counts as missing.
-- **SBOM author signature**: the CycloneDX JSON top-level `signature` must be present and well-formed (a JSF signature: `algorithm` and `value` non-empty strings, `value` base64url without padding; an embedded `publicKey` a JWK with `kty` `OKP`, `EC` or `RSA`; or `signers`/`chain` with at least one such entry). A present but malformed one fails with the note `signature present but malformed`; `input.signature.detail` names what is wrong. In XML a root-level `Signature` element in a foreign namespace such as XML-DSig is present and well-formed. A signature on a component or service does not count. Without `--signature-key` nothing is verified and a passing check reads `present, not verified (no key given)`; a failing one carries the remedy `configure an organization SBOM signing key in ReARM (Organization settings, SBOM export signing); exports are then signed`.
+- **SBOM author signature**: the CycloneDX JSON top-level `signature` must be present and well-formed (a JSF signature: `algorithm` and `value` non-empty strings, `value` base64url without padding; an embedded `publicKey` a JWK with `kty` `OKP`, `EC` or `RSA`; or `signers`/`chain` with at least one such entry). A present but malformed one fails with the note `signature present but malformed`; `input.signature.detail` names what is wrong. In XML a root-level `Signature` element in a foreign namespace such as XML-DSig is present and well-formed. A signature on a component or service does not count. Without `--signature-key` nothing is verified and a passing check reads `present, not verified (no key given)`; when the embedded `publicKey` carries the private member `d` it still passes, with the note `present, not verified (no key given); signature.publicKey carries private key material (d)`, and `input.signature.detail` names it (`signature.publicKey carries private key material (d)`); a failing one carries the remedy `configure an organization SBOM signing key in ReARM (Organization settings, SBOM export signing); exports are then signed`.
 
 **What SPDX 2.x cannot carry.** SPDX 2.x has no place for the SBOM author signature, the generation context (lifecycle), the SBOM version or the level of support, and SPDX 2.1 and 2.2 none for the end-of-support date. Those checks fail with the note `not representable in SPDX <version>`, so an SPDX 2.x file is always `NOT_READY` under `cisa-2026` and `fda`.
 
@@ -264,8 +264,8 @@ With `--signature-key <file>` the root JSF signature of a CycloneDX JSON documen
 
 The key file is one of:
 - a PEM `PUBLIC KEY` (SubjectPublicKeyInfo) of an Ed25519 or EC P-256/P-384/P-521 key; a private key, a certificate or another key type is refused;
-- a JWK (`kty` `OKP` with `crv` `Ed25519`, or `EC` with `crv` `P-256`, `P-384` or `P-521`);
-- a JWKS (`{"keys": [...]}`), such as the organization's public SBOM signing keys: the key whose `kid` equals the signature's `keyId` is used; without a `keyId` the JWKS must hold one key. An entry with `rearm:status` `REVOKED` does not verify; a `RETIRED` one does, and the detail says it is retired.
+- a JWK (`kty` `OKP` with `crv` `Ed25519`, or `EC` with `crv` `P-256`, `P-384` or `P-521`); a JWK carrying the private member `d` (any key type, any value) is refused, as a private PEM is: `signature key <path>: private JWK (member d) is not a supported public key (JWK OKP Ed25519 or EC P-256/P-384/P-521)`;
+- a JWKS (`{"keys": [...]}`), such as the organization's public SBOM signing keys: the key whose `kid` equals the signature's `keyId` is used; without a `keyId` the JWKS must hold one key. An entry with `rearm:status` `REVOKED` does not verify; a `RETIRED` one does, and the detail says it is retired. A JWKS with an entry carrying the private member `d` is refused whole, whichever entry the `keyId` selects: `signature key <path>: keys[<i>]: private JWK (member d) is not a supported public key (JWK OKP Ed25519 or EC P-256/P-384/P-521)`, for the first such entry. No refusal ever prints key material.
 
 When the signature embeds a `publicKey`, it must be the key given, so a document cannot verify itself with a key it carries. A missing, unreadable or unsupported key file stops the run (exit 1). The outcome is `input.signature.verification`:
 
@@ -278,13 +278,14 @@ When the signature embeds a `publicKey`, it must be the key given, so a document
 | `KEY_REVOKED` | the selected JWKS key is `REVOKED` | FAIL |
 | `UNSUPPORTED_ALGORITHM` | an algorithm other than `Ed25519`, `ES256`, `ES384`, `ES512` (for example `RS256`) | FAIL, note `signature not verified with the given key (...)` |
 | `UNSUPPORTED_FORM` | `signers` with two or more entries, `chain`, `excludes`, `certificatePath`, or an XML signature: valid shapes this command does not verify | FAIL, note `signature not verified with the given key (...)` |
+| `KEY_LEAKED` | the embedded `publicKey` carries the private member `d`: the document publishes its signing key and nothing is verified | FAIL, note `signature not verified with the given key (...)` |
 
 With a key given the REQUIRED check passes only on `VERIFIED`. A signature that does not verify fails it with the note `signature does not verify with the given key`: you asked the question, and a document that fails it is not ready. A signature the engine cannot verify (another algorithm, another JSF form, XML) fails it too, with the note `signature not verified with the given key (<verification>: <detail>)`: the signer writes the algorithm and the form, so neither may turn a failure into a pass. To check only that an XML signature is present, leave the key out. Without a key the check never depends on verification. The text report starts with `signature: <verification>, <detail>`; the JSON report echoes the path as `options.signatureKey`.
 
 ### Exit codes
 
 - **0** - scored, whatever the verdict
-- **1** - unsupported or unparsable input: one line on stderr, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, nothing on stdout; or a `--signature-key` file that is missing, unreadable or not a supported public key: one line on stderr starting `signature key <path>: `
+- **1** - unsupported or unparsable input: one line on stderr, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, nothing on stdout; or a `--signature-key` file that is missing, unreadable or not a supported public key, including a JWK or JWKS entry carrying the private member `d`: one line on stderr starting `signature key <path>: `
 - **2** - an unknown `--profile` or `--format` value
 - **3** - with `--fail-on-not-ready`, a requested profile is `NOT_READY` or `UNKNOWN` (with `--signature-key`, a signature that is not `VERIFIED` makes `cisa-2026` `NOT_READY`)
 
@@ -326,11 +327,11 @@ curl -fsS https://rearm.example.com/api/public/v1/organization/<organization uui
 rearm bomutils verify-signature -f release.cdx.json --key org-sbom-keys.jwks.json
 ```
 
-The key whose `kid` equals the signature's `keyId` is used, and the embedded `publicKey` must equal it. A verified document prints `verified with key <keyId> from <file>; algorithm <algorithm>`; anything else prints `not verified (<verification>): <detail>`, for example `not verified (FAILED): signature does not verify` for a changed document, `not verified (KEY_REVOKED): key <keyId> is REVOKED in <file> since <date>`, or `not verified (FAILED): no signature`.
+The key whose `kid` equals the signature's `keyId` is used, and the embedded `publicKey` must equal it. A verified document prints `verified with key <keyId> from <file>; algorithm <algorithm>`; anything else prints `not verified (<verification>): <detail>`, for example `not verified (FAILED): signature does not verify` for a changed document, `not verified (KEY_REVOKED): key <keyId> is REVOKED in <file> since <date>`, `not verified (KEY_LEAKED): signature.publicKey carries private key material (d)` for a document whose embedded `publicKey` carries the private member `d` (with or without `--key`), or `not verified (FAILED): no signature`.
 
 ### Exit codes
 
 - **0** - the signature verifies
-- **1** - unreadable input, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, or a `--key` file that is missing, unreadable or not a supported public key; one line on stderr, nothing on stdout
+- **1** - unreadable input, `unsupported SBOM: <reason>` or `unparsable SBOM: <library error>`, or a `--key` file that is missing, unreadable or not a supported public key, including a JWK or JWKS entry carrying the private member `d`; one line on stderr, nothing on stdout
 - **2** - an unknown `--format` value
-- **3** - not verified: no signature, malformed, unsupported algorithm or form, key mismatch, revoked key, or no key (`NO_KEY`); the line is still written
+- **3** - not verified: no signature, malformed, unsupported algorithm or form, key mismatch, revoked key, no key (`NO_KEY`), or a leaked key (`KEY_LEAKED`: the embedded `publicKey` carries the private member `d`); the line is still written

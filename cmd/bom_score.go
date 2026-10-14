@@ -74,8 +74,9 @@ cannot verify, such as another algorithm, another JSF form or XML, fails it). Wi
 asks only for a present, well-formed signature.
 
 Exit codes: 0 scored; 1 unsupported or unparsable input, or an unreadable or unsupported
---signature-key file; 2 unknown --profile or --format value; 3 with --fail-on-not-ready when a
-requested profile is NOT_READY or UNKNOWN (the report is still written).`,
+--signature-key file, or a JWK or JWKS entry carrying the private member d; 2 unknown --profile or
+--format value; 3 with --fail-on-not-ready when a requested profile is NOT_READY or UNKNOWN (the
+report is still written).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		code := RunBomScore(BomScoreOptions{
 			Infile:         infile,

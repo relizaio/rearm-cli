@@ -34,6 +34,10 @@ const (
 	// VerificationNoKey: verify-signature without a key on a signature that embeds no publicKey.
 	// Score never reports it.
 	VerificationNoKey Verification = "NO_KEY"
+	// VerificationKeyLeaked: the embedded publicKey carries the private member d, so the document
+	// publishes its signing key and nothing is verified, with or without a key (design SCORE-37
+	// ADR-2).
+	VerificationKeyLeaked Verification = "KEY_LEAKED"
 )
 
 // SignatureReport is input.signature of the report and the JSON output of verify-signature.
@@ -67,6 +71,9 @@ const (
 	// noteSignatureUnverified prefixes "(<verification>: <detail>)" when a key was given and the
 	// engine could not verify (ADR-9).
 	noteSignatureUnverified = "signature not verified with the given key"
+	// detailKeyLeaked is the detail of KEY_LEAKED, and the addition to the no-key note (design
+	// SCORE-37 ADR-2).
+	detailKeyLeaked = "signature.publicKey carries private key material (d)"
 )
 
 // The malformed reasons, in the order they are tried.
@@ -101,20 +108,24 @@ type SignatureState struct {
 	Algorithm    string
 	KeyID        string
 	Verification Verification
-	// Detail is the malformed reason after loading, then the verification detail.
+	// Detail is the malformed reason after loading, or detailKeyLeaked for a well-formed signature
+	// whose publicKey carries d, then the verification detail.
 	Detail string
 
-	form    signatureForm
-	signers int       // entries of signers or chain
-	signer  jsfSigner // the single signer, or the first entry of signers or chain
+	form      signatureForm
+	signers   int       // entries of signers or chain
+	signer    jsfSigner // the single signer, or the first entry of signers or chain
+	keyLeaked bool      // any signer read (single, signers or chain) embeds a publicKey carrying d
 }
 
-// jsfSigner is one well-formed signer: value decoded, publicKey kept raw (nil when absent).
+// jsfSigner is one well-formed signer: value decoded, publicKey kept raw (nil when absent). leaked
+// is set when the well-formed publicKey carries the private member d.
 type jsfSigner struct {
 	value           []byte
 	publicKey       json.RawMessage
 	excludes        bool
 	certificatePath bool
+	leaked          bool
 }
 
 func (s *SignatureState) report() SignatureReport {
@@ -198,6 +209,8 @@ func readJSONSignature(raw json.RawMessage) *SignatureState {
 	default:
 		s.signer, s.Algorithm, s.KeyID, s.Detail = readSigner(m)
 		s.WellFormed = s.Detail == ""
+		s.keyLeaked = s.signer.leaked
+		s.markLeaked()
 		return s
 	}
 	s.signers = len(entries)
@@ -219,9 +232,19 @@ func readJSONSignature(raw json.RawMessage) *SignatureState {
 		if reason != "" && s.Detail == "" {
 			s.Detail = reason
 		}
+		s.keyLeaked = s.keyLeaked || signer.leaked
 	}
 	s.WellFormed = s.Detail == ""
+	s.markLeaked()
 	return s
+}
+
+// markLeaked names the leak in Detail at load for a well-formed signature, so input.signature.detail
+// says it even when nothing is verified (design SCORE-37 ADR-2). A malformed one keeps its reason.
+func (s *SignatureState) markLeaked() {
+	if s.WellFormed && s.keyLeaked {
+		s.Detail = detailKeyLeaked
+	}
 }
 
 // readSigner checks one signer object; reason is the first malformed reason, empty when
@@ -257,6 +280,8 @@ func readSigner(m map[string]json.RawMessage) (signer jsfSigner, algorithm, keyI
 		if why := publicKeyMalformed(signer.publicKey); why != "" {
 			return signer, algorithm, keyID, "publicKey malformed (" + why + ")"
 		}
+		var jwk map[string]json.RawMessage
+		signer.leaked = json.Unmarshal(signer.publicKey, &jwk) == nil && jwkCarriesPrivate(jwk)
 	}
 	return signer, algorithm, keyID, ""
 }
@@ -489,6 +514,11 @@ func verify(input []byte, d *Doc, keys *KeySet) {
 	case !s.WellFormed:
 		set(VerificationFailed, s.Detail)
 		return
+	case s.keyLeaked:
+		// Before the form, the algorithm and any key selection: a leaked key proves nothing,
+		// whatever else the signature says (design SCORE-37 ADR-2).
+		set(VerificationKeyLeaked, detailKeyLeaked)
+		return
 	}
 	if form := s.unsupportedForm(); form != "" {
 		set(VerificationUnsupportedForm, form)
@@ -603,10 +633,14 @@ func hasSignature(d *Doc) Outcome {
 		}
 	case VerificationFailed, VerificationKeyMismatch, VerificationKeyRevoked:
 		o = Outcome{Passed: 0, Total: 1, Note: noteSignatureNotVerify}
-	case VerificationUnsupportedAlgorithm, VerificationUnsupportedForm:
+	case VerificationUnsupportedAlgorithm, VerificationUnsupportedForm, VerificationKeyLeaked:
 		o = Outcome{Passed: 0, Total: 1, Note: noteSignatureUnverified + " (" + string(s.Verification) + ": " + s.Detail + ")"}
 	default:
 		o.Note = noteSignatureNotVerified
+		if s.keyLeaked {
+			// Without a key the check stays a presence check (SCORE-34 O-5); the note warns.
+			o.Note += "; " + detailKeyLeaked
+		}
 	}
 	return o
 }

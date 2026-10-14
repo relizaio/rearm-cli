@@ -60,8 +60,10 @@ proves the document was not changed since it was signed under that key, and says
 holds the key (integrity, not authorship).
 
 Exit codes: 0 verified; 1 unreadable, unsupported or unparsable input, or an unreadable or
-unsupported --key file; 2 unknown --format value; 3 not verified (no signature, malformed,
-unsupported algorithm or form, key mismatch, revoked key, no key; the line is still written).`,
+unsupported --key file, or a JWK or JWKS entry carrying the private member d; 2 unknown --format
+value; 3 not verified (no signature, malformed, unsupported algorithm or form, key mismatch, revoked
+key, no key, leaked key (the embedded publicKey carries the private member d); the line is still
+written).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		code := RunBomVerifySignature(BomVerifySignatureOptions{
 			Infile:  infile,
