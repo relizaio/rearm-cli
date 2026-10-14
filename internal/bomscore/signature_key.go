@@ -36,6 +36,7 @@ const (
 	jwkCrv          = "crv"
 	jwkX            = "x"
 	jwkY            = "y"
+	jwkD            = "d"
 	jwkKid          = "kid"
 	jwkKeys         = "keys"
 	jwkRearmStatus  = "rearm:status"
@@ -50,6 +51,9 @@ const (
 	pemPublicKey     = "PUBLIC KEY"
 )
 
+// privateJWK heads the refusal of a JWK carrying d (design SCORE-37 ADR-1); it never names the value.
+const privateJWK = "private JWK (member d)"
+
 // jwkCurves are the EC curves a JWK may name, by crv.
 var jwkCurves = map[string]elliptic.Curve{curveP256: elliptic.P256(), curveP384: elliptic.P384(), curveP521: elliptic.P521()}
 
@@ -60,7 +64,8 @@ type KeySet struct {
 }
 
 // KeyEntry is one key of a KeySet. pub is nil for a JWKS entry whose kty or crv the engine does not
-// support (kept so selection by kid can still name it).
+// support (kept so selection by kid can still name it). private is set when the JWK carries the
+// member d; LoadKeySet refuses such a file, so a KeySet never holds a private entry.
 type KeyEntry struct {
 	kid       string
 	kty, crv  string
@@ -68,6 +73,7 @@ type KeyEntry struct {
 	status    keyStatus
 	notAfter  string
 	revokedAt string
+	private   bool
 }
 
 // describe names the key type for a message: "key curve Ed448", "key type RSA". Never key material.
@@ -121,6 +127,11 @@ func LoadKeySet(path string) (*KeySet, error) {
 			if err != nil {
 				return nil, keyFileError(path, "keys[%d]: %v", i, err)
 			}
+			// A JWKS holding a private entry is refused whole, whichever entry the keyId selects
+			// (design SCORE-37 ADR-1).
+			if e.private {
+				return nil, keyFileError(path, "keys[%d]: %s is not a supported public key %s", i, privateJWK, supportedJWKKeys)
+			}
 			set.entries = append(set.entries, e)
 		}
 		return set, nil
@@ -129,6 +140,9 @@ func LoadKeySet(path string) (*KeySet, error) {
 		e, err := parseJWK(b)
 		if err != nil {
 			return nil, keyFileError(path, "%v", err)
+		}
+		if e.private {
+			return nil, keyFileError(path, "%s is not a supported public key %s", privateJWK, supportedJWKKeys)
 		}
 		if e.pub == nil {
 			return nil, keyFileError(path, "JWK %s is not a supported public key %s", jwkName(e), supportedJWKKeys)
@@ -174,9 +188,19 @@ func jwkName(e KeyEntry) string {
 	return "kty " + e.kty
 }
 
+// jwkCarriesPrivate reports whether a decoded JWK has a member named exactly d, whatever its value
+// (null, empty, not base64url) and whatever the kty (design SCORE-37 ADR-3). The value is never
+// read.
+func jwkCarriesPrivate(m map[string]json.RawMessage) bool {
+	_, ok := m[jwkD]
+	return ok
+}
+
 // parseJWK reads one JWK (a key file, a JWKS entry or a JSF publicKey). An OKP Ed25519 or EC
 // P-256/P-384/P-521 key must decode to a valid public key, else it is an error; any other kty or
 // crv returns an entry with a nil pub. kid and the rearm:* members are kept when they are strings.
+// A JWK carrying d returns with private set and no error before any coordinate is decoded, so a
+// private JWK with a bad x is still reported as private.
 func parseJWK(raw []byte) (KeyEntry, error) {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(raw, &m) != nil {
@@ -193,6 +217,10 @@ func parseJWK(raw []byte) (KeyEntry, error) {
 	e.status = keyStatus(strings.ToUpper(status))
 	e.notAfter, _ = jsonString(m[jwkRearmAfter])
 	e.revokedAt, _ = jsonString(m[jwkRearmRevoked])
+	if jwkCarriesPrivate(m) {
+		e.private = true
+		return e, nil
+	}
 	coordinate := func(name string, size int) ([]byte, error) {
 		v, _ := jsonString(m[name])
 		b, err := decodeBase64URL(v)

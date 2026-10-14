@@ -19,6 +19,10 @@ package bomscore
 // key, ES256 the RFC 6979 section A.2.5 P-256 private key. The documents are CycloneDX 1.6 in the
 // merged-export shape, signed over signingInput (the document with the root signature in place and
 // only its value removed, RFC 8785 JCS) and written compact, signature last.
+//
+// The private-key fixtures of design SCORE-37 (with-d.jwk.json, with-d-es256.jwk.json,
+// with-d.jwks.json, embedded-d.cdx.json) embed those RFC secret keys as the JWK member d on purpose:
+// they are published test vectors. No fixture may ever carry a key that is not from an RFC.
 
 import (
 	"bytes"
@@ -61,6 +65,11 @@ const (
 
 	// The JWK x of the TEST 1 public key, design SCORE-34 ADR-7: proves the seed was copied right.
 	currentJWKX = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+	// The JWK d of the TEST 1 and TEST 2 secret keys (base64url of the seeds), design SCORE-37 3.6.
+	currentJWKD = "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A"
+	revokedJWKD = "TM0Imyj_ltqdtsNG7BFOD1uKMZ81q6Yk2oz27U-4pvs"
+	// The JWK d of the RFC 6979 A.2.5 P-256 private key x.
+	es256JWKD = "ya-p2EW6dRZrXCFXZ7HWk05Qw9s26JsSe4piKxIPZyE"
 
 	kidCurrent = "00000000-0000-4000-8000-000000000001"
 	kidRevoked = "00000000-0000-4000-8000-000000000002"
@@ -104,6 +113,7 @@ type vecJWK struct {
 	Crv string `json:"crv"`
 	X   string `json:"x"`
 	Y   string `json:"y,omitempty"`
+	D   string `json:"d,omitempty"` // private fixtures of SCORE-37 only, RFC secrets
 }
 
 type vecRSAJWK struct {
@@ -275,6 +285,7 @@ type jwksEntry struct {
 	Kty       string  `json:"kty"`
 	Crv       string  `json:"crv"`
 	X         string  `json:"x"`
+	D         string  `json:"d,omitempty"` // with-d.jwks.json only, an RFC secret
 	Kid       string  `json:"kid"`
 	Use       string  `json:"use"`
 	Alg       string  `json:"alg"`
@@ -389,12 +400,23 @@ func generateVectors(t *testing.T, k vectorKeys, es256Kept string) map[string][]
 
 	files["pub.pem"] = pemOf(t, curPub)
 	files["pub-es256.pem"] = pemOf(t, &k.es256.PublicKey)
-	files["pub.jwk.json"] = append(marshalCompact(t, struct {
+	type keyFileJWK struct {
 		vecJWK
 		Kid string `json:"kid"`
 		Use string `json:"use"`
 		Alg string `json:"alg"`
-	}{curJWK, kidCurrent, "sig", "Ed25519"}), '\n')
+	}
+	files["pub.jwk.json"] = append(marshalCompact(t, keyFileJWK{curJWK, kidCurrent, "sig", "Ed25519"}), '\n')
+
+	// Design SCORE-37 3.6: the private-key fixtures, d the RFC secret of each key.
+	curPrivJWK := curJWK
+	curPrivJWK.D = b64u(k.current.Seed())
+	esPrivJWK := es256JWK(t, &k.es256.PublicKey)
+	esPrivJWK.D = b64u(k.es256.D.FillBytes(make([]byte, 32)))
+	files["with-d.jwk.json"] = append(marshalCompact(t, keyFileJWK{curPrivJWK, kidCurrent, "sig", "Ed25519"}), '\n')
+	files["with-d-es256.jwk.json"] = append(marshalCompact(t, keyFileJWK{esPrivJWK, kidES256, "sig", "ES256"}), '\n')
+	files["embedded-d.cdx.json"] = signEd25519(t, vectorDocument(kidCurrent),
+		&vecSigner{Algorithm: "Ed25519", KeyID: kidCurrent, PublicKey: curPrivJWK}, k.current)
 	revokedAt := "2026-10-13T00:00:00Z"
 	entry := func(jwk vecJWK, kid, status, revoked string) jwksEntry {
 		return jwksEntry{Kty: jwk.Kty, Crv: jwk.Crv, X: jwk.X, Kid: kid, Use: "sig", Alg: "Ed25519", Status: status, RevokedAt: revoked}
@@ -405,6 +427,14 @@ func generateVectors(t *testing.T, k vectorKeys, es256Kept string) map[string][]
 	}}), '\n')
 	files["wrong-key.jwks.json"] = append(marshalCompact(t, map[string][]jwksEntry{"keys": {
 		entry(revJWK, kidCurrent, "CURRENT", ""),
+	}}), '\n')
+	// SCORE-37: both CURRENT, the clean TEST 1 entry (the one signed-ed25519's keyId selects) first,
+	// the TEST 2 entry carrying d second: the whole file is refused.
+	leakedEntry := entry(revJWK, kidRevoked, "CURRENT", "")
+	leakedEntry.D = b64u(k.revoked.Seed())
+	files["with-d.jwks.json"] = append(marshalCompact(t, map[string][]jwksEntry{"keys": {
+		entry(curJWK, kidCurrent, "CURRENT", ""),
+		leakedEntry,
 	}}), '\n')
 	// T-27: both keys CURRENT, the TEST 2 key listed first.
 	files["both-current.jwks.json"] = append(marshalCompact(t, map[string][]jwksEntry{"keys": {
@@ -446,6 +476,16 @@ func TestJSFVectors(t *testing.T) {
 	}
 	if got := ed25519JWK(curPub).X; got != currentJWKX {
 		t.Fatalf("current JWK x %s, want %s", got, currentJWKX)
+	}
+	// SCORE-37 3.6: the d members are the base64url RFC 8032 TEST 1 and TEST 2 secret keys.
+	if got := b64u(k.current.Seed()); got != currentJWKD {
+		t.Fatalf("current JWK d %s, want %s", got, currentJWKD)
+	}
+	if got := b64u(k.revoked.Seed()); got != revokedJWKD {
+		t.Fatalf("revoked JWK d %s, want %s", got, revokedJWKD)
+	}
+	if got := b64u(k.es256.D.FillBytes(make([]byte, 32))); got != es256JWKD {
+		t.Fatalf("ES256 JWK d %s, want %s", got, es256JWKD)
 	}
 	// The ES256 key is the RFC 6979 A.2.5 key: its public point is Ux, Uy.
 	if k.es256.X.Cmp(new(big.Int).SetBytes(mustHex(t, rfc6979P256Ux))) != 0 || k.es256.Y.Cmp(new(big.Int).SetBytes(mustHex(t, rfc6979P256Uy))) != 0 {
@@ -494,6 +534,31 @@ func TestJSFVectors(t *testing.T) {
 	h := sha256.Sum256(canonical)
 	if !ecdsa.Verify(&k.es256.PublicKey, h[:], new(big.Int).SetBytes(raw[:32]), new(big.Int).SetBytes(raw[32:])) {
 		t.Error("signed-es256.cdx.json does not verify under the RFC 6979 A.2.5 key")
+	}
+	// SCORE-37 T-6: with-d.jwk.json carries the pinned TEST 1 d, and embedded-d.cdx.json is a valid
+	// signature under the TEST 1 public key, so only the leak check keeps it from verifying.
+	var withD struct {
+		D string `json:"d"`
+	}
+	if err := json.Unmarshal(files["with-d.jwk.json"], &withD); err != nil || withD.D != currentJWKD {
+		t.Errorf("with-d.jwk.json d %q (%v), want %s", withD.D, err, currentJWKD)
+	}
+	leaked := files["embedded-d.cdx.json"]
+	leakedInput, err := signingInput(leaked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var leakedDoc struct {
+		Signature struct {
+			Value string `json:"value"`
+		} `json:"signature"`
+	}
+	if err := json.Unmarshal(leaked, &leakedDoc); err != nil {
+		t.Fatal(err)
+	}
+	leakedValue, err := decodeBase64URL(leakedDoc.Signature.Value)
+	if err != nil || !ed25519.Verify(curPub, leakedInput, leakedValue) {
+		t.Errorf("embedded-d.cdx.json is not a valid signature under the TEST 1 public key (%v)", err)
 	}
 	// Every generated file is plain ASCII except the documents, whose one non-ASCII character is
 	// the component description that exercises UTF-8 through JCS.
