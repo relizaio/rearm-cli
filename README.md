@@ -557,7 +557,7 @@ steps:
       REARM_AUTH: github-oidc
 ```
 
-The CLI requests the identity token with the ReARM URL as audience, exchanges it at the ReARM token endpoint and uses the resulting one-hour access token; it does this again on its own when needed. With no other credentials present in a job that has `id-token: write`, the mode is picked automatically. Pass `--org <organization uuid>` (or `REARM_ORG`) only when several organizations trust the same repository. `rearm whoami --auth github-oidc` shows which key and repository the job acts as; a refused exchange names the reason (no trust rule matches, several organizations match, the repository was renamed since it was pinned).
+The CLI requests the identity token with the ReARM URL as audience, exchanges it at the ReARM token endpoint and uses the resulting one-hour access token; it does this again on its own when needed. With no other credentials present in a job that has `id-token: write`, the mode is picked automatically. Pass `--org <organization uuid>` (or `REARM_ORG`) only when several organizations trust the same repository. `rearm whoami --auth github-oidc` shows which key and repository the job acts as; a refused exchange prints ReARM's answer. When several organizations match, or the repository was renamed since it was pinned, the answer says so; every exchange that no trust rule admits (an unknown issuer, an identity token that does not verify, no rule matching the repository) gets one answer, `assertion not accepted`, and the cause is in the ReARM server log (ReARM Community Edition names it in the answer).
 
 ## 6. Use Case: Create New Component in ReARM
 
