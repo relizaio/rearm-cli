@@ -10,7 +10,15 @@
     "serialization": "json",
     "components": 4,
     "componentsSkipped": 0,
-    "sha256": "baecc4b0b72a979dd9573c48101c2d4de99b71a603958a1b500459a48579f491"
+    "sha256": "baecc4b0b72a979dd9573c48101c2d4de99b71a603958a1b500459a48579f491",
+    "signature": {
+      "present": false,
+      "wellFormed": false,
+      "algorithm": "",
+      "keyId": "",
+      "verification": "NOT_REQUESTED",
+      "detail": ""
+    }
   },
   "options": {
     "skipFiles": false
@@ -59,7 +67,7 @@
           "failing": [],
           "failingTruncated": false,
           "ref": "Table 1, SBOM Author Signature",
-          "remedy": "",
+          "remedy": "configure an organization SBOM signing key in ReARM (Organization settings, SBOM export signing); exports are then signed",
           "note": "not representable in SPDX 2.3"
         },
         {

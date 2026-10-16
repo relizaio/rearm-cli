@@ -92,6 +92,11 @@ func TestCycloneDXXMLReadsTheSameDocAsJSON(t *testing.T) {
 	fromJSON := loadOK(t, readFixture(t, "full.cdx.json"))
 	fromXML := loadOK(t, readFixture(t, "full.cdx.xml"))
 	fromJSON.Serialization = fromXML.Serialization
+	// The signature is read per serialization (JSF object, XML-DSig element); both are present.
+	if !fromJSON.Signature.Present || !fromXML.Signature.Present {
+		t.Fatalf("signature present: json %v, xml %v; want both", fromJSON.Signature.Present, fromXML.Signature.Present)
+	}
+	fromJSON.Signature, fromXML.Signature = nil, nil
 	if !reflect.DeepEqual(fromJSON, fromXML) {
 		t.Errorf("XML Doc differs from JSON Doc:\njson %+v\nxml  %+v", fromJSON, fromXML)
 	}

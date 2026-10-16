@@ -315,6 +315,7 @@ func runExportReleaseBom(o *releaseBomExportOptions, stdout, stderr io.Writer) i
 			fmt.Fprintln(stderr, "Error writing the document:", err)
 			return 1
 		}
+		printSigningNotice(mediaType, content, stderr)
 		return 0
 	}
 	if dir := filepath.Dir(o.outfile); dir != "." {
@@ -328,7 +329,21 @@ func runExportReleaseBom(o *releaseBomExportOptions, stdout, stderr io.Writer) i
 		return 1
 	}
 	fmt.Fprintln(stdout, o.outfile)
+	printSigningNotice(mediaType, content, stderr)
 	return 0
+}
+
+// printSigningNotice writes one stderr line saying whether a JSON export is signed
+// (bomscore.ExportSigningNotice, design SCORE-38). Nothing for CSV or EXCEL, a document that does
+// not parse, or one without reliza:export:signed (a server that does not sign). stdout is never
+// touched.
+func printSigningNotice(mediaType string, content []byte, stderr io.Writer) {
+	if mediaType != releaseBomMediaJSON {
+		return
+	}
+	if line := bomscore.ExportSigningNotice(content); line != "" {
+		fmt.Fprintln(stderr, line)
+	}
 }
 
 func runScoreReleaseBom(o *releaseBomScoreOptions, stdout, stderr io.Writer) int {

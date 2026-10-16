@@ -108,12 +108,13 @@ type Doc struct {
 	SpecVersion   string // "1.6", "2.3": no "SPDX-" prefix
 	Serialization Serialization
 
-	Authors          []string // CycloneDX metadata.authors[].name and metadata.manufacturer.name; SPDX Person and Organization creators
-	Tools            []Tool
-	Timestamp        string
-	Lifecycles       []string // CycloneDX metadata.lifecycles[] phase or name
-	SBOMVersion      int
-	SignaturePresent bool
+	Authors     []string // CycloneDX metadata.authors[].name and metadata.manufacturer.name; SPDX Person and Organization creators
+	Tools       []Tool
+	Timestamp   string
+	Lifecycles  []string // CycloneDX metadata.lifecycles[] phase or name
+	SBOMVersion int
+	// Signature is the root signature (CycloneDX JSON and XML); nil until a loader sets it.
+	Signature *SignatureState
 
 	// SubjectRefs names the described component: CycloneDX metadata.component's bom-ref (one
 	// element, when present and not blank); SPDX the SPDXIDs of the described packages. Empty when

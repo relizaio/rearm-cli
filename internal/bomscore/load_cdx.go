@@ -2,6 +2,7 @@ package bomscore
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"strconv"
 	"strings"
@@ -12,7 +13,9 @@ import (
 // xmlSignatureElement is the local name of an XML signature (XML-DSig) under the root.
 const xmlSignatureElement = "Signature"
 
-func loadCDXJSON(data []byte) (*Doc, error) {
+// loadCDXJSON decodes a CycloneDX JSON document; signature is the raw root signature member (nil
+// when absent), read by readJSONSignature since cyclonedx-go drops the single-signer members.
+func loadCDXJSON(data []byte, signature json.RawMessage) (*Doc, error) {
 	bom := new(cdx.BOM)
 	if err := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON).Decode(bom); err != nil {
 		return nil, unparsable(err)
@@ -21,7 +24,7 @@ func loadCDXJSON(data []byte) (*Doc, error) {
 		return nil, unsupported(reasonCDXSpecVersion)
 	}
 	// JSON: the top-level signature only; one on a component or service does not count.
-	return cdxDoc(bom, SerializationJSON, bom.Signature != nil), nil
+	return cdxDoc(bom, SerializationJSON, readJSONSignature(signature)), nil
 }
 
 func loadCDXXML(data []byte) (*Doc, error) {
@@ -37,7 +40,8 @@ func loadCDXXML(data []byte) (*Doc, error) {
 	if err != nil {
 		return nil, unparsable(err)
 	}
-	return cdxDoc(bom, SerializationXML, signed), nil
+	// XML: presence only, so well-formed equals present.
+	return cdxDoc(bom, SerializationXML, &SignatureState{Present: signed, WellFormed: signed, form: formXML}), nil
 }
 
 // xmlRootSignature: cyclonedx-go drops BOM.Signature for XML (xml:"-") and the CycloneDX XSD
@@ -71,13 +75,13 @@ func xmlRootSignature(data []byte) (bool, error) {
 	}
 }
 
-func cdxDoc(bom *cdx.BOM, s Serialization, signed bool) *Doc {
+func cdxDoc(bom *cdx.BOM, s Serialization, signature *SignatureState) *Doc {
 	d := &Doc{
 		Format:                 FormatCycloneDX,
 		SpecVersion:            bom.SpecVersion.String(),
 		Serialization:          s,
 		SBOMVersion:            bom.Version,
-		SignaturePresent:       signed,
+		Signature:              signature,
 		DeclaredNoDependencies: map[string]bool{},
 		NotRepresentable:       map[Field]bool{},
 	}

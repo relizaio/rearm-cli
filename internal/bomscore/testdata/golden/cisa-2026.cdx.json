@@ -10,7 +10,15 @@
     "serialization": "json",
     "components": 4,
     "componentsSkipped": 0,
-    "sha256": "d2524d6cb111f820b89e1ae5a6383d47134cff53228aa2f65da33bee3d2ba28c"
+    "sha256": "d2524d6cb111f820b89e1ae5a6383d47134cff53228aa2f65da33bee3d2ba28c",
+    "signature": {
+      "present": true,
+      "wellFormed": true,
+      "algorithm": "ES256",
+      "keyId": "",
+      "verification": "NOT_REQUESTED",
+      "detail": ""
+    }
   },
   "options": {
     "skipFiles": false
@@ -59,8 +67,8 @@
           "failing": [],
           "failingTruncated": false,
           "ref": "Table 1, SBOM Author Signature",
-          "remedy": "",
-          "note": ""
+          "remedy": "configure an organization SBOM signing key in ReARM (Organization settings, SBOM export signing); exports are then signed",
+          "note": "present, not verified (no key given)"
         },
         {
           "id": "cisa-2026.sbom-data-format-name",
