@@ -174,6 +174,60 @@ func TestOneErrorIsRetriedAndTwoInARowExitOne(t *testing.T) {
 	}
 }
 
+func TestTimeoutZeroWaitsPastAnyDeadlineForTheWork(t *testing.T) {
+	o := worker(t)
+	o.timeout = 0
+	// Ten hours of empty polls at 60 s, then the offer: no timeout exit on the way.
+	offers := make([]interface{}, 601)
+	offers[600] = map[string]interface{}{"role": "coder"}
+	f := &fakeBoard{offers: offers}
+	clk := start()
+	var out bytes.Buffer
+	if code := runWait(o, f, clk, &out); code != waitExitWork {
+		t.Fatalf("exit %d, want 0 with the offer", code)
+	}
+	if got := clk.t.Sub(start().t); got != 10*time.Hour {
+		t.Errorf("waited %v, want 10h", got)
+	}
+	if strings.Contains(out.String(), "timeout") {
+		t.Errorf("printed %q, want the offer only", out.String())
+	}
+}
+
+func TestMaxFailuresRetriesThatManyFailedPollsInARow(t *testing.T) {
+	boom := errors.New("401: token refreshed by another process")
+	offer := map[string]interface{}{"role": "coder"}
+	o, err := worker(t).failingAfter(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nine := []error{boom, boom, boom, boom, boom, boom, boom, boom, boom}
+	f := &fakeBoard{offers: append(make([]interface{}, 9), offer), nextErrs: nine}
+	if code := runWait(o, f, start(), &bytes.Buffer{}); code != waitExitWork {
+		t.Errorf("nine in a row under --max-failures 10: exit %d, want 0 once the offer comes", code)
+	}
+	f = &fakeBoard{offers: []interface{}{nil}, nextErrs: append(nine, boom)}
+	if code := runWait(o, f, start(), &bytes.Buffer{}); code != waitExitError || len(f.nextCalls) != 10 {
+		t.Errorf("ten in a row: exit %d after %d polls, want 1 after 10", code, len(f.nextCalls))
+	}
+}
+
+func TestTheTimeoutAndMaxFailuresFlagsAreChecked(t *testing.T) {
+	if _, err := waitOptsOf("s1", "b1", nil, false, 0, 60, -time.Minute, ""); err == nil {
+		t.Error("a negative --timeout accepted")
+	}
+	o, err := waitOptsOf("s1", "b1", nil, false, 0, 60, 0, "")
+	if err != nil || o.timeout != 0 {
+		t.Errorf("--timeout 0: %v, timeout %v", err, o.timeout)
+	}
+	if o.maxFailures != 2 {
+		t.Errorf("default --max-failures %d, want 2", o.maxFailures)
+	}
+	if _, err := o.failingAfter(0); err == nil {
+		t.Error("--max-failures 0 accepted")
+	}
+}
+
 func runCoordinator(t *testing.T, o waitOpts, f *fakeBoard) (int, map[string]interface{}) {
 	t.Helper()
 	var out bytes.Buffer
