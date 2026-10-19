@@ -29,7 +29,8 @@ import (
 // Waiting for work without spending turns (task RD2-32). An idle agent that polls spends a model
 // turn per poll, and most polls are empty. `rearm agent wait` runs in the background of the
 // agent's harness, costs nothing while it waits, and exits only when there is something to do:
-// 0 with the work, 2 on the heartbeat timeout (re-arm), 1 after two failed polls in a row.
+// 0 with the work, 2 on the heartbeat timeout (re-arm), 1 after --max-failures failed polls in a row
+// (two by default). --timeout 0 never times out: every exit of such a wait is something to act on.
 
 const (
 	waitExitWork    = 0
@@ -39,6 +40,12 @@ const (
 	// about 50 commands per 30 s: a worker makes one request a poll (three with --watch), a coordinator
 	// three or four.
 	waitIntervalFloor = 30
+	// waitMaxFailuresDefault is the failed polls in a row that end a wait: one is retried.
+	waitMaxFailuresDefault = 2
+	// waitKeptEventsMax is how many INFO and ALERT events a coordinator's run keeps to print. A run
+	// with no deadline (--timeout 0) can read for days without waking; past this it drops the oldest
+	// and prints how many as eventsDropped, and they stay on the board's event log.
+	waitKeptEventsMax = 200
 )
 
 var (
@@ -51,6 +58,7 @@ var (
 	waitTimeout     time.Duration
 	waitState       string
 	waitWatch       bool
+	waitMaxFailures int
 )
 
 // waitOpts is what one run of the loop was asked for.
@@ -61,8 +69,11 @@ type waitOpts struct {
 	coordinator bool
 	after       int64
 	interval    time.Duration
-	timeout     time.Duration
-	statePath   string
+	// timeout 0 is no deadline: the loop polls until there is work or the polls keep failing.
+	timeout   time.Duration
+	statePath string
+	// maxFailures is how many failed polls in a row end the wait with exit 1.
+	maxFailures int
 	// watch widens a worker's wake (task RD4-3): see agentWaitWatch.go.
 	watch bool
 }
@@ -98,8 +109,8 @@ func waitOptsOf(session, board string, roles []string, coordinator bool, after i
 	if interval < waitIntervalFloor {
 		return waitOpts{}, fmt.Errorf("interval is %d s or more", waitIntervalFloor)
 	}
-	if timeout <= 0 {
-		return waitOpts{}, fmt.Errorf("--timeout must be positive, e.g. 4h")
+	if timeout < 0 {
+		return waitOpts{}, fmt.Errorf("--timeout is 0 (no deadline) or positive, e.g. 4h")
 	}
 	if coordinator && strings.TrimSpace(board) == "" {
 		return waitOpts{}, fmt.Errorf("--coordinator needs --board: the board whose seat you hold")
@@ -115,7 +126,17 @@ func waitOptsOf(session, board string, roles []string, coordinator bool, after i
 		statePath = filepath.Join(home, ".rearm", "wait-"+board+".json")
 	}
 	return waitOpts{session: session, board: board, roles: roles, coordinator: coordinator, after: after,
-		interval: time.Duration(interval) * time.Second, timeout: timeout, statePath: statePath}, nil
+		interval: time.Duration(interval) * time.Second, timeout: timeout, statePath: statePath,
+		maxFailures: waitMaxFailuresDefault}, nil
+}
+
+// failingAfter sets how many failed polls in a row end the wait.
+func (o waitOpts) failingAfter(n int) (waitOpts, error) {
+	if n < 1 {
+		return waitOpts{}, fmt.Errorf("--max-failures is 1 or more")
+	}
+	o.maxFailures = n
+	return o, nil
 }
 
 // traced says whether the shell traces commands: credentials are in the environment, and a traced
@@ -129,10 +150,15 @@ func traced(shellopts string) bool {
 	return false
 }
 
-// runWait polls until there is work, the timeout passes, or two polls in a row fail, and returns
-// the exit code. What it prints goes to out, one JSON document.
+// runWait polls until there is work, the timeout passes (never with timeout 0), or maxFailures polls
+// in a row fail, and returns the exit code. What it prints goes to out, one JSON document.
 func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 	deadline := clk.now().Add(o.timeout)
+	maxFailures := o.maxFailures
+	if maxFailures < 1 {
+		// A waitOpts not built by waitOptsOf (its zero value) fails as the default does.
+		maxFailures = waitMaxFailuresDefault
+	}
 	var coord *coordinatorWait
 	if o.coordinator {
 		coord = &coordinatorWait{opts: o}
@@ -189,10 +215,11 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 		}
 		if err != nil {
 			failures++
-			if failures >= 2 {
-				fmt.Fprintf(os.Stderr, "rearm agent wait: two polls in a row failed: %v\n", err)
+			if failures >= maxFailures {
+				fmt.Fprintf(os.Stderr, "rearm agent wait: %d polls in a row failed: %v\n", failures, err)
 				return waitExitError
 			}
+			fmt.Fprintf(os.Stderr, "rearm agent wait: poll failed (%d of %d in a row), retrying: %v\n", failures, maxFailures, err)
 		} else {
 			failures = 0
 			if done {
@@ -203,7 +230,7 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 				return waitExitWork
 			}
 		}
-		if !clk.now().Add(o.interval).Before(deadline) {
+		if o.timeout > 0 && !clk.now().Add(o.interval).Before(deadline) {
 			timeout := map[string]interface{}{"timeout": true}
 			if coord != nil {
 				// What was read before the timeout, and where the next run reads on from.
@@ -255,6 +282,8 @@ type coordinatorWait struct {
 	events []map[string]interface{}
 	alerts []int64
 	merge  *string
+	// dropped counts the oldest events let go past waitKeptEventsMax.
+	dropped int
 }
 
 // cursorOut is what every exit prints about the events: those read in this run (INFO and ALERT),
@@ -266,6 +295,9 @@ func (w *coordinatorWait) cursorOut() map[string]interface{} {
 		events = []map[string]interface{}{}
 	}
 	out := map[string]interface{}{"events": events, "nextAfter": nil}
+	if w.dropped > 0 {
+		out["eventsDropped"] = w.dropped
+	}
 	if w.after != nil {
 		out["nextAfter"] = *w.after
 	} else {
@@ -364,6 +396,10 @@ func (w *coordinatorWait) readEvents(c waitClient) error {
 				w.alerts = append(w.alerts, int64(s))
 			}
 		}
+	}
+	if n := len(w.events) - waitKeptEventsMax; n > 0 {
+		w.dropped += n
+		w.events = append([]map[string]interface{}(nil), w.events[n:]...)
 	}
 	return err
 }
@@ -611,9 +647,15 @@ when the last exit printed one; nothing is lost when it printed null. The timeou
 it read and the cursor as well.
 
 --interval is 30 s or more (default 60): every agent on a host shares a limit of about 50 commands
-per 30 s. --timeout (default 4h) exits 2 with {"timeout": true}: re-arm. One failed poll is
-retried; two in a row exit 1 with the error. Never run it with shell tracing: credentials are in
-the environment.
+per 30 s. --timeout (default 4h) exits 2 with {"timeout": true}: re-arm. --timeout 0 never times
+out, so the wait ends only with work or with repeated errors: an agent harness that wakes the model
+on every exit then wakes it only when there is something to do, instead of once per timeout to
+re-arm. A failed poll is retried at the next interval; --max-failures failed polls in a row
+(default 2) exit 1 with the error. A long-running wait (--timeout 0) takes a higher value, e.g. 10,
+so a short outage or a token refresh race does not wake the agent. Every retried failure is logged
+to stderr. A coordinator's run keeps the newest 200 events it read to print and counts the rest as
+eventsDropped (they stay in 'rearm agent board events'); a --watch run reads the session's tasks and
+roles again every hour. Never run it with shell tracing: credentials are in the environment.
 
 A worker with --watch (and --board) also wakes, when no offer is there, on what happens to its
 work (task RD4-3): a task the session signed off on that a later hop REJECTED, returned, or that
@@ -657,6 +699,9 @@ events), an offer's poll included.`,
 			waitBoard = boardArg(waitBoard)
 		}
 		o, err := waitOptsOf(waitSession, waitBoard, roles, waitCoordinator, waitAfter, waitInterval, waitTimeout, waitState)
+		if err == nil {
+			o, err = o.failingAfter(waitMaxFailures)
+		}
 		if err == nil && waitWatch {
 			o, err = o.watching()
 		}
@@ -675,7 +720,8 @@ func init() {
 	agentWaitCmd.Flags().BoolVar(&waitCoordinator, "coordinator", false, "wait as the board's coordinator")
 	agentWaitCmd.Flags().Int64Var(&waitAfter, "after", 0, "coordinator or --watch: the event seq to read on from (default: where the last wait stopped, else now)")
 	agentWaitCmd.Flags().IntVar(&waitInterval, "interval", 60, "seconds between polls, 30 or more")
-	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do")
+	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do; 0 never times out")
+	agentWaitCmd.Flags().IntVar(&waitMaxFailures, "max-failures", waitMaxFailuresDefault, "failed polls in a row that exit 1; each one before is retried at the next interval")
 	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator or --watch: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json; with --watch wait-<board>-watch-<session>.json)")
 	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/PAUSED/RESUMED event; needs --board")
 	agentCmd.AddCommand(agentWaitCmd)
