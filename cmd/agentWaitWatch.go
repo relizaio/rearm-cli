@@ -56,6 +56,8 @@ const (
 } }`
 	// watchTasksPage is the most tasks one AgentTasksByUuid read takes.
 	watchTasksPage = 100
+	// watchRescopeEvery is how often a watch reads the session's tasks and the board's roles again.
+	watchRescopeEvery = time.Hour
 )
 
 // watchReader is what a watch reads besides the board a worker's and a coordinator's wait read.
@@ -177,6 +179,10 @@ type workerWatch struct {
 	names   map[string]string
 	answers map[string][]string
 	scoped  bool
+	// scopedAt is when the tasks and roles were read: a run with no deadline reads them again every
+	// watchRescopeEvery, as the re-arm of a run with one did, so a role taken during the wait is watched.
+	scopedAt time.Time
+	clk      waitClock
 	// changes and questions are what the last poll that read the whole board saw, new ones first; polled
 	// says one has, so the state holds the sets this run printed (task RD4-16).
 	changes   []watchChange
@@ -185,7 +191,7 @@ type workerWatch struct {
 }
 
 func newWorkerWatch(o waitOpts, clk waitClock) *workerWatch {
-	w := &workerWatch{opts: o}
+	w := &workerWatch{opts: o, clk: clk}
 	// The cursor starts as the coordinator's does: --after, else where the last run stopped, else now.
 	st := readWatchState(o.statePath)
 	switch {
@@ -264,14 +270,14 @@ func (w *workerWatch) poll(c waitClient) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("--watch: this client cannot read the session's tasks")
 	}
-	if !w.scoped {
+	if !w.scoped || !w.clk.now().Before(w.scopedAt.Add(watchRescopeEvery)) {
 		worked, roles, err := r.scope(w.opts.session, w.opts.board)
 		if err != nil {
 			return false, err
 		}
 		w.worked, w.roles = watchScope(w.opts, worked, roles)
 		w.names, w.answers = roleFacts(roles)
-		w.scoped = true
+		w.scoped, w.scopedAt = true, w.clk.now()
 	}
 	events, err := readBoardEvents(c, w.opts.board, &w.after, &w.since, watchedEventKind)
 	w.events = append(w.events, events...)

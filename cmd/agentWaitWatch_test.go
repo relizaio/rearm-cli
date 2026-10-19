@@ -461,3 +461,19 @@ func TestWatchWakesARejectingReviewerOnTheProducersNextRound(t *testing.T) {
 		t.Errorf("a pass after a pass woke it: exit %d, %v", code, printed)
 	}
 }
+
+func TestAWatchWithNoDeadlineReadsItsScopeAgainEveryHour(t *testing.T) {
+	o := watcher(t, filepath.Join(t.TempDir(), "w.json"))
+	o.timeout = 0
+	// 130 empty polls at 60 s, then the offer: the scope is read at the start, at 60m and at 120m.
+	offers := make([]interface{}, 131)
+	offers[130] = map[string]interface{}{"role": "architect"}
+	f := &fakeWatch{fakeBoard: &fakeBoard{offers: offers, snapshots: snaps{{}}}, worked: worked(), roles: boardRoles}
+	code, _ := runWatch(t, o, f)
+	if code != waitExitWork {
+		t.Fatalf("exit %d, want 0 with the offer", code)
+	}
+	if f.scopeReads != 3 {
+		t.Errorf("scope read %d times over 130 minutes, want 3", f.scopeReads)
+	}
+}

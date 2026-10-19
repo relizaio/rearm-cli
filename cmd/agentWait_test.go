@@ -142,6 +142,19 @@ func TestTheIntervalHasAFloorAndTheFlagsAreChecked(t *testing.T) {
 	if !traced("braceexpand:hashall:xtrace") || traced("braceexpand:hashall") {
 		t.Error("xtrace detection")
 	}
+	if _, err := waitOptsOf("s1", "b1", nil, false, 0, 60, -time.Minute, ""); err == nil {
+		t.Error("a negative --timeout accepted")
+	}
+	o, err := waitOptsOf("s1", "b1", nil, false, 0, 60, 0, "")
+	if err != nil || o.timeout != 0 {
+		t.Errorf("--timeout 0: %v, timeout %v", err, o.timeout)
+	}
+	if o.maxFailures != 2 {
+		t.Errorf("default --max-failures %d, want 2", o.maxFailures)
+	}
+	if _, err := o.failingAfter(0); err == nil {
+		t.Error("--max-failures 0 accepted")
+	}
 }
 
 func TestTheTimeoutExitsTwoToReArm(t *testing.T) {
@@ -209,22 +222,6 @@ func TestMaxFailuresRetriesThatManyFailedPollsInARow(t *testing.T) {
 	f = &fakeBoard{offers: []interface{}{nil}, nextErrs: append(nine, boom)}
 	if code := runWait(o, f, start(), &bytes.Buffer{}); code != waitExitError || len(f.nextCalls) != 10 {
 		t.Errorf("ten in a row: exit %d after %d polls, want 1 after 10", code, len(f.nextCalls))
-	}
-}
-
-func TestTheTimeoutAndMaxFailuresFlagsAreChecked(t *testing.T) {
-	if _, err := waitOptsOf("s1", "b1", nil, false, 0, 60, -time.Minute, ""); err == nil {
-		t.Error("a negative --timeout accepted")
-	}
-	o, err := waitOptsOf("s1", "b1", nil, false, 0, 60, 0, "")
-	if err != nil || o.timeout != 0 {
-		t.Errorf("--timeout 0: %v, timeout %v", err, o.timeout)
-	}
-	if o.maxFailures != 2 {
-		t.Errorf("default --max-failures %d, want 2", o.maxFailures)
-	}
-	if _, err := o.failingAfter(0); err == nil {
-		t.Error("--max-failures 0 accepted")
 	}
 }
 
@@ -434,5 +431,32 @@ func TestTheCursorIsHandedOverBetweenRuns(t *testing.T) {
 	runWait(o4, f4, start(), &bytes.Buffer{})
 	if f4.eventCalls[0] != "after=7" {
 		t.Errorf("--after 7 read %v", f4.eventCalls)
+	}
+}
+
+func TestACoordinatorWithNoDeadlineKeepsTheNewestEventsAndCountsTheRest(t *testing.T) {
+	seq := func(n int64) *int64 { return &n }
+	var info []map[string]interface{}
+	for i := 1; i <= 250; i++ {
+		info = append(info, map[string]interface{}{"seq": float64(i), "kind": "INFO"})
+	}
+	o := coordinator(t)
+	o.timeout = 0
+	f := &fakeBoard{
+		snapshots: [][]map[string]interface{}{{entry("RD-1", "PENDING_INTAKE", nil)}},
+		pages:     []eventPage{{Events: info, NextAfter: seq(250)}},
+	}
+	code, printed := runCoordinator(t, o, f)
+	if code != waitExitWork {
+		t.Fatalf("exit %d", code)
+	}
+	events, _ := printed["events"].([]interface{})
+	first, _ := events[0].(map[string]interface{})
+	if len(events) != waitKeptEventsMax || first["seq"].(float64) != 51 || printed["eventsDropped"].(float64) != 50 {
+		t.Errorf("printed %d events from seq %v, dropped %v: want the newest 200 and 50 dropped",
+			len(events), first["seq"], printed["eventsDropped"])
+	}
+	if printed["nextAfter"].(float64) != 250 {
+		t.Errorf("nextAfter %v, want 250", printed["nextAfter"])
 	}
 }

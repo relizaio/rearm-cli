@@ -42,6 +42,10 @@ const (
 	waitIntervalFloor = 30
 	// waitMaxFailuresDefault is the failed polls in a row that end a wait: one is retried.
 	waitMaxFailuresDefault = 2
+	// waitKeptEventsMax is how many INFO and ALERT events a coordinator's run keeps to print. A run
+	// with no deadline (--timeout 0) can read for days without waking; past this it drops the oldest
+	// and prints how many as eventsDropped, and they stay on the board's event log.
+	waitKeptEventsMax = 200
 )
 
 var (
@@ -152,6 +156,7 @@ func runWait(o waitOpts, c waitClient, clk waitClock, out io.Writer) int {
 	deadline := clk.now().Add(o.timeout)
 	maxFailures := o.maxFailures
 	if maxFailures < 1 {
+		// A waitOpts not built by waitOptsOf (its zero value) fails as the default does.
 		maxFailures = waitMaxFailuresDefault
 	}
 	var coord *coordinatorWait
@@ -277,6 +282,8 @@ type coordinatorWait struct {
 	events []map[string]interface{}
 	alerts []int64
 	merge  *string
+	// dropped counts the oldest events let go past waitKeptEventsMax.
+	dropped int
 }
 
 // cursorOut is what every exit prints about the events: those read in this run (INFO and ALERT),
@@ -288,6 +295,9 @@ func (w *coordinatorWait) cursorOut() map[string]interface{} {
 		events = []map[string]interface{}{}
 	}
 	out := map[string]interface{}{"events": events, "nextAfter": nil}
+	if w.dropped > 0 {
+		out["eventsDropped"] = w.dropped
+	}
 	if w.after != nil {
 		out["nextAfter"] = *w.after
 	} else {
@@ -386,6 +396,10 @@ func (w *coordinatorWait) readEvents(c waitClient) error {
 				w.alerts = append(w.alerts, int64(s))
 			}
 		}
+	}
+	if n := len(w.events) - waitKeptEventsMax; n > 0 {
+		w.dropped += n
+		w.events = append([]map[string]interface{}(nil), w.events[n:]...)
 	}
 	return err
 }
@@ -638,8 +652,10 @@ out, so the wait ends only with work or with repeated errors: an agent harness t
 on every exit then wakes it only when there is something to do, instead of once per timeout to
 re-arm. A failed poll is retried at the next interval; --max-failures failed polls in a row
 (default 2) exit 1 with the error. A long-running wait (--timeout 0) takes a higher value, e.g. 10,
-so a short outage or a token refresh race does not wake the agent. Never run it with shell tracing:
-credentials are in the environment.
+so a short outage or a token refresh race does not wake the agent. Every retried failure is logged
+to stderr. A coordinator's run keeps the newest 200 events it read to print and counts the rest as
+eventsDropped (they stay in 'rearm agent board events'); a --watch run reads the session's tasks and
+roles again every hour. Never run it with shell tracing: credentials are in the environment.
 
 A worker with --watch (and --board) also wakes, when no offer is there, on what happens to its
 work (task RD4-3): a task the session signed off on that a later hop REJECTED, returned, or that
