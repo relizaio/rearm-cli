@@ -70,6 +70,7 @@ type Outcome struct {
 	Note             string
 	Skipped          int      // components the check did not judge (perSupportableComponent)
 	SkippedTypes     []string // their distinct types, sorted; nil when none was skipped
+	SelfSkipped      int      // components skipped as the subject's own, reliza:support:selfComponent
 }
 
 // CheckResult is one check in the report.
@@ -90,6 +91,9 @@ type CheckResult struct {
 	// distinct types, sorted; both are omitted when the check skipped none.
 	ComponentsSkipped int      `json:"componentsSkipped,omitempty"`
 	SkippedTypes      []string `json:"skippedTypes,omitempty"`
+	// SelfComponentsSkipped counts the components the check did not judge because ReARM marked them
+	// as the subject's own (reliza:support:selfComponent); omitted when none.
+	SelfComponentsSkipped int `json:"selfComponentsSkipped,omitempty"`
 }
 
 // CheckError is one evaluator that panicked.
@@ -118,12 +122,14 @@ func evaluate(c Check, d *Doc) (res CheckResult, cerr *CheckError) {
 			res.FailingTruncated = false
 			res.Note = ""
 			res.ComponentsSkipped, res.SkippedTypes = 0, nil
+			res.SelfComponentsSkipped = 0
 			cerr = &CheckError{Check: c.ID, Message: fmt.Sprint(r)}
 		}
 	}()
 	o := c.Eval(d)
 	res.Passed, res.Total, res.Note = o.Passed, o.Total, o.Note
 	res.ComponentsSkipped, res.SkippedTypes = o.Skipped, o.SkippedTypes
+	res.SelfComponentsSkipped = o.SelfSkipped
 	if o.NotRepresentable && c.Level == LevelRequired {
 		res.Level = notRepresentableLevel
 	}
