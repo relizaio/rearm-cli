@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -80,21 +81,8 @@ func writeCredentials(values map[string]string) error {
 			sb.WriteString(k + "=" + v + "\n")
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
 	// write-then-rename so a crash never leaves a half-written file; 0600 from the first byte
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(sb.String()), 0o600); err != nil {
-		return err
-	}
-	if runtime.GOOS == "windows" {
-		_ = os.Remove(path) // rename does not replace on Windows
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
+	return writeFile0600(path, []byte(sb.String()))
 }
 
 // sessionValues is a browser login as the credentials file (or the REARM_* environment) holds it.
@@ -414,7 +402,16 @@ func logout() error {
 				fmt.Println("Warning: could not reach ReARM to revoke the session:", err)
 			}
 		}
-		return writeCredentials(map[string]string{"URI": rearmUri})
+		if err := writeCredentials(map[string]string{"URI": rearmUri}); err != nil {
+			return err
+		}
+		// the API-key token cache is a bearer at rest: logging out forgets it too (task TPF-67)
+		if path, err := tokenCachePath(); err == nil {
+			if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
