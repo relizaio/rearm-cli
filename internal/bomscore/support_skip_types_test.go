@@ -351,8 +351,9 @@ func TestSupportSkipReportOutput(t *testing.T) {
 	}
 }
 
-// T-6 (c): the fda golden of full.types.cdx.json carries the fields on the two support checks
-// only; the other goldens carry them nowhere; reportVersion stays 1.
+// T-6 (c): the fda goldens of full.types.cdx.json and full.self.cdx.json carry the fields on the
+// two support checks only; the other goldens carry them nowhere; selfComponentsSkipped is only on
+// the self fda golden's support checks (SCORE-59 T-4 c); reportVersion stays 1.
 func TestSupportSkipGoldens(t *testing.T) {
 	type golden struct {
 		ReportVersion int `json:"reportVersion"`
@@ -361,8 +362,8 @@ func TestSupportSkipGoldens(t *testing.T) {
 		} `json:"profiles"`
 	}
 	files, err := filepath.Glob(filepath.Join("testdata", "golden", "*.json"))
-	if err != nil || len(files) != 9 {
-		t.Fatalf("goldens %v (%v), want 9", files, err)
+	if err != nil || len(files) != 12 {
+		t.Fatalf("goldens %v (%v), want 12", files, err)
 	}
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
@@ -376,24 +377,37 @@ func TestSupportSkipGoldens(t *testing.T) {
 		if g.ReportVersion != 1 {
 			t.Errorf("%s: reportVersion %d, want 1", f, g.ReportVersion)
 		}
-		isTypesFDA := filepath.Base(f) == "fda.types.cdx.json"
+		base := filepath.Base(f)
+		isSelfFDA := base == "fda.self.cdx.json"
+		isSkipFDA := base == "fda.types.cdx.json" || isSelfFDA
+		baselineTotal := float64(6)
+		if isSelfFDA {
+			baselineTotal = 7
+		}
 		for _, p := range g.Profiles {
 			for _, c := range p.Checks {
 				id := c["id"].(string)
 				_, hasCount := c["componentsSkipped"]
 				_, hasTypes := c["skippedTypes"]
-				if !isTypesFDA || !supportCheckIDs[id] {
-					if hasCount || hasTypes {
+				_, hasSelf := c["selfComponentsSkipped"]
+				if !isSkipFDA || !supportCheckIDs[id] {
+					if hasCount || hasTypes || hasSelf {
 						t.Errorf("%s %s carries the skip fields", f, id)
 					}
-					if isTypesFDA && strings.HasPrefix(id, "fda.baseline.") && c["scope"] == string(ScopeComponent) && c["total"] != float64(6) {
-						t.Errorf("%s %s: total %v, want 6", f, id, c["total"])
+					if isSkipFDA && strings.HasPrefix(id, "fda.baseline.") && c["scope"] == string(ScopeComponent) && c["total"] != baselineTotal {
+						t.Errorf("%s %s: total %v, want %v", f, id, c["total"], baselineTotal)
 					}
 					continue
 				}
 				if c["componentsSkipped"] != float64(2) || !reflect.DeepEqual(c["skippedTypes"], []any{"cryptographic-asset", "file"}) || c["total"] != float64(4) {
 					t.Errorf("%s %s: componentsSkipped %v skippedTypes %v total %v, want 2 [cryptographic-asset file] 4",
 						f, id, c["componentsSkipped"], c["skippedTypes"], c["total"])
+				}
+				switch {
+				case isSelfFDA && c["selfComponentsSkipped"] != float64(1):
+					t.Errorf("%s %s: selfComponentsSkipped %v, want 1", f, id, c["selfComponentsSkipped"])
+				case !isSelfFDA && hasSelf:
+					t.Errorf("%s %s carries selfComponentsSkipped", f, id)
 				}
 			}
 		}
