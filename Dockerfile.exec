@@ -1,4 +1,4 @@
-FROM golang:1.26.6-alpine3.24@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83 AS build-stage
+FROM golang:1.26.10-alpine3.24@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca AS build-stage
 WORKDIR /build
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
@@ -9,6 +9,9 @@ RUN apk add --update zip
 ARG VERSION=not_versioned
 RUN mkdir /$VERSION
 RUN chmod +x ./build.sh
+# Trust-store gate: the toolchain that builds the release binaries must refuse
+# the compromised eMudhra chains (ci/trust-gate/trustgate_test.go).
+RUN go test -count=1 -tags trustgate -run TestTrustGate ./ci/trust-gate/
 RUN ./build.sh darwin amd64; \
     ./build.sh darwin arm64; \
     ./build.sh solaris amd64

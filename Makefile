@@ -2,7 +2,7 @@
 # hand: a conflict on it is resolved by taking either side and re-running the
 # target. See pin-rearm-client-go-script/pin-client-go.sh.
 
-.PHONY: pin-client-go pin-client-go-check
+.PHONY: pin-client-go pin-client-go-check gate-selftest
 
 pin-client-go:
 	@test -n "$(REF)" || { echo "usage: make pin-client-go REF=<commit or branch>" >&2; exit 2; }
@@ -10,3 +10,7 @@ pin-client-go:
 
 pin-client-go-check:
 	sh pin-rearm-client-go-script/pin-client-go.sh --check
+
+# Trust-store gate self-test (ci/trust-gate/selftest.sh): hermetic, needs openssl.
+gate-selftest:
+	sh ci/trust-gate/selftest.sh
