@@ -74,6 +74,77 @@ func TestSupportChecksSkipSelfComponents(t *testing.T) {
 	}
 }
 
+// Review item T-9 (ADR-1, the name half of design row T-1): only the exact property name is
+// honoured (no case folding, no trimming, no prefix or suffix), and a second entry of the name
+// valued otherwise does not cancel a "true" one, in either order. The server's sweep removes only
+// names starting with "reliza:support:" as typed, so "Reliza:..." or " reliza:..." in an uploaded
+// SBOM reaches the engine, which must not depend on the sweep.
+func TestSupportChecksSelfNameExact(t *testing.T) {
+	m := jsonFixture(t, "full.cdx.json")
+	components := m["components"].([]any)
+	add := func(name string, props ...any) {
+		components = append(components, map[string]any{"bom-ref": name, "type": "library", "name": name, "properties": props})
+	}
+	named := func(name string) map[string]any { return map[string]any{"name": name, "value": "true"} }
+	add("name-upper", named("Reliza:support:selfComponent"))
+	add("name-lower", named("reliza:support:selfcomponent"))
+	add("name-leading", named(" reliza:support:selfComponent"))
+	add("name-trailing", named("reliza:support:selfComponent "))
+	add("name-suffix", named("reliza:support:selfComponents"))
+	add("name-prefix", named("reliza:support:self"))
+	add("dup-false-true", selfProp("false"), selfProp("true"))
+	add("dup-true-false", selfProp("true"), selfProp("false"))
+	m["components"] = components
+	r := scoreOK(t, encode(t, m), ProfileFDA)
+	want := []string{"name-leading", "name-lower", "name-prefix", "name-suffix", "name-trailing", "name-upper"}
+	for _, id := range []string{supportLevelID, endOfSupportID} {
+		c := assertStatus(t, r, id, StatusFail)
+		if c.SelfComponentsSkipped != 2 {
+			t.Errorf("%s: selfComponentsSkipped %d, want 2 (the two duplicate-entry components)", id, c.SelfComponentsSkipped)
+		}
+		assertNotSkipped(t, c)
+		if c.Total != 10 || c.Passed != 4 {
+			t.Errorf("%s: %d/%d, want 4/10 (the 4 fixture components pass, the 6 near-miss names fail)", id, c.Passed, c.Total)
+		}
+		if !reflect.DeepEqual(c.Failing, want) {
+			t.Errorf("%s: failing %v, want %v", id, c.Failing, want)
+		}
+	}
+}
+
+// Review item T-10 (SCORE-58 option A, "a marker, not a name match"): a component that shares the
+// subject's name, version or purl, or whose name is the subject's bom-ref, but carries no marker
+// is judged like any other.
+func TestSupportChecksNoSubjectNameMatch(t *testing.T) {
+	m := jsonFixture(t, "full.cdx.json")
+	const purl = "pkg:generic/example-device-app@5.0.0"
+	subject := m["metadata"].(map[string]any)["component"].(map[string]any)
+	subject["purl"] = purl
+	components := m["components"].([]any)
+	components = append(components,
+		// the subject listed again, as an export lists it: same name, version and purl
+		map[string]any{"bom-ref": "app-listed", "type": "application", "name": "example-device-app", "version": "5.0.0", "purl": purl},
+		// the subject's name and version, no purl
+		map[string]any{"bom-ref": "app-copy", "type": "library", "name": "example-device-app", "version": "5.0.0"},
+		// an entry whose name is the subject's bom-ref
+		map[string]any{"bom-ref": "app-named", "type": "library", "name": "app"},
+	)
+	m["components"] = components
+	r := scoreOK(t, encode(t, m), ProfileFDA)
+	want := []string{"app", "example-device-app@5.0.0", purl} // shown by purl, else name@version, else name
+	for _, id := range []string{supportLevelID, endOfSupportID} {
+		c := assertStatus(t, r, id, StatusFail)
+		assertNotSelfSkipped(t, c)
+		assertNotSkipped(t, c)
+		if c.Total != 7 || c.Passed != 4 {
+			t.Errorf("%s: %d/%d, want 4/7 (the 4 fixture components pass, the 3 subject look-alikes fail)", id, c.Passed, c.Total)
+		}
+		if !reflect.DeepEqual(c.Failing, want) {
+			t.Errorf("%s: failing %v, want %v", id, c.Failing, want)
+		}
+	}
+}
+
 // T-2: every other component check and every structure check judges the self components.
 func TestOnlySupportChecksSkipSelf(t *testing.T) {
 	r := scoreOK(t, encode(t, selfCDX(t)))
