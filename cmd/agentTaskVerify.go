@@ -1119,4 +1119,6 @@ func init() {
 	f.BoolVar(&verifyJson, "json", false, "print the checks as JSON")
 	f.StringArrayVar(&verifyCodeSession, "code-session", nil, "the client session id your code commits carry, when it is not the board session's (a code session on another instance); repeat it for each code session this round's commits used (commits from before the assignment are accepted under any session). Left out: the current sessions recorded for this repository on other instances, else the board session's")
 	agentTaskCmd.AddCommand(agentTaskVerifyCmd)
+	// It resolves a key with resolveTaskRef in its run, keeping the typed reference for its output (task TPF-96).
+	resolvesTaskKeysInRun(agentTaskVerifyCmd)
 }

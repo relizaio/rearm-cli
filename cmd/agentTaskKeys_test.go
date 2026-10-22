@@ -53,6 +53,7 @@ func TestTaskCommandsAcceptKeys(t *testing.T) {
 	for _, c := range []*cobra.Command{
 		agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskShowCmd, agentTaskMergeplanCmd, agentTaskAuthorizeCmd,
 		boardsAuthorizeCmd, boardsSignoffCmd, boardsRegisterCmd, agentDocPublishCmd, agentSessionUsageCmd,
+		agentTaskTagCmd, agentTaskSetGroupCmd, agentTaskWorkLevelCmd, boardsTagCmd, boardsSetGroupCmd, boardsTaskWorkLevelCmd,
 	} {
 		if c.PreRunE == nil {
 			t.Errorf("%s does not resolve task keys", c.CommandPath())

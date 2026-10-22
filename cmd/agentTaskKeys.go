@@ -69,9 +69,42 @@ const (
 	everyTaskArg = -1
 )
 
+// taskKeyRegistration is what acceptTaskKeys (or a verb resolving in its own run) declared for a command:
+// the guard test compares it with what the command's Use and flags say (task TPF-96).
+type taskKeyRegistration struct {
+	positional int  // noTaskArgs, firstTaskArg or everyTaskArg
+	flags      int  // len(flags) + len(sliceFlags)
+	inline     bool // the verb calls resolveTaskRef in its run (push, verify)
+	calls      int  // how many declarations the command received; above 1 it would resolve twice
+}
+
+// taskKeyCommands records every command that resolves task keys, however it does it. A task flag is
+// named task or ends in -task, or its usage says task uuid or task key, so the guard can find it.
+var taskKeyCommands = map[*cobra.Command]taskKeyRegistration{}
+
+// taskUUIDOnlyCommands exempts a command whose task argument must stay a uuid, with the reason.
+// Empty at this head; a reason is required, and the guard prints it.
+var taskUUIDOnlyCommands = map[*cobra.Command]string{}
+
+// declareTaskKeys records one declaration for cmd, counting the ones before it.
+func declareTaskKeys(cmd *cobra.Command, reg taskKeyRegistration) {
+	reg.calls = taskKeyCommands[cmd].calls + 1
+	taskKeyCommands[cmd] = reg
+}
+
+// resolvesTaskKeysInRun declares a verb that resolves its first argument with resolveTaskRef inside its
+// own run, because it keeps the typed reference for its output (push, verify).
+func resolvesTaskKeysInRun(cmd *cobra.Command) {
+	declareTaskKeys(cmd, taskKeyRegistration{positional: firstTaskArg, inline: true})
+}
+
+// takesTaskUUIDOnly exempts a verb from key resolution, with the reason the guard prints.
+func takesTaskUUIDOnly(cmd *cobra.Command, why string) { taskUUIDOnlyCommands[cmd] = why }
+
 // acceptTaskKeys lets a command's task arguments be keys: the positional ones it names and the given
 // flags. Resolved in PreRunE, before the command's own run sees them.
 func acceptTaskKeys(cmd *cobra.Command, positional int, flags []*string, sliceFlags []*[]string) {
+	declareTaskKeys(cmd, taskKeyRegistration{positional: positional, flags: len(flags) + len(sliceFlags)})
 	prevE, prev := cmd.PreRunE, cmd.PreRun
 	cmd.PreRun = nil
 	cmd.PreRunE = func(c *cobra.Command, args []string) error {
@@ -120,6 +153,7 @@ func init() {
 		agentTaskDeclareDeliveryCmd, agentTaskSupersedeCmd, agentTaskUnlinkCmd, boardsDeclareDeliveryCmd, boardsOrderCmd, boardsCompleteCmd, boardsCancelCmd,
 		boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd, boardsSignoffCmd, boardsHoldCmd, boardsLiftholdCmd,
 		boardsRequireReviewCmd, boardsBudgetCmd, boardsStrengthCmd,
+		agentTaskWorkLevelCmd, agentTaskSetGroupCmd, agentTaskTagCmd, boardsTaskWorkLevelCmd, boardsSetGroupCmd, boardsTagCmd,
 	} {
 		acceptTaskKeys(c, firstTaskArg, nil, nil)
 	}
