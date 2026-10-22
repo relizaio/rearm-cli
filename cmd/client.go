@@ -73,6 +73,10 @@ func rearmClient() *rearm.Client {
 		// the identity token GitHub issues to the job, exchanged through an organization's trust rule: no secret
 		c, err = rearm.NewWithAssertion(rearmUri, oidcOrg(), rearm.GitHubActionsAssertion(rearmUri, nil), opts...)
 	default:
+		// the access token outlives the process in the token cache file (task TPF-67, tokenCache.go)
+		if s, ok := tokenCacheStore(); ok {
+			opts = append(opts, rearm.WithTokenStore(s))
+		}
 		c, err = rearm.New(rearmUri, apiKeyId, apiKey, opts...)
 	}
 	if err != nil {

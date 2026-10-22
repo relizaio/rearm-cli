@@ -26,6 +26,8 @@ It is possible to set authentication data via:
 
 All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/rearm-client-go) library, which exchanges the key for a short-lived access token on servers that offer the programmatic endpoint and falls back to the classic `/graphql` endpoint on older servers.
 
+In API-key mode the CLI keeps the exchanged access token in `~/.rearm.env.tokens` (mode 0600, beside `.rearm.env`, under the same `.rearm.env.lock`), keyed by server, key id and a keyed digest of the secret (the secret itself is never written), and reuses it until a minute before its one-hour expiry, so repeated commands make one call each instead of two and parallel commands of one key share one exchange. `REARM_NO_TOKEN_CACHE=true` turns the cache off for callers that must not write to disk, and a home directory that cannot be written just means no cache. The cache follows `--config`: it sits beside whatever credentials file `--config` names, so keep that off shared or network volumes. In a CI job (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI` or `TF_BUILD` true, or `JENKINS_URL` set) the cache is off unless `REARM_TOKEN_CACHE=true`, because a persistent runner's home directory is shared by every job on it. Set `REARM_NO_TOKEN_CACHE=true` in image builds (a `RUN` line that runs `rearm` would otherwise leave the token in the image layer) and on shared hosts. A cache file that is not mode 0600 and owned by the caller is ignored and rewritten. `rearm logout` removes it.
+
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm)
