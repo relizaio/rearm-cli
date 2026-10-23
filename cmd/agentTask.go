@@ -660,9 +660,12 @@ var agentTaskOrderCmd = &cobra.Command{
 }
 
 var agentTaskWorkLevelCmd = &cobra.Command{
-	Use:   "work-level <task-uuid>",
+	Use:   "work-level <task>",
 	Short: "Coordinator: set a task's work level, a rung of the board's ladder, or --clear so it reads the default",
-	Args:  cobra.ExactArgs(1),
+	Long: `Coordinator: set a task's work level, a rung of the board's ladder, or --clear so it reads the default.
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := workLevelVariables(args[0], taskLevel, cmd.Flags().Changed("work-level"), taskLevelClear)
 		if err != nil {

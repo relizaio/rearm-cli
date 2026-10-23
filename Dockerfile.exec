@@ -9,6 +9,9 @@ RUN apk add --update zip
 ARG VERSION=not_versioned
 RUN mkdir /$VERSION
 RUN chmod +x ./build.sh
+# Trust-store gate: the toolchain that builds the release binaries must refuse
+# the compromised eMudhra chains (ci/trust-gate/trustgate_test.go).
+RUN go test -count=1 -tags trustgate -run TestTrustGate ./ci/trust-gate/
 RUN ./build.sh darwin amd64; \
     ./build.sh darwin arm64; \
     ./build.sh solaris amd64

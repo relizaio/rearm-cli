@@ -46,7 +46,11 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 ARG CI_ENV=noci
 ARG GIT_COMMIT=git_commit_undefined
 ARG GIT_BRANCH=git_branch_undefined
-RUN apk add --no-cache ca-certificates && \
+# ca-certificates-bundle is what the release stage copies: upgrade it first, so
+# the shipped bundle is the fixed one (20261020-r0 dropped the two roots of the
+# October 2026 eMudhra compromise) whatever the base image carried.
+RUN apk upgrade --no-cache ca-certificates ca-certificates-bundle && \
+    apk add --no-cache ca-certificates && \
     mkdir -p /skel/app/localdata /skel/indir /skel/outdir /skel/tmp && \
     echo "version=$VERSION" > /skel/app/version && \
     echo "commit=$GIT_COMMIT" >> /skel/app/version && \
@@ -54,6 +58,20 @@ RUN apk add --no-cache ca-certificates && \
     echo "apprunner:x:1000:1000:apprunner:/app:/sbin/nologin" > /skel-passwd && \
     echo "apprunner:x:1000:" > /skel-group && \
     chown -R 1000:1000 /skel
+
+# Trust-store gate self-test (ci/trust-gate/selftest.sh): hermetic, so it gives
+# the same verdicts on any store; run here because CI builds this Dockerfile and
+# nothing else.
+RUN apk add --no-cache openssl && sh ci/trust-gate/selftest.sh
+
+# Trust-store gate: the toolchain and the bundle that the scratch stage ships
+# must refuse the compromised eMudhra chains (ci/trust-gate/). The release stage
+# copies the marker, which is what makes BuildKit build this stage.
+FROM build-stage AS trust-gate
+USER root
+RUN apk add --no-cache curl openssl
+COPY ci/trust-gate/ /gate/
+RUN sh /gate/trust-gate.sh && go test -count=1 -tags trustgate -run TestTrustGate ./ci/trust-gate/ && echo "trust-gate ok $(date -u +%FT%TZ)" > /gate/ok
 
 # The binary is fully static (CGO_ENABLED=0), so the release image carries no
 # distro at all: FROM scratch removes every Alpine package finding (openssl,
@@ -71,6 +89,7 @@ COPY --from=build-stage /skel-passwd /etc/passwd
 COPY --from=build-stage /skel-group /etc/group
 COPY --from=build-stage /skel/ /
 COPY --from=build-stage --chown=1000:1000 /build/rearm /app/app
+COPY --from=trust-gate /gate/ok /trust-gate-ok
 USER apprunner
 ENV TMPDIR=/tmp HOME=/app
 
