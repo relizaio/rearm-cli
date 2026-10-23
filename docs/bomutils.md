@@ -168,13 +168,15 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 
 Flags stand for:
 - **--input-files** - Comma-separated list of input BOM file paths to merge (required)
-- **--name** - Name for the new root component of the merged BOM (optional)
-- **--version** - Version for the new root component of the merged BOM (optional)
+- **--name** - Name for the new root component of the merged BOM (required)
+- **--version** - Version for the new root component of the merged BOM (required)
 - **--group** - Group for the new root component of the merged BOM (optional)
 - **--structure** - Structure of the merged BOM: FLAT or HIERARCHICAL (default: FLAT)
 - **--root-component-merge-mode** - How to handle root components: PRESERVE_UNDER_NEW_ROOT or FLATTEN_UNDER_NEW_ROOT (default: PRESERVE_UNDER_NEW_ROOT)
 - **--purl** - Set bom-ref and purl for the root merged component (optional)
 - **--outfile** - Output file path to write merged BOM (optional - writes to stdout when not specified)
+
+What a merge keeps: FLAT keys every input's root, then every input's top-level components, by purl, else bom-ref. The first holder of a key in input order survives, and each later holder folds into it, carrying hashes by algorithm, properties by name, external references by URL, and licences by one rule: an empty `licenses` list counts as absent, so an absent survivor list takes the later holder's whole list; beside an expression on either side the survivor's list stands as it is; otherwise the two lists are unioned, and two entries of one licence id or name with different acknowledgements or bom-refs are both kept. Nothing else of a folded node is carried, its nested components included. A root with neither purl nor bom-ref is dropped. HIERARCHICAL nests each input's top-level components under its root and folds nothing. Every fold that loses something (a licence entry beside an expression, a hash of an algorithm the survivor already holds with another value, a property of a name the survivor already holds with another value), every root that folds into another, and every dropped root prints one `merge-boms:` line on stderr naming the node by its purl or bom-ref and what was lost in full (the kept licence list is shown up to four entries, a kept value up to 96 bytes, and the hash and property lines show the purl or bom-ref up to 96 bytes). A clean merge prints nothing on stderr. Exit code 0 when merged, 1 on any error.
 
 ## 9.5 Score an SBOM against CISA, NTIA and FDA minimum elements
 
