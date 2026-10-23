@@ -168,13 +168,15 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 
 Flags stand for:
 - **--input-files** - Comma-separated list of input BOM file paths to merge (required)
-- **--name** - Name for the new root component of the merged BOM (optional)
-- **--version** - Version for the new root component of the merged BOM (optional)
+- **--name** - Name for the new root component of the merged BOM (required)
+- **--version** - Version for the new root component of the merged BOM (required)
 - **--group** - Group for the new root component of the merged BOM (optional)
 - **--structure** - Structure of the merged BOM: FLAT or HIERARCHICAL (default: FLAT)
 - **--root-component-merge-mode** - How to handle root components: PRESERVE_UNDER_NEW_ROOT or FLATTEN_UNDER_NEW_ROOT (default: PRESERVE_UNDER_NEW_ROOT)
 - **--purl** - Set bom-ref and purl for the root merged component (optional)
 - **--outfile** - Output file path to write merged BOM (optional - writes to stdout when not specified)
+
+What a merge keeps: FLAT keys every input's root, then every input's top-level components, by purl, else bom-ref. The first holder of a key in input order survives, and each later holder folds into it, carrying hashes by algorithm, properties by name, external references by URL, and licences by one rule: an empty `licenses` list counts as absent, so an absent survivor list takes the later holder's whole list; beside an expression on either side the survivor's list stands as it is; otherwise the two lists are unioned, and two entries of one licence id or name with different acknowledgements or bom-refs are both kept. Nothing else of a folded node is carried, its nested components included. A root with neither purl nor bom-ref is dropped. HIERARCHICAL nests each input's top-level components under its root and folds nothing. Every fold that loses something (a licence entry beside an expression, a hash of an algorithm the survivor already holds with another value, a property of a name the survivor already holds with another value), every root that folds into another, and every dropped root prints one `merge-boms:` line on stderr naming the node by its purl or bom-ref and what was lost in full (the kept licence list is shown up to four entries, a kept value up to 96 bytes, and the hash and property lines show the purl or bom-ref up to 96 bytes). A clean merge prints nothing on stderr. Exit code 0 when merged, 1 on any error.
 
 ## 9.5 Score an SBOM against CISA, NTIA and FDA minimum elements
 
@@ -241,6 +243,7 @@ Not supported: SPDX RDF/XML, SPDX 3.x, CycloneDX 2.0 and newer, CycloneDX protob
 - The `structure` block (CycloneDX only) holds three INFO checks, `structure.purl-valid`, `structure.refs-resolve` and `structure.no-orphans`; they never change a verdict or a score.
 - `input.components` is the number of components scored, the `total` of every component check except the two fda support checks below; with `--skip-files`, `input.componentsSkipped` is the number left out.
 - `fda.component.support-level` and `fda.component.end-of-support` judge software packages only: they skip CycloneDX components of type `file`, `cryptographic-asset`, `data`, `machine-learning-model` and `device`; a component without a type is judged. In SPDX the level of support is not representable, so `fda.component.support-level` counts every package and skips none; `fda.component.end-of-support` skips SPDX 2.3 packages with `primaryPackagePurpose` `FILE` or `DEVICE` (in SPDX 2.2 it is not representable either). A check that skipped components reports `componentsSkipped` and `skippedTypes`, and the text output prints `skipped N components of type ... (not software packages)` under it. With `--skip-files` the file components are already left out before these checks. Every other check judges these components as before.
+- The two fda support checks also do not judge a component ReARM marked as the subject's own: the property `reliza:support:selfComponent` with the literal value `true` (exact: no other spelling, case or padding counts), which ReARM writes on the organization's own release or artifact listed in an export (a product's component releases, the release's own uploaded root). The backend's coverage gauge and bulk attestation leave the same entries out. Such a component is neither passed nor failing; the check reports `selfComponentsSkipped`, and the text output prints `skipped N of the subject's own components (reliza:support:selfComponent)` under a failed check. A self component of a skipped type is counted once, as self. A document whose every component is self or of a skipped type fails both checks at 0/0 with the note `no supportable component`. Every other check judges the component as before. SPDX has no such marker.
 
 ### How results differ from sbomqs
 
@@ -254,7 +257,7 @@ sbomqs v2.1.2 scores the same fields, and on the real-world files we compared mo
 | SBOM author | never taken from `metadata.tools` or `Tool:` creators | its NTIA 2021 profile gives full marks for an author inferred from the generation tool (its 2026 profile does not) | a tool is not the author of the SBOM |
 | Declared unknowns | `NOASSERTION`, `NONE` and blank count as missing in every field | counts SPDX `NOASSERTION` as a declared supplier and producer | a value that says "unknown" does not give the field |
 | `NOASSERTION` supplier | missing, in SPDX as in CycloneDX | present in SPDX; on the CycloneDX file of the same scan it counted 65 of 1845 components, on the SPDX file 1842 | the same scan should score the same in either format |
-| Level of support, end of support | scored by the fda profile on software packages: file, key-material, data, ML-model and device components are skipped, stated per check | not scored: neither its NTIA 2021 nor its 2026 profile has the fields, and its default score marks `comp_eol_eos` as ignored (`N/A`) even on files that carry them | the FDA guidance asks for both; a supplier does not maintain a key file or a data set |
+| Level of support, end of support | scored by the fda profile on software packages: file, key-material, data, ML-model and device components are skipped, and the subject's own entries too, stated per check | not scored: neither its NTIA 2021 nor its 2026 profile has the fields, and its default score marks `comp_eol_eos` as ignored (`N/A`) even on files that carry them | the FDA guidance asks for both; a supplier does not maintain a key file or a data set |
 
 With `--skip-files` the per-component totals differ from sbomqs as well, which scores file components.
 
@@ -298,7 +301,7 @@ cisa-2026  CISA Minimum Elements for an SBOM (2026)  NOT_READY  score 99
   17 required: 16 pass, 1 fail, 0 error; 6 not assessed
 ```
 
-With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count, `componentsSkipped` the number `--skip-files` left out, and `signature` the root signature: `present`, `wellFormed`, `algorithm`, `keyId`, `verification`, `detail`) comes `options`, `{"skipFiles": false}` or `true`, plus `signatureKey` with the key path when one was given. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note, and, when the check skipped components, `componentsSkipped` and `skippedTypes`.
+With `--format json` the report is versioned (`reportVersion` 1) and deterministic: the same input, profiles, options and CLI version give the same bytes. After `input` (whose `components` is the scored count, `componentsSkipped` the number `--skip-files` left out, and `signature` the root signature: `present`, `wellFormed`, `algorithm`, `keyId`, `verification`, `detail`) comes `options`, `{"skipFiles": false}` or `true`, plus `signatureKey` with the key path when one was given. Each check carries its id, title, level, scope, status, `passed` and `total`, up to 20 failing components (`failingTruncated` says there are more), the reference into its source document, a remedy and a note, and, when the check skipped components, `componentsSkipped` and `skippedTypes`, and `selfComponentsSkipped` when it skipped the subject's own components.
 
 ## 9.6 Verify an SBOM signature
 

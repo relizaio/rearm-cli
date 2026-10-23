@@ -13,6 +13,11 @@ const (
 	propEndOfSupport = "cdx:lifecycle:milestone:endOfSupport"
 )
 
+// propSelfComponent marks a component as the subject's own entry: ReARM writes it, with the literal
+// value "true", on the organization's own releases and artifacts listed in an export (SCORE-58).
+// Only the two fda support checks read it, through perSupportableComponent.
+const propSelfComponent = "reliza:support:selfComponent"
+
 // supportLevels are the only values of propSupportLevel that pass fda.component.support-level.
 var supportLevels = map[string]bool{
 	"actively maintained":  true,
@@ -34,6 +39,17 @@ const noteNoSupportable = "no supportable component"
 
 // supportable says whether the fda support checks judge the component (false for the skipped types).
 func (c *Comp) supportable(f Format) bool { return !skippedSupportTypes[f][c.Type] }
+
+// selfComponent says whether the component carries propSelfComponent with the exact value "true":
+// no trimming, no case folding, so a document cannot widen what the support checks skip.
+func (c *Comp) selfComponent() bool {
+	for _, p := range c.Properties {
+		if p.Name == propSelfComponent && p.Value == "true" {
+			return true
+		}
+	}
+	return false
+}
 
 // isPresent says whether a value states something. Operator point O3: a declared-unknown value
 // (SPDX NOASSERTION or NONE, an empty or whitespace-only string) counts as missing. To let declared
@@ -92,13 +108,18 @@ func perComponent(d *Doc, has func(c *Comp) bool) Outcome {
 }
 
 // perSupportableComponent evaluates has on the supportable components only and reports the rest:
-// how many were skipped and their distinct types, sorted. When it skipped every component the
-// check has total 0 (FAIL) and the note noteNoSupportable.
+// the subject's own components (selfComponent, counted first and only as self), then how many were
+// skipped by type and their distinct types, sorted. When it skipped every component the check has
+// total 0 (FAIL) and the note noteNoSupportable.
 func perSupportableComponent(d *Doc, has func(c *Comp) bool) Outcome {
 	var o Outcome
 	types := map[string]bool{}
 	for i := range d.Components {
 		c := &d.Components[i]
+		if c.selfComponent() {
+			o.SelfSkipped++
+			continue
+		}
 		if !c.supportable(d.Format) {
 			o.Skipped++
 			types[c.Type] = true
@@ -115,7 +136,7 @@ func perSupportableComponent(d *Doc, has func(c *Comp) bool) Outcome {
 		o.SkippedTypes = append(o.SkippedTypes, t)
 	}
 	sort.Strings(o.SkippedTypes)
-	if o.Skipped > 0 && o.Total == 0 {
+	if (o.Skipped > 0 || o.SelfSkipped > 0) && o.Total == 0 {
 		o.Note = noteNoSupportable
 	}
 	return o

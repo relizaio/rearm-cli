@@ -1,0 +1,29 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/hier-b@2.0.0",
+      "name": "hier-b",
+      "version": "2.0.0",
+      "purl": "pkg:generic/hier-b@2.0.0",
+      "licenses": []
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/right-pad@2.0.0",
+      "name": "right-pad",
+      "version": "2.0.0",
+      "purl": "pkg:npm/right-pad@2.0.0",
+      "licenses": [{"license": {"id": "Apache-2.0"}}, {"license": {"name": "Custom"}}],
+      "hashes": [{"alg": "SHA-512", "content": "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222"}]
+    }
+  ],
+  "dependencies": [
+    {"ref": "pkg:generic/hier-b@2.0.0", "dependsOn": ["pkg:npm/right-pad@2.0.0"]}
+  ]
+}
