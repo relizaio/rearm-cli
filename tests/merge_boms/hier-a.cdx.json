@@ -1,0 +1,39 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/hier-a@1.0.0",
+      "name": "hier-a",
+      "version": "1.0.0",
+      "purl": "pkg:generic/hier-a@1.0.0",
+      "licenses": [{"license": {"id": "MIT"}}],
+      "hashes": [{"alg": "SHA-256", "content": "1111111111111111111111111111111111111111111111111111111111111111"}]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/left-pad@1.3.0",
+      "name": "left-pad",
+      "version": "1.3.0",
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "licenses": [{"expression": "MIT OR Apache-2.0"}],
+      "properties": [{"name": "p", "value": "a"}]
+    },
+    {
+      "type": "library",
+      "bom-ref": "local-lib",
+      "name": "local-lib",
+      "version": "0.1.0",
+      "licenses": [{"license": {"name": "Custom", "acknowledgement": "declared"}}],
+      "externalReferences": [{"type": "website", "url": "https://example.com/local-lib"}]
+    }
+  ],
+  "dependencies": [
+    {"ref": "pkg:generic/hier-a@1.0.0", "dependsOn": ["pkg:npm/left-pad@1.3.0", "local-lib"]},
+    {"ref": "pkg:npm/left-pad@1.3.0"}
+  ]
+}

@@ -78,14 +78,21 @@ func readBom() *cdx.BOM {
 }
 
 func readBomFromBytes(data []byte) *cdx.BOM {
-	bom := new(cdx.BOM)
-	decoder := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON)
-	err := decoder.Decode(bom)
+	bom, err := decodeBom(data)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	return bom
+}
+
+// decodeBom decodes a CycloneDX JSON document.
+func decodeBom(data []byte) (*cdx.BOM, error) {
+	bom := new(cdx.BOM)
+	if err := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON).Decode(bom); err != nil {
+		return nil, err
+	}
+	return bom, nil
 }
 
 func writeOutput(bom *cdx.BOM) error {
