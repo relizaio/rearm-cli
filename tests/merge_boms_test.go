@@ -810,6 +810,90 @@ func TestMergeBomsKeptValueCap(t *testing.T) {
 	}
 }
 
+// T-6 (j): the hash and property lines come once per entry of the duplicate, so they show
+// the key through boundedQuote; the licence line comes at most once per fold of a node and
+// keeps the key whole.
+func TestMergeBomsMismatchLineKeyBounded(t *testing.T) {
+	longRef := strings.Repeat("k", 5000)
+	node := func(extra obj) obj {
+		c := obj{"type": "library", "bom-ref": longRef, "name": "k", "version": "1"}
+		for k, v := range extra {
+			c[k] = v
+		}
+		return c
+	}
+	t.Run("property line bounds the key", func(t *testing.T) {
+		props := make([]obj, 200)
+		for i := range props {
+			props[i] = obj{"name": "p", "value": fmt.Sprint("b", i)}
+		}
+		survivor := node(obj{"properties": []obj{{"name": "p", "value": "a"}}})
+		dup := node(obj{"properties": props})
+		paths := writeMergeInputs(t, mergeBomDoc(t, appRoot("r0"), survivor), mergeBomDoc(t, appRoot("r1"), dup))
+		run := runMergeBoms(cmd.MergeBomsOptions{InputFiles: paths})
+		if run.code != 0 {
+			t.Fatalf("exit %d", run.code)
+		}
+		lines := strings.Split(strings.TrimSuffix(run.stderr, "\n"), "\n")
+		if len(lines) != 200 {
+			t.Fatalf("%d stderr lines, want 200", len(lines))
+		}
+		shownKey := `"` + strings.Repeat("k", 96) + `"(+4904 bytes)`
+		if want := `merge-boms: component ` + shownKey + `: property "p" dropped beside the kept value: "b0" (kept: "a")`; lines[0] != want {
+			t.Errorf("first line %q, want %q", lines[0], want)
+		}
+		if len(run.stderr) >= 200*256 {
+			t.Errorf("stderr %d bytes, want under %d", len(run.stderr), 200*256)
+		}
+		merged := onlyComponentWith(t, topComponents(t, decodeMerged(t, run.stdout)), "bom-ref", longRef)
+		if got := fieldStrings(merged, "properties", "name"); !reflect.DeepEqual(got, []string{"p"}) {
+			t.Errorf("property names %v, want [p]", got)
+		}
+		if got := fieldStrings(merged, "properties", "value"); !reflect.DeepEqual(got, []string{"a"}) {
+			t.Errorf("property values %v, want [a]", got)
+		}
+	})
+	t.Run("hash line bounds the key", func(t *testing.T) {
+		hashes := make([]obj, 200)
+		for i := range hashes {
+			hashes[i] = obj{"alg": "SHA-256", "content": fmt.Sprint("h", i)}
+		}
+		survivor := node(obj{"hashes": []obj{{"alg": "SHA-256", "content": "a"}}})
+		dup := node(obj{"hashes": hashes})
+		paths := writeMergeInputs(t, mergeBomDoc(t, appRoot("r0"), survivor), mergeBomDoc(t, appRoot("r1"), dup))
+		run := runMergeBoms(cmd.MergeBomsOptions{InputFiles: paths})
+		if run.code != 0 {
+			t.Fatalf("exit %d", run.code)
+		}
+		lines := strings.Split(strings.TrimSuffix(run.stderr, "\n"), "\n")
+		if len(lines) != 200 {
+			t.Fatalf("%d stderr lines, want 200", len(lines))
+		}
+		shownKey := `"` + strings.Repeat("k", 96) + `"(+4904 bytes)`
+		if want := `merge-boms: component ` + shownKey + `: hash "SHA-256" dropped beside the kept value: "h0" (kept: "a")`; lines[0] != want {
+			t.Errorf("first line %q, want %q", lines[0], want)
+		}
+		if len(run.stderr) >= 200*256 {
+			t.Errorf("stderr %d bytes, want under %d", len(run.stderr), 200*256)
+		}
+	})
+	t.Run("licence line keeps the key whole", func(t *testing.T) {
+		survivor := withLicences(t, node(nil), "X")
+		dup := withLicences(t, node(nil), "L")
+		paths := writeMergeInputs(t, mergeBomDoc(t, appRoot("r0"), survivor), mergeBomDoc(t, appRoot("r1"), dup))
+		run := runMergeBoms(cmd.MergeBomsOptions{InputFiles: paths})
+		if run.code != 0 {
+			t.Fatalf("exit %d", run.code)
+		}
+		want := dropLine(longRef, `[id:"MIT"]`, `[expression:"MIT OR Apache-2.0"]`)
+		if run.stderr != want {
+			t.Errorf("stderr %d bytes %.200q..., want exactly the one line with the whole key (%d bytes)", len(run.stderr), run.stderr, len(want))
+		}
+		merged := onlyComponentWith(t, topComponents(t, decodeMerged(t, run.stdout)), "bom-ref", longRef)
+		assertLicences(t, "survivor", merged, "X")
+	})
+}
+
 // T-7: every error path returns 1 with its message, writes nothing to stdout and does not exit.
 func TestMergeBomsExitPaths(t *testing.T) {
 	good := writeMergeInputs(t, mergeBomDoc(t, appRoot("r0")))[0]
@@ -885,35 +969,5 @@ func TestMergeBomsDeterministic(t *testing.T) {
 	}
 	if !bytes.Equal(blankSerial([]byte(a.stdout)), blankSerial([]byte(b.stdout))) || a.stderr != b.stderr {
 		t.Errorf("two runs differ beyond serialNumber:\n%s\n%s", a.stdout, b.stdout)
-	}
-}
-
-// The hash and property lines come once per entry of the duplicate, so they show the key
-// bounded like every survivor-side string: a long key repeated on every line would make
-// stderr grow as key length times entry count (Layer-1 review of SCORE-67).
-func TestMergeBomsMismatchLineKeyBounded(t *testing.T) {
-	longRef := strings.Repeat("k", 5000)
-	survivor := obj{"type": "library", "bom-ref": longRef, "name": "k", "version": "1",
-		"properties": []obj{{"name": "p", "value": "a"}}}
-	props := make([]obj, 200)
-	for i := range props {
-		props[i] = obj{"name": "p", "value": fmt.Sprint("b", i)}
-	}
-	dup := obj{"type": "library", "bom-ref": longRef, "name": "k", "version": "1", "properties": props}
-	paths := writeMergeInputs(t, mergeBomDoc(t, appRoot("r0"), survivor), mergeBomDoc(t, appRoot("r1"), dup))
-	run := runMergeBoms(cmd.MergeBomsOptions{InputFiles: paths})
-	if run.code != 0 {
-		t.Fatalf("exit %d", run.code)
-	}
-	lines := strings.Split(strings.TrimSuffix(run.stderr, "\n"), "\n")
-	if len(lines) != 200 {
-		t.Fatalf("%d stderr lines, want 200", len(lines))
-	}
-	shownKey := `"` + strings.Repeat("k", 96) + `"(+4904 bytes)`
-	if want := `merge-boms: component ` + shownKey + `: property "p" dropped beside the kept value: "b0" (kept: "a")`; lines[0] != want {
-		t.Errorf("first line %q, want %q", lines[0], want)
-	}
-	if len(run.stderr) >= 200*256 {
-		t.Errorf("stderr %d bytes, want under %d", len(run.stderr), 200*256)
 	}
 }
