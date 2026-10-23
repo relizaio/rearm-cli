@@ -83,7 +83,7 @@ func TestReleaseByCommitPrintsNoDebugLineAtTheProductionDefault(t *testing.T) {
 	}
 }
 
-func TestReleaseByCommitSendsAnEmptyCommitOrComponentAndPrintsWhatTheServerSays(t *testing.T) {
+func TestReleaseByCommitSendsAnEmptyOrBlankCommitOrComponentAndPrintsWhatTheServerSays(t *testing.T) {
 	for _, c := range []struct {
 		args            []string
 		commit, compone string
@@ -91,6 +91,9 @@ func TestReleaseByCommitSendsAnEmptyCommitOrComponentAndPrintsWhatTheServerSays(
 		{[]string{"--commit", "", "--component", "my-service"}, "", "my-service"},
 		{[]string{"--commit", byCommitSha, "--component", ""}, byCommitSha, ""},
 		{[]string{"--commit=", "--component="}, "", ""},
+		{[]string{"--commit", "   ", "--component", "my-service"}, "   ", "my-service"},
+		{[]string{"--commit", byCommitSha, "--component", "\t"}, byCommitSha, "\t"},
+		{[]string{"--commit", " \t\r\n", "--component", "\u00a0\u3000"}, " \t\r\n", "\u00a0\u3000"},
 	} {
 		s, _ := releaseBomWorld(t, byCommitAnswer("{}"))
 		stdout, stderr, code := runReleaseByCommitCmd(t, c.args...)
@@ -104,5 +107,58 @@ func TestReleaseByCommitSendsAnEmptyCommitOrComponentAndPrintsWhatTheServerSays(
 		if stdout != "{}\n" || stderr != "" || code != 0 {
 			t.Fatalf("%q: the server's {} on stdout, exit 0; got %q %q %d", c.args, stdout, stderr, code)
 		}
+	}
+}
+
+// Every kind of whitespace at either end, at both ends and inside, of the three things the command
+// passes through: the commit, the component and the printed document.
+var byCommitWhitespace = []string{" ", "\t", "\n", "\r", "\r\n", "\u00a0", "\u3000", "  \t"}
+
+func byCommitPadded(core string) []string {
+	var out []string
+	for _, w := range byCommitWhitespace {
+		out = append(out, w+core, core+w, w+core+w, core[:3]+w+core[3:])
+	}
+	return out
+}
+
+func TestReleaseByCommitPassesEveryKindOfWhitespaceThroughTheCommitAndTheComponent(t *testing.T) {
+	for _, commit := range byCommitPadded(byCommitSha) {
+		s, _ := releaseBomWorld(t, byCommitAnswer("{}"))
+		runReleaseByCommitCmd(t, "--commit", commit, "--component", "my-service")
+		if calls := s.calls(); len(calls) != 1 || calls[0].Variables["commit"] != commit || calls[0].Variables["componentId"] != "my-service" {
+			t.Fatalf("commit %q as typed, got %v", commit, calls)
+		}
+	}
+	for _, component := range byCommitPadded("My-Service") {
+		s, _ := releaseBomWorld(t, byCommitAnswer("{}"))
+		runReleaseByCommitCmd(t, "--commit", byCommitSha, "--component", component)
+		if calls := s.calls(); len(calls) != 1 || calls[0].Variables["commit"] != byCommitSha || calls[0].Variables["componentId"] != component {
+			t.Fatalf("component %q as typed, got %v", component, calls)
+		}
+	}
+}
+
+func TestReleaseByCommitPrintsEveryKindOfWhitespaceAroundTheDocumentAndAnEmptyDocument(t *testing.T) {
+	docs := append(byCommitPadded(releaseBomDoc), "", "\n", "\r\n", " ", "\u00a0", "\u3000")
+	for _, doc := range docs {
+		releaseBomWorld(t, byCommitAnswer(doc))
+		stdout, stderr, code := runReleaseByCommitCmd(t, "--commit", byCommitSha, "--component", "my-service")
+		if stdout != doc+"\n" || stderr != "" || code != 0 {
+			t.Fatalf("the string %q untouched and one newline after it; got %q %q %d", doc, stdout, stderr, code)
+		}
+	}
+}
+
+func TestReleaseByCommitPrintsTheDebugLineBeforeAFailedRequestToo(t *testing.T) {
+	_, srv := releaseBomWorld(t, byCommitErrors("Not authorized"))
+	debug = "true" // after the rig, which clears the flag
+	t.Cleanup(func() { debug = "" })
+	savedURI := rearmUri
+	rearmUri = srv.URL
+	t.Cleanup(func() { rearmUri = savedURI })
+	stdout, stderr, code := runReleaseByCommitCmd(t, "--commit", byCommitSha, "--component", "my-service")
+	if stdout != "Error: Not authorized\n" || stderr != "Using ReARM at "+srv.URL+"\n" || code != 1 {
+		t.Fatalf("-d true on a failed request: the Error line on stdout, the debug line once on stderr, exit 1; got %q %q %d", stdout, stderr, code)
 	}
 }
