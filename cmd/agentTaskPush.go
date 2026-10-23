@@ -665,4 +665,6 @@ func init() {
 	f.StringVar(&pushBase, "base", "", "the PR's base branch, never pushed to, when the PR row names none (a PR CI never registered); kept for this checkout")
 	f.BoolVar(&pushJson, "json", false, "print the result as JSON")
 	agentTaskCmd.AddCommand(agentTaskPushCmd)
+	// It resolves a key with resolveTaskRef in its run, keeping the typed reference for its output (task TPF-96).
+	resolvesTaskKeysInRun(agentTaskPushCmd)
 }

@@ -185,9 +185,12 @@ func statusGroupInput(key, status string) map[string]interface{} {
 // ---------- the agent's verbs (the coordinator seat) ----------
 
 var agentTaskSetGroupCmd = &cobra.Command{
-	Use:   "setgroup <task-uuid>",
+	Use:   "setgroup <task>",
 	Short: "Coordinator: move a task into a group by key (--group), or out of its group (--none)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Coordinator: move a task into a group by key (--group), or out of its group (--none).
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := setGroupVariables(args[0], taskGroupKey, taskGroupNone)
 		if err != nil {
@@ -199,9 +202,12 @@ var agentTaskSetGroupCmd = &cobra.Command{
 }
 
 var agentTaskTagCmd = &cobra.Command{
-	Use:   "tag <task-uuid>",
+	Use:   "tag <task>",
 	Short: "Coordinator: add and remove a task's tags (--add k, --remove k; repeatable), or --clear them",
-	Args:  cobra.ExactArgs(1),
+	Long: `Coordinator: add and remove a task's tags (--add k, --remove k; repeatable), or --clear them.
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var tags []map[string]interface{}
 		if taskTagsClear {
@@ -284,9 +290,12 @@ var agentBoardGroupReopenCmd = agentGroupStatusCmd("reopen", "OPEN", "Coordinato
 // ---------- the people's verbs (rearm boards) ----------
 
 var boardsSetGroupCmd = &cobra.Command{
-	Use:   "setgroup <task-uuid>",
+	Use:   "setgroup <task>",
 	Short: "Move a task into a group by key (--group), or out of its group (--none)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Move a task into a group by key (--group), or out of its group (--none).
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := setGroupVariables(args[0], taskGroupKey, taskGroupNone)
 		if err != nil {
@@ -297,9 +306,12 @@ var boardsSetGroupCmd = &cobra.Command{
 }
 
 var boardsTagCmd = &cobra.Command{
-	Use:   "tag <task-uuid>",
+	Use:   "tag <task>",
 	Short: "Set a task's tags to exactly the --tag keys given (repeatable), or --clear them",
-	Args:  cobra.ExactArgs(1),
+	Long: `Set a task's tags to exactly the --tag keys given (repeatable), or --clear them.
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		tags := tagInputs(taskTagKeys)
 		if taskTagsClear == (len(tags) > 0) {
