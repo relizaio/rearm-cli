@@ -201,7 +201,7 @@ func (s *sessServer) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["sessionProgrammatic"] = selected(sess, req.Query)
-	case "AgentTaskAssignProgrammatic":
+	case "AgentTaskAssignProgrammatic", "AgentTaskAssignByPromptVersion":
 		uuid := str(req.Variables["sessionUuid"])
 		if str(req.Variables["taskUuid"]) == "t-held" {
 			gqlFail(w, "Session "+uuid+" does not hold task t-held")
@@ -832,7 +832,7 @@ func TestTaskAssignRecordsNoCurrentSession(t *testing.T) {
 	if _, errOut, code := w.run(agentTaskAssignCmd, "t-1", "--session", boardSession); code != 0 {
 		t.Fatalf("assign: %s", errOut)
 	}
-	if w.b.last("AgentTaskAssignProgrammatic").vars["sessionUuid"] != boardSession {
+	if w.b.last("AgentTaskAssignByPromptVersion").vars["sessionUuid"] != boardSession {
 		t.Fatalf("assign sends the session")
 	}
 	dir, _ := currentSessionsDir()

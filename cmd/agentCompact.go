@@ -97,6 +97,18 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 	if assignment != nil && str(assignment["promptVersion"]) != "" {
 		first += ", prompt " + str(assignment["promptVersion"])
 	}
+	// The served prompt by version (task TPF-110): unchanged names the version in full, so the context can
+	// pass it back; changed only when this assign said it held a version.
+	if pbv, _ := assignment["promptByVersion"].(map[string]interface{}); pbv != nil {
+		switch str(pbv["status"]) {
+		case "UNCHANGED":
+			first += ", prompt unchanged (served version " + str(pbv["version"]) + ")"
+		case "SERVED":
+			if assignSentHeldVersions {
+				first += ", served prompt changed: re-read it with task brief"
+			}
+		}
+	}
 	lines := []string{first}
 	if inv := investigationLine(t); inv != "" {
 		lines = append(lines, inv)

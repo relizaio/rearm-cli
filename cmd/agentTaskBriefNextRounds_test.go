@@ -48,13 +48,11 @@ func nextRoundsWorld(t *testing.T, hopPublished ...string) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		data := map[string]any{}
 		switch q := req.Query; {
+		case strings.Contains(q, "AgentRoleBriefByPromptVersion"):
+			// The brief's main read (task TPF-110): the same rows with the served prompt by version.
+			data["agentTaskRoleConfigsProgrammatic"] = byVersionRows(nextRoundsRoleRows())
 		case strings.Contains(q, "AgentRoleBriefProgrammatic"):
-			data["agentTaskRoleConfigsProgrammatic"] = []any{map[string]any{"name": "coder", "servedPrompt": "P",
-				"producesOutputs": []any{
-					map[string]any{"specification": "DETAILED_DESIGN", "scope": "TASK", "required": true},
-					map[string]any{"specification": "BOARD_QUESTIONS", "scope": "COMPONENT"},
-					map[string]any{"specification": "SOFTWARE_REQUIREMENTS", "scope": "COMPONENT"},
-				}}}
+			data["agentTaskRoleConfigsProgrammatic"] = nextRoundsRoleRows()
 		case strings.Contains(q, "AgentTaskProgrammatic"):
 			data["agentTaskProgrammatic"] = map[string]any{"uuid": "t-1", "key": "RD-1", "board": "b-1", "status": "ASSIGNED",
 				"role": "coder", "documents": nextRoundsDocs()}
@@ -243,4 +241,14 @@ func TestPathSlugMirrorsTheServer(t *testing.T) {
 			t.Errorf("pathSlug(%q) = %q, want %q", tc.name, got, tc.want)
 		}
 	}
+}
+
+// nextRoundsRoleRows are the role rows the next-rounds rig serves, as the legacy role read answers them.
+func nextRoundsRoleRows() []any {
+	return []any{map[string]any{"name": "coder", "servedPrompt": "P",
+		"producesOutputs": []any{
+			map[string]any{"specification": "DETAILED_DESIGN", "scope": "TASK", "required": true},
+			map[string]any{"specification": "BOARD_QUESTIONS", "scope": "COMPONENT"},
+			map[string]any{"specification": "SOFTWARE_REQUIREMENTS", "scope": "COMPONENT"},
+		}}}
 }

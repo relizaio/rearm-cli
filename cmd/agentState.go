@@ -158,24 +158,17 @@ func readAgentIdentity(agentUuid string) (*agentIdentityState, error) {
 }
 
 // writeAgentIdentity persists the agent's record, written to a temporary file and renamed as the session
-// state is.
+// state is, under a temp name unique per writer (TPF-110 F-2).
 func writeAgentIdentity(id *agentIdentityState) error {
 	path, err := agentIdentityPath(id.AgentUuid)
 	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	body, err := json.MarshalIndent(id, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFile0600(path, body)
 }
 
 // sanitiseStateKey keeps a session id from escaping the state directory. Client session ids are
@@ -305,12 +298,10 @@ func writeAgentState(st *agentSessionState) error {
 			return err
 		}
 		// Written to a temporary file and renamed: a Stop hook can fire while a `task assign` is
-		// mid-write, and a half-written state file would strand the session's usage.
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, body, 0o600); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, path); err != nil {
+		// mid-write, and a half-written state file would strand the session's usage. The name is
+		// unique per writer: two processes (a wait's hook and a task assign) writing the same session
+		// at once must never share the temp file (TPF-110 F-2).
+		if err := writeFile0600(path, body); err != nil {
 			return err
 		}
 	}

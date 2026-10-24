@@ -50,12 +50,11 @@ func orientationWorld(t *testing.T, caps []any) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		q, data := req.Query, map[string]any{}
 		switch {
+		case strings.Contains(q, "AgentRoleBriefByPromptVersion"):
+			// The brief's main read (task TPF-110): the same rows with the served prompt by version.
+			data["agentTaskRoleConfigsProgrammatic"] = byVersionRows(orientationRoleRows(caps))
 		case strings.Contains(q, "AgentRoleBriefProgrammatic"):
-			data["agentTaskRoleConfigsProgrammatic"] = []any{
-				map[string]any{"name": "coder", "servedPrompt": "SERVED coder prompt", "promptVersion": "abc123", "requiredCapabilities": caps,
-					"requiredInputs": []any{map[string]any{"kind": "DOCUMENT", "specification": "ARCHITECTURE"}}},
-				map[string]any{"name": "tester", "servedPrompt": "SERVED tester prompt", "promptVersion": "def456"},
-			}
+			data["agentTaskRoleConfigsProgrammatic"] = orientationRoleRows(caps)
 		case strings.Contains(q, "AgentTasksByUuidProgrammatic"):
 			data["agentTasksByUuidProgrammatic"] = []any{}
 		case strings.Contains(q, "AgentTaskProgrammatic"):
@@ -155,5 +154,14 @@ func TestTheSectionsAHopNeeds(t *testing.T) {
 		if got := strings.Join(briefSectionKeys(c.asks, c.push, c.first), ","); got != c.want {
 			t.Errorf("asks=%v push=%v first=%v: got %s, want %s", c.asks, c.push, c.first, got, c.want)
 		}
+	}
+}
+
+// orientationRoleRows are the role rows the orientation rig serves, as the legacy role read answers them.
+func orientationRoleRows(caps any) []any {
+	return []any{
+		map[string]any{"name": "coder", "servedPrompt": "SERVED coder prompt", "promptVersion": "abc123", "requiredCapabilities": caps,
+			"requiredInputs": []any{map[string]any{"kind": "DOCUMENT", "specification": "ARCHITECTURE"}}},
+		map[string]any{"name": "tester", "servedPrompt": "SERVED tester prompt", "promptVersion": "def456"},
 	}
 }

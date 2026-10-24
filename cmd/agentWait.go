@@ -543,10 +543,13 @@ func writeWaitState(path string, s waitKept) {
 	_ = os.WriteFile(path, b, 0o600)
 }
 
-// cliWaitClient reads the board with the CLI's operations and credentials.
-type cliWaitClient struct{}
+// cliWaitClient reads the board with the CLI's operations and credentials. prompt is the worker's
+// --prompt-version and --full-prompt (task TPF-110); nothing is remembered on the client.
+type cliWaitClient struct {
+	prompt promptFlags
+}
 
-func (cliWaitClient) next(session, board string, roles []string) (interface{}, error) {
+func (c cliWaitClient) next(session, board string, roles []string) (interface{}, error) {
 	vars := map[string]interface{}{"sessionUuid": session}
 	if board != "" {
 		vars["boardUuid"] = board
@@ -554,11 +557,7 @@ func (cliWaitClient) next(session, board string, roles []string) (interface{}, e
 	if len(roles) > 0 {
 		vars["roles"] = roles
 	}
-	data, err := sendGraphQLRequest(rearm.AgentTaskNextProgrammatic_Operation, vars)
-	if err != nil {
-		return nil, err
-	}
-	return data["agentTaskNextProgrammatic"], nil
+	return nextOffer(vars, c.prompt)
 }
 
 func (cliWaitClient) events(board string, after *int64, since string) (eventPage, error) {
@@ -684,7 +683,11 @@ same object, as "offer", with the changes and questions read with it (task RD4-1
 the wait (an offer, a change, a question, an event or the timeout), the output is that object, and
 what it reported is kept in --state first, so the next run does not report it again. The timeout
 prints the object with "timeout": true. A watch makes two more reads a poll (the snapshot and the
-events), an offer's poll included.`,
+events), an offer's poll included.
+
+` + promptByVersionHelp + `
+--prompt-version and --full-prompt are for a worker; --coordinator reads no prompt
+and ignores them.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if traced(os.Getenv("SHELLOPTS")) {
 			fmt.Fprintln(os.Stderr, "do not trace this command: credentials are in the environment")
@@ -709,7 +712,8 @@ events), an offer's poll included.`,
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(waitExitError)
 		}
-		os.Exit(runWait(o, cliWaitClient{}, realClock{}, os.Stdout))
+		requirePromptFlags(waitPromptFlags)
+		os.Exit(runWait(o, cliWaitClient{prompt: waitPromptFlags}, realClock{}, os.Stdout))
 	},
 }
 
@@ -723,6 +727,7 @@ func init() {
 	agentWaitCmd.Flags().DurationVar(&waitTimeout, "timeout", 4*time.Hour, "exit 2 after this long with nothing to do; 0 never times out")
 	agentWaitCmd.Flags().IntVar(&waitMaxFailures, "max-failures", waitMaxFailuresDefault, "failed polls in a row that exit 1; each one before is retried at the next interval")
 	agentWaitCmd.Flags().StringVar(&waitState, "state", "", "coordinator or --watch: where the last poll's triggers are kept (default ~/.rearm/wait-<board>.json; with --watch wait-<board>-watch-<session>.json)")
+	addPromptFlags(agentWaitCmd, &waitPromptFlags)
 	agentWaitCmd.Flags().BoolVar(&waitWatch, "watch", false, "worker: also wake on a rejection, return or reopen of a task the session signed off on, the producer's next pass after its own rejection, an open question to its role, or an ALERT/PAUSED/RESUMED event; needs --board")
 	agentCmd.AddCommand(agentWaitCmd)
 }
