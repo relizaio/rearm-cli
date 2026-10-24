@@ -158,11 +158,35 @@ var agentBoardCoordinateCmd = &cobra.Command{
 	Long: `Claims the coordinator seat. The seat is held until the session closes
 and the seat session can take no task assignments. Returns the board
 including servedCoordinatorPrompt - assume it: the board's coordinatorPrompt,
-then who merges on this board and how (delivery.merge).`,
+then who merges on this board and how (delivery.merge). Its version is
+coordinatorPromptByVersion.version; a later claim from the same context
+passes it with --prompt-version and, when unchanged, the board carries
+coordinatorPromptByVersion {version, status: UNCHANGED} and no
+servedCoordinatorPrompt; the stored coordinatorPrompt is no longer printed.
+A claim from a new context passes nothing and gets the text. --full-prompt
+as for task next.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		requirePromptFlags(coordinatePromptFlags)
 		board := boardArg(args[0])
-		runGql(rearm.AgentBoardCoordinateProgrammatic_Operation, map[string]interface{}{"boardUuid": board, "sessionUuid": taskSessionUuid}, "agentBoardCoordinateProgrammatic")
+		variables := map[string]interface{}{"boardUuid": board, "sessionUuid": taskSessionUuid}
+		held, send := heldVersionsToSend(coordinatePromptFlags)
+		if send {
+			variables["heldVersions"] = held
+		}
+		data, legacy, err := sendByVersion(rearm.AgentBoardCoordinateByPromptVersion_Operation,
+			rearm.AgentBoardCoordinateProgrammatic_Operation, variables)
+		if err != nil {
+			printRefusal(err)
+			os.Exit(1)
+		}
+		claimed := data["agentBoardCoordinateProgrammatic"]
+		version, status := "", ""
+		if m, ok := claimed.(map[string]interface{}); ok && !legacy {
+			version, status, _ = shapePromptByVersion(m, "coordinatorPromptByVersion", "servedCoordinatorPrompt")
+		}
+		emitJson(claimed)
+		reportPromptStatus(version, status, held, send)
 		// Recorded so a component-scoped `doc publish`, which names no task, can still tell which
 		// board it belongs to. Only the seat gives a session a board without a task.
 		rememberBoard(taskSessionUuid, board)
@@ -309,8 +333,11 @@ var agentTaskNextCmd = &cobra.Command{
 (any case) or a role uuid; repeat it or separate with commas. Only tasks
 for those roles are offered, and nothing when none match or none is open.
 Without --role every role is considered. The declaration is remembered
-for this session, so a following 'task assign' passes the same roles.`,
+for this session, so a following 'task assign' passes the same roles.
+
+` + promptByVersionHelp,
 	Run: func(cmd *cobra.Command, args []string) {
+		requirePromptFlags(nextPromptFlags)
 		variables := map[string]interface{}{"sessionUuid": taskSessionUuid}
 		if taskBoardUuid != "" {
 			variables["boardUuid"] = boardArg(taskBoardUuid)
@@ -319,7 +346,7 @@ for this session, so a following 'task assign' passes the same roles.`,
 		if len(roles) > 0 {
 			variables["roles"] = roles
 		}
-		data, err := sendGraphQLRequest(rearm.AgentTaskNextProgrammatic_Operation, variables)
+		offered, err := nextOffer(variables, nextPromptFlags)
 		if err != nil {
 			printRefusal(err)
 			os.Exit(1)
@@ -327,7 +354,6 @@ for this session, so a following 'task assign' passes the same roles.`,
 		// Remembered only once the server has answered, and cleared by an undeclared poll, so
 		// assign never carries a declaration the agent has since dropped.
 		setDeclaredRoles(taskSessionUuid, roles)
-		offered := data["agentTaskNextProgrammatic"]
 		if offered == nil && len(roles) > 0 {
 			fmt.Fprintf(os.Stderr, "rearm: no open task for roles %s (names are per board; "+
 				"'rearm agent board roleconfig list' shows them)\n", strings.Join(roles, ", "))
@@ -402,8 +428,13 @@ func cleanRoles(in []string) []string {
 var agentTaskAssignCmd = &cobra.Command{
 	Use:   "assign <task-uuid>",
 	Short: "Bind the task to the calling session (QUEUED -> ASSIGNED; constraints re-checked atomically)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Binds the task to the calling session. The compact line ends with 'prompt unchanged (served version <v>)'
+when --prompt-version named the served prompt, and with 'served prompt changed: re-read it with task brief'
+when --prompt-version was given and did not; without the flag the compact lines are as before (they never
+printed the text).`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		requirePromptFlags(assignPromptFlags)
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid}
 		// An explicit --role wins; otherwise the roles the last 'task next' declared, so a STRICT
 		// board ranks this agent only against work it could be offered.
@@ -414,7 +445,23 @@ var agentTaskAssignCmd = &cobra.Command{
 		if len(roles) > 0 {
 			variables["roles"] = roles
 		}
-		assigned := runGqlReadCompact(rearm.AgentTaskAssignProgrammatic_Operation, variables, "agentTaskAssignProgrammatic")
+		held, send := heldVersionsToSend(assignPromptFlags)
+		if send {
+			variables["heldVersions"] = held
+		}
+		data, legacy, err := sendByVersion(rearm.AgentTaskAssignByPromptVersion_Operation, rearm.AgentTaskAssignProgrammatic_Operation, variables)
+		if err != nil {
+			printRefusal(err)
+			os.Exit(1)
+		}
+		assigned := data["agentTaskAssignProgrammatic"]
+		if m, ok := assigned.(map[string]interface{}); ok && !legacy {
+			version, status, _ := shapePromptByVersion(m, "promptByVersion", "rolePrompt")
+			unchangedNotAsked(version, status, held, send)
+		}
+		assignSentHeldVersions = send
+		printCompact(assigned)
+		assignSentHeldVersions = false
 		// The assign prints the task's documents: they are what the hop starts from, recorded as read (RD2-34).
 		rememberSeenFromRead(taskSessionUuid, assigned)
 		// Record the assignment locally so the usage hooks attribute this session's spend to it
@@ -875,6 +922,9 @@ func init() {
 	agentTaskAssignCmd.PersistentFlags().StringSliceVar(&taskRoles, "role", nil,
 		"Roles this agent declared; defaults to what the last `task next` declared for this session")
 	_ = agentTaskNextCmd.MarkPersistentFlagRequired("session")
+	addPromptFlags(agentTaskNextCmd, &nextPromptFlags)
+	addPromptFlags(agentTaskAssignCmd, &assignPromptFlags)
+	addPromptFlags(agentBoardCoordinateCmd, &coordinatePromptFlags)
 
 	for _, c := range []*cobra.Command{agentTaskAssignCmd, agentTaskSignoffCmd, agentTaskReturnCmd,
 		agentTaskAuthorizeCmd, agentTaskOrderCmd, agentTaskWorkLevelCmd, agentTaskSplitCmd, agentTaskCompleteCmd, agentTaskCancelCmd,
