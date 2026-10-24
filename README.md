@@ -26,6 +26,8 @@ It is possible to set authentication data via:
 
 All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/rearm-client-go) library, which exchanges the key for a short-lived access token on servers that offer the programmatic endpoint and falls back to the classic `/graphql` endpoint on older servers.
 
+In API-key mode the CLI keeps the exchanged access token in `~/.rearm.env.tokens` (mode 0600, beside `.rearm.env`, under the same `.rearm.env.lock`), keyed by server, key id and a keyed digest of the secret (the secret itself is never written), and reuses it until a minute before its one-hour expiry, so repeated commands make one call each instead of two and parallel commands of one key share one exchange. `REARM_NO_TOKEN_CACHE=true` turns the cache off for callers that must not write to disk, and a home directory that cannot be written just means no cache. The cache follows `--config`: it sits beside whatever credentials file `--config` names, so keep that off shared or network volumes. In a CI job (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI` or `TF_BUILD` true, or `JENKINS_URL` set) the cache is off unless `REARM_TOKEN_CACHE=true`, because a persistent runner's home directory is shared by every job on it. Set `REARM_NO_TOKEN_CACHE=true` in image builds (a `RUN` line that runs `rearm` would otherwise leave the token in the image layer) and on shared hosts. A cache file that is not mode 0600 and owned by the caller is ignored and rewritten. `rearm logout` removes it.
+
 # Table of Contents - Use Cases
 1. [Get Version Assignment From ReARM](#1-use-case-get-version-assignment-from-rearm)
 2. [Send Release Metadata to ReARM](#2-use-case-send-release-metadata-to-rearm)
@@ -33,6 +35,7 @@ All calls to ReARM go through the [rearm-client-go](https://github.com/relizaio/
    1. [Check If Artifact Hash Already Present In Some Release](#3a-use-case-check-if-deliverable-hash-already-present-in-some-release)
    2. [Get Release By Version](#3b-use-case-get-release-by-version)
    3. [Export or Score the Merged Release SBOM](#3c-use-case-export-or-score-the-merged-release-sbom)
+   4. [Get Release By Commit](#3d-use-case-get-release-by-commit)
 4. [Request Latest Release Per Component Or Product](#4-use-case-request-latest-release-per-component-or-product)
 5. [Persist ReARM Credentials in a Config File](#5-use-case-persist-rearm-credentials-in-a-config-file)
 6. [Create New Component in ReARM](#6-use-case-create-new-component-in-rearm)
@@ -460,6 +463,29 @@ rearm scorereleasebom --releaseid release_uuid --profile cisa-2026 --profile fda
 Support metadata: `scorereleasebom` scores the document the organization's default gives (as the Score button of the UI does), while `exportreleasebom` leaves support metadata out unless `--includesupportmetadata` is passed. In an organization that discloses support metadata the two can therefore differ on the support checks of the `fda` profile.
 
 Errors (an unknown release or version, a missing permission, a bad flag value) print one `Error:` line on stderr and exit 1.
+
+## 3d. Use Case: Get Release By Commit
+
+This command outputs the OBOM of the release of a component or product that was built from a given head commit: the release plus every dependency release unwound, with deliverables, as a CycloneDX 1.6 JSON string. The commit is matched whole, exactly as it was recorded by `addrelease --commit` (no short sha, tag or branch; a short sha prints `{}`). It prints `{}` when no release of the component has that head commit. When several releases share the head commit (rebuilds), the newest by creation date is returned. Lifecycle and approvals are not consulted. It needs a ReARM server that serves `getReleaseByCommitProgrammatic`; on an older server the command prints `Error: Validation error (FieldUndefined@[getReleaseByCommitProgrammatic]) ...` and exits 1: upgrade the server.
+
+Sample command:
+
+```bash
+docker run --rm registry.relizahub.com/library/rearm-cli    \
+    releasebycommit    \
+    -i component_or_org_wide_api_id    \
+    -k component_or_org_wide_api_key    \
+    --component component_uuid    \
+    --commit 1f2e3d4c5b6a79880716253443526170f1e2d3c4
+```
+
+Flags stand for:
+
+- **releasebycommit** - command that denotes we are retrieving release by head commit.
+- **-i** - flag for api id (required).
+- **-k** - flag for api key (required).
+- **--component** - UUID of the Component or Product, or its name. A name is matched case-insensitively against the active components and products of the key's organization and must match exactly one; otherwise the command errors (required).
+- **--commit** - head commit of the release whose OBOM to output, the whole sha as recorded (required).
 
 ## 4. Use Case: Request Latest Release Per Component Or Product
 

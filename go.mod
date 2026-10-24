@@ -2,13 +2,15 @@ module github.com/relizaio/rearm
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gofrs/flock v0.13.1
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.2
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/relizaio/rearm-client-go v0.3.2-0.20261013010456-9c023885fd9d
+	github.com/relizaio/rearm-client-go v0.3.2-0.20261023165949-8ca23f793cb8
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

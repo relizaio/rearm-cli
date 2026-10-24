@@ -611,9 +611,12 @@ func workLevelVariables(task string, level int, levelSet, clear bool) (map[strin
 }
 
 var boardsTaskWorkLevelCmd = &cobra.Command{
-	Use:   "work-level <task-uuid>",
+	Use:   "work-level <task>",
 	Short: "Set a task's work level, a rung of the board's ladder (refused on a board without one), or --clear to read the default",
-	Args:  cobra.ExactArgs(1),
+	Long: `Set a task's work level, a rung of the board's ladder (refused on a board without one), or --clear to read the default.
+
+<task> is a task key such as TPF-42, or its uuid.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		vars, err := workLevelVariables(args[0], boardsWorkLevel, cmd.Flags().Changed("work-level"), boardsClear)
 		if err != nil {
