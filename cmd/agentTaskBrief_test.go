@@ -40,27 +40,50 @@ func stdoutOf(t *testing.T, f func()) string {
 // briefBoard answers the reads a brief makes.
 type briefBoard struct {
 	noServedPrompt bool
+	// The served prompt by version (task TPF-110): the status the by-version read answers (SERVED when
+	// empty), and the operation names and variables of every request, in order.
+	byVersionStatus string
+	requests        []briefRequest
 }
+
+type briefRequest struct {
+	op   string
+	vars map[string]any
+}
+
+// briefServedVersion is the 64-hex served version the rig answers.
+const briefServedVersion = "5e7f0d8c2b1a49e6a3f0c7d5b8e2a1f4c6d9e0b3a7f2c5d8e1b4a7f0c3d6e9b2"
 
 func (b *briefBoard) serve() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Query string `json:"query"`
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		q := req.Query
+		b.requests = append(b.requests, briefRequest{opNameOf(q), req.Variables})
 		data := map[string]any{}
 		switch {
+		case strings.Contains(q, "AgentRoleBriefByPromptVersion"):
+			if b.noServedPrompt {
+				_ = json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"message": "Validation error (FieldUndefined@[agentTaskRoleConfigsProgrammatic/promptByVersion]) : Field 'promptByVersion' in type 'AgentTaskRoleConfig' is undefined"}}})
+				return
+			}
+			rows := byVersionRows(briefRoleRows())
+			if b.byVersionStatus == "UNCHANGED" {
+				for _, r := range rows {
+					pbv := r.(map[string]any)["promptByVersion"].(map[string]any)
+					pbv["status"], pbv["text"] = "UNCHANGED", nil
+				}
+			}
+			data["agentTaskRoleConfigsProgrammatic"] = rows
 		case strings.Contains(q, "AgentRoleBriefProgrammatic"):
 			if b.noServedPrompt {
 				_ = json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"message": "Field 'servedPrompt' undefined"}}})
 				return
 			}
-			data["agentTaskRoleConfigsProgrammatic"] = []any{
-				map[string]any{"name": "coder", "servedPrompt": "SERVED coder prompt", "promptVersion": "abc123",
-					"requiredInputs": []any{map[string]any{"kind": "DOCUMENT", "specification": "ARCHITECTURE"}}},
-				map[string]any{"name": "tester", "servedPrompt": "SERVED tester prompt", "promptVersion": "def456"},
-			}
+			data["agentTaskRoleConfigsProgrammatic"] = briefRoleRows()
 		case strings.Contains(q, "AgentTaskRoleConfigsProgrammatic"):
 			data["agentTaskRoleConfigsProgrammatic"] = []any{map[string]any{"name": "coder", "prompt": "RAW coder prompt"}}
 		case strings.Contains(q, "AgentTasksByUuidProgrammatic"):
@@ -74,6 +97,15 @@ func (b *briefBoard) serve() *httptest.Server {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 	}))
+}
+
+// briefRoleRows are the role rows as the legacy role read answers them.
+func briefRoleRows() []any {
+	return []any{
+		map[string]any{"name": "coder", "servedPrompt": "SERVED coder prompt", "promptVersion": "abc123",
+			"requiredInputs": []any{map[string]any{"kind": "DOCUMENT", "specification": "ARCHITECTURE"}}},
+		map[string]any{"name": "tester", "servedPrompt": "SERVED tester prompt", "promptVersion": "def456"},
+	}
 }
 
 func briefTaskFixture() map[string]any {
@@ -100,6 +132,7 @@ func briefTaskFixture() map[string]any {
 func briefWorld(t *testing.T, b *briefBoard, withNotes bool) string {
 	t.Helper()
 	withStateDir(t)
+	briefPromptFlags, promptByVersionUnsupported = promptFlags{}, false
 	checkout := t.TempDir()
 	must := func(err error) {
 		if err != nil {
@@ -126,6 +159,7 @@ func briefWorld(t *testing.T, b *briefBoard, withNotes bool) string {
 	briefSession = "s-1"
 	t.Cleanup(func() {
 		apiClient, rearmUri, briefSession, briefRole, briefInline, briefJson = nil, "", "", "", false, false
+		briefPromptFlags, promptByVersionUnsupported = promptFlags{}, false
 	})
 	return checkout
 }
@@ -138,7 +172,7 @@ func TestTheBriefPrintsItsSixPartsInOrder(t *testing.T) {
 	briefWorld(t, &briefBoard{}, true)
 	out := runBrief(t)
 	prev := -1
-	for _, h := range []string{"Brief for RD-1 as coder: prompt", "## 1. Your prompt (coder, version abc123)", "SERVED coder prompt",
+	for _, h := range []string{"Brief for RD-1 as coder: prompt", "## 1. Your prompt (coder, version abc123, served version " + briefServedVersion + ")", "SERVED coder prompt",
 		"Orientation: https://rearm.example/api/agents/orientation.md", "## 2. The task", "**RD-1** build it",
 		"depends on RD-0 the base (completed)", "open question Q-1: which branch?", "## 3. Its documents",
 		"ARCHITECTURE round 2 v7, assembled, advisory", "ARCHITECTURE round 1 v7", "BOARD_TEST_REPORT round 1 v7, assembled, rejected (3 passed, 1 failed, 0 skipped)",

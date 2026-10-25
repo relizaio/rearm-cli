@@ -62,7 +62,7 @@ func TestVerbWithoutSessionUsesTheCurrentSession(t *testing.T) {
 		t.Fatalf("the hook gave --session %q", got)
 	}
 	stdoutOf(t, func() { agentTaskAssignCmd.Run(agentTaskAssignCmd, []string{"t-1"}) })
-	if got := w.b.last("AgentTaskAssignProgrammatic").vars["sessionUuid"]; got != boardSess {
+	if got := w.b.last("AgentTaskAssignByPromptVersion").vars["sessionUuid"]; got != boardSess {
 		t.Fatalf("assign sent %v", got)
 	}
 }

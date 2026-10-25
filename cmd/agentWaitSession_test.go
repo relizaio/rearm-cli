@@ -19,7 +19,7 @@ import (
 // waitBoardAnswers answers the wait's operations with an empty board.
 func waitBoardAnswers(op string, _ json.RawMessage) json.RawMessage {
 	switch op {
-	case "AgentTaskNextProgrammatic":
+	case "AgentTaskNextProgrammatic", "AgentTaskNextByPromptVersion":
 		return json.RawMessage(`{"data":{"agentTaskNextProgrammatic":null}}`)
 	case "SessionTouchProgrammatic":
 		return json.RawMessage(`{"data":{"sessionTouchProgrammatic":{"uuid":"s"}}}`)

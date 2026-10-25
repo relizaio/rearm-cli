@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -13,8 +14,10 @@ import (
 // its lines on stderr, as before. The local-state warnings a publish that succeeded can print (the output not
 // recorded, the documents repository not remembered) are notices under --json too, and stay on stderr without it.
 
-// pjState files local state for session s-1 (client id c-1); broken makes every later write of it fail, as a
-// directory where the write's temporary file goes does, for root too.
+// pjState files local state for session s-1 (client id c-1); broken makes every later write of it fail: the
+// state directory turns read-only, so the writer cannot create its temporary file (its name is unique per
+// writer since TPF-110, so a directory planted at a fixed name no longer blocks it). Root ignores the mode and
+// Windows has none, so those skip.
 func pjState(t *testing.T, broken bool) {
 	t.Helper()
 	if err := writeAgentState(&agentSessionState{SessionUuid: "s-1", ClientSessionId: "c-1"}); err != nil {
@@ -23,13 +26,17 @@ func pjState(t *testing.T, broken bool) {
 	if !broken {
 		return
 	}
-	path, err := agentStatePath("c-1")
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a read-only directory does not stop writes here")
+	}
+	dir, err := agentStateDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
+	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 }
 
 // pjMerged is what a script capturing both streams (2>&1) gets, parsed as one JSON object.

@@ -14,6 +14,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -102,6 +103,10 @@ type taskBrief struct {
 	Rules         []string          `json:"rules"`
 	NotesPath     string            `json:"notesPath,omitempty"`
 	Notes         []string          `json:"notes"`
+	// The served prompt by version (task TPF-110): its 64-hex version and SERVED or UNCHANGED; empty against a
+	// server that predates promptByVersion. ServedPrompt is empty on UNCHANGED.
+	ServedPromptVersion string `json:"servedPromptVersion,omitempty"`
+	PromptStatus        string `json:"promptStatus,omitempty"`
 	// The orientation's core and the sections this task's actions need (task RD3-10); empty against a
 	// server that does not serve the split, which leaves the URL above.
 	OrientationCore     string         `json:"orientationCore,omitempty"`
@@ -160,12 +165,15 @@ this hop already published that round), the documents repository (its uri, your 
 board's root and path templates), the rules, and the tail of notes/<role>.md. Markdown by default;
 --json for the same as structure. --inline prints the newest round of each of the role's input types
 in full, from your checkout. The documents it prints are recorded as read for --session, so the
-ordinary flow -- brief, work, publish, sign off -- needs no task show.`,
+ordinary flow -- brief, work, publish, sign off -- needs no task show. It prints the prompt in full
+unless --prompt-version names the served version this context already holds (the heading then says
+so); it never records a version.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(briefSession) == "" {
 			fail("--session is required: the brief records what it showed for that session")
 		}
+		requirePromptFlags(briefPromptFlags)
 		b, read, err := buildTaskBrief(args[0], briefSession, briefRole, briefInline)
 		if err != nil {
 			fail(err.Error())
@@ -201,7 +209,29 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 	b := &taskBrief{Key: str(task["key"]), TaskUuid: str(task["uuid"]), Role: role, Rules: briefRules, Notes: []string{},
 		Orientation: strings.TrimRight(rearmUri, "/") + "/api/agents/orientation.md"}
 
-	roles, err := sendGraphQLRequest(rearm.AgentRoleBriefProgrammatic_Operation, map[string]interface{}{"boardUuid": board})
+	// The role read by version first (task TPF-110), then today's read on any error, then the role's own
+	// prompt from a server that predates the served prompt.
+	held, send := heldVersionsToSend(briefPromptFlags)
+	byVersion := false
+	var roles map[string]interface{}
+	err = errors.New("promptByVersion unsupported")
+	if !promptByVersionUnsupported {
+		vars := map[string]interface{}{"boardUuid": board}
+		if send {
+			vars["heldVersions"] = held
+		}
+		roles, err = sendGraphQLRequest(rearm.AgentRoleBriefByPromptVersion_Operation, vars)
+		if err != nil && isFieldUndefinedError(err) {
+			promptByVersionUnsupported = true
+			if debug == "true" {
+				fmt.Fprintln(os.Stderr, "server predates promptByVersion, using the legacy selection")
+			}
+		}
+		byVersion = err == nil
+	}
+	if err != nil {
+		roles, err = sendGraphQLRequest(rearm.AgentRoleBriefProgrammatic_Operation, map[string]interface{}{"boardUuid": board})
+	}
 	composed := true
 	if err != nil {
 		// A server from before the served-prompt read: the role's own prompt, and say what is missing.
@@ -221,6 +251,10 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		found = true
 		b.Role = str(r["name"])
 		roleUuid = str(r["uuid"])
+		if byVersion {
+			b.ServedPromptVersion, b.PromptStatus, _ = shapePromptByVersion(r, "promptByVersion", "servedPrompt")
+			unchangedNotAsked(b.ServedPromptVersion, b.PromptStatus, held, send)
+		}
 		b.ServedPrompt = str(r["servedPrompt"])
 		b.PromptVersion = str(r["promptVersion"])
 		outputs = briefTaskOutputs(r)
@@ -486,7 +520,11 @@ func renderTaskBrief(b *taskBrief) string {
 	for _, in := range b.Inline {
 		inlineBytes += len(in.Content)
 	}
-	fmt.Fprintf(&sb, "Brief for %s as %s: prompt %d bytes, %d documents", b.Key, b.Role, len(b.ServedPrompt), len(b.Documents))
+	if b.PromptStatus == "UNCHANGED" {
+		fmt.Fprintf(&sb, "Brief for %s as %s: prompt unchanged, %d documents", b.Key, b.Role, len(b.Documents))
+	} else {
+		fmt.Fprintf(&sb, "Brief for %s as %s: prompt %d bytes, %d documents", b.Key, b.Role, len(b.ServedPrompt), len(b.Documents))
+	}
 	if b.Inline != nil {
 		fmt.Fprintf(&sb, ", inline %d bytes", inlineBytes)
 	}
@@ -503,8 +541,15 @@ func renderTaskBrief(b *taskBrief) string {
 	if b.PromptVersion != "" {
 		fmt.Fprintf(&sb, ", version %s", b.PromptVersion)
 	}
+	if b.ServedPromptVersion != "" {
+		fmt.Fprintf(&sb, ", served version %s", b.ServedPromptVersion)
+	}
 	sb.WriteString(")\n\n")
-	sb.WriteString(strings.TrimRight(b.ServedPrompt, "\n"))
+	if b.PromptStatus == "UNCHANGED" {
+		fmt.Fprintf(&sb, "prompt unchanged (served version %s): keep the prompt you hold; --full-prompt prints it", b.ServedPromptVersion)
+	} else {
+		sb.WriteString(strings.TrimRight(b.ServedPrompt, "\n"))
+	}
 	fmt.Fprintf(&sb, "\n\nOrientation: %s\n\n", b.Orientation)
 
 	fmt.Fprintf(&sb, "## 2. The task\n\n")
@@ -647,6 +692,7 @@ func init() {
 	agentTaskBriefCmd.Flags().StringVar(&briefRole, "role", "", "brief as this role instead of the one the task waits on")
 	agentTaskBriefCmd.Flags().BoolVar(&briefInline, "inline", false, "print the newest round of each of the role's input types in full, from your checkout")
 	agentTaskBriefCmd.Flags().BoolVar(&briefJson, "json", false, "print the brief as JSON")
+	addPromptFlags(agentTaskBriefCmd, &briefPromptFlags)
 	agentTaskCmd.AddCommand(agentTaskBriefCmd)
 	acceptTaskKeys(agentTaskBriefCmd, firstTaskArg, nil, nil)
 }

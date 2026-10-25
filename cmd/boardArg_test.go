@@ -133,7 +133,7 @@ func TestEveryBoardVerbSendsTheResolvedUuid(t *testing.T) {
 		{"agent board roleconfig list", agentBoardRoleconfigListCmd, []string{"ReARM Dogfood 3"}, "AgentTaskRoleConfigsProgrammatic", false},
 		{"agent board events", agentBoardEventsCmd, []string{"ReARM Dogfood 3"}, "AgentBoardEventsProgrammatic", false},
 		{"agent board group list", agentBoardGroupListCmd, []string{"ReARM Dogfood 3"}, "AgentBoardGroupsProgrammatic", false},
-		{"agent task next --board", agentTaskNextCmd, nil, "AgentTaskNextProgrammatic", true},
+		{"agent task next --board", agentTaskNextCmd, nil, "AgentTaskNextByPromptVersion", true},
 		{"agent task register --board", agentTaskRegisterCmd, nil, "AgentTaskRegisterProgrammatic", true},
 		{"boards tasks", boardsTasksCmd, []string{"ReARM Dogfood 3"}, "AgentTasksOfBoard", false},
 		{"boards pause", boardsPauseCmd, []string{"ReARM Dogfood 3"}, "AgentBoardOperatorPause", false},
