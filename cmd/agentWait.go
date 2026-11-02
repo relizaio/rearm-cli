@@ -633,7 +633,10 @@ printing the offer, the same JSON 'task next' prints. It does not claim: assign 
 A coordinator (--coordinator, with the seat's session and --board) reads the board's events, its
 snapshot, and touches the seat, every interval. It exits 0 when something waits on it: a task in
 PENDING_INTAKE or AWAITING_COORDINATOR, a hold at the coordinator's level, a DELIVERING task with a
-PR not merged when the board's merge is the coordinator's, or an ALERT. It prints the triggers, the
+PR not merged when the board's merge is the coordinator's, or an ALERT. The design checkpoint is one
+such ALERT: a task whose design is reviewed stops at the coordinator before the role that carries
+coordinatorCheckpoint, and the ALERT names the design rounds and the architect's note; send it on
+with 'task authorize <key> --role <role>' or split it with 'task split'. It prints the triggers, the
 INFO and ALERT events it read, and nextAfter. It wakes when a trigger appears that it has not
 reported (a new task, or a task in a new state), or on an ALERT; a set that only shrinks stays
 quiet. The set each poll saw is kept in --state, so a trigger that leaves and comes back wakes it

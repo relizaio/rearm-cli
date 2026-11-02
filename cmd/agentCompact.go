@@ -123,7 +123,12 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 			lines = append(lines, "held by session "+short(session)+"; read it with: rearm agent task brief "+key+" --session "+session)
 		}
 	case "AWAITING_COORDINATOR":
-		lines = append(lines, "waits for the coordinator")
+		// Only here: a PENDING record on any other status is not a wait at the coordinator (task SPLIT-7).
+		if c, _ := t["designCheckpoint"].(map[string]interface{}); c != nil && str(c["state"]) == "PENDING" {
+			lines = append(lines, "waits for the coordinator: design checkpoint before "+str(c["beforeRole"]))
+		} else {
+			lines = append(lines, "waits for the coordinator")
+		}
 	case "ON_HOLD":
 		if h, _ := t["hold"].(map[string]interface{}); h != nil {
 			lines = append(lines, fmt.Sprintf("on hold (%s): %s", words(str(h["kind"])), str(h["reason"])))

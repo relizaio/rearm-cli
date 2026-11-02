@@ -94,6 +94,7 @@ var (
 	roleWipLimit     int
 	roleDistinct     bool
 	roleInactive     bool
+	roleCheckpoint   bool
 )
 
 func runGql(query string, variables map[string]interface{}, key string) {
@@ -245,20 +246,31 @@ var agentBoardRoleconfigSetCmd = &cobra.Command{
 			}
 			prompt = string(b)
 		}
-		input := map[string]interface{}{
-			"name":                 roleName,
-			"orderIndex":           roleOrder,
-			"requireDistinctAgent": roleDistinct,
-			"active":               !roleInactive,
-		}
-		if prompt != "" {
-			input["prompt"] = prompt
-		}
-		if roleWipLimit > 0 {
-			input["wipLimit"] = roleWipLimit
-		}
+		input := roleconfigSetInput(cmd, prompt)
 		runGql(rearm.AgentTaskRoleConfigSetProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "input": input}, "agentTaskRoleConfigSetProgrammatic")
 	},
+}
+
+// roleconfigSetInput is the role config input roleconfig set sends. coordinatorCheckpoint goes only when the flag
+// was given, so a plain set never touches a stored flag (the server reads an absent field as "leave it"), and
+// --coordinator-checkpoint=false sends false (task SPLIT-7).
+func roleconfigSetInput(cmd *cobra.Command, prompt string) map[string]interface{} {
+	input := map[string]interface{}{
+		"name":                 roleName,
+		"orderIndex":           roleOrder,
+		"requireDistinctAgent": roleDistinct,
+		"active":               !roleInactive,
+	}
+	if prompt != "" {
+		input["prompt"] = prompt
+	}
+	if roleWipLimit > 0 {
+		input["wipLimit"] = roleWipLimit
+	}
+	if cmd.Flags().Changed("coordinator-checkpoint") {
+		input["coordinatorCheckpoint"] = roleCheckpoint
+	}
+	return input
 }
 
 var agentBoardRoleconfigListCmd = &cobra.Command{
@@ -557,7 +569,13 @@ one is the operator's decision. Left out, the budget is unchanged.
 --work-level sets the task's work level, a rung of the board's ladder (0 is a
 level): on a board with a ladder, set it here rather than leave the task to the
 default. The server refuses a work level off the ladder, naming it, and any
-work level on a board without one. Left out, the work level is unchanged.`,
+work level on a board without one. Left out, the work level is unchanged.
+
+At the design checkpoint (a task AWAITING_COORDINATOR whose designCheckpoint is
+PENDING) this is how the coordinator sends the task on: --role names the
+checkpoint role (usually coder) or a later one, and the record is settled
+SENT_ON in the seat's name. Authorizing a design role instead keeps the record
+PENDING and the task comes back to the checkpoint on its next pass.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -901,6 +919,7 @@ func init() {
 	agentBoardRoleconfigSetCmd.PersistentFlags().IntVar(&roleWipLimit, "wip-limit", 0, "Per-role concurrent assignment cap (0 = uncapped)")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleDistinct, "require-distinct-agent", false, "Assigned agent must differ from the last sign-off's agent")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleInactive, "inactive", false, "Deactivate the role")
+	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleCheckpoint, "coordinator-checkpoint", false, "Operator-only: before this role is queued on a task's reviewed design the task stops at the coordinator (design checkpoint; one role per board). The seat's roleconfig set is refused with the operator-only message, true or false: a person sets or clears it in the board file (coordinatorCheckpoint: true|false) applied with rearm agent board apply under a personal key, or in the UI")
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("session")
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("name")
 
