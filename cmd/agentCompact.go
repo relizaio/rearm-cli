@@ -124,9 +124,15 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 		}
 	case "AWAITING_COORDINATOR":
 		// Only here: a PENDING record on any other status is not a wait at the coordinator (task SPLIT-7).
+		// So is a REQUESTED split request (task SPLIT-12): after the checkpoint line when both wait.
+		waits := len(lines)
 		if c, _ := t["designCheckpoint"].(map[string]interface{}); c != nil && str(c["state"]) == "PENDING" {
 			lines = append(lines, "waits for the coordinator: design checkpoint before "+str(c["beforeRole"]))
-		} else {
+		}
+		if line := splitRequestWaitLine(t); line != "" {
+			lines = append(lines, line)
+		}
+		if len(lines) == waits {
 			lines = append(lines, "waits for the coordinator")
 		}
 	case "ON_HOLD":
