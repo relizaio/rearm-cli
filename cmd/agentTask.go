@@ -581,7 +581,10 @@ checkpoint role (usually coder) or a later one, and the record is settled
 SENT_ON in the seat's name. Authorizing a design role instead keeps the record
 PENDING and the task comes back to the checkpoint on its next pass.
 
-A split request (a task AWAITING_COORDINATOR whose splitRequest.state is REQUESTED: a role returned it with --reason SPLIT) is declined by this verb: --role sends the task on and --note says why; the requester reads the note in task brief. To accept the request instead, run task split <key> --from-request.`,
+A split request (a task AWAITING_COORDINATOR whose splitRequest.state is
+REQUESTED: a role returned it with --reason SPLIT) is declined by this verb:
+--role sends the task on and --note says why; the requester reads the note in
+task brief. To accept the request instead, run task split <key> --from-request.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -756,7 +759,10 @@ var agentTaskSplitCmd = &cobra.Command{
 "dependsOnSiblingIndexes"}. Each title is one line of at most 120 characters;
 the rest goes in the child's description.
 
---from-request takes the children a role proposed when it returned the task with --reason SPLIT (task show prints them under splitRequest); the server reads the list sent, not the request, so pass your own --children-json to split differently.`,
+--from-request takes the children a role proposed when it returned the task
+with --reason SPLIT (task show prints them under splitRequest); the server
+reads the list sent, not the request, so pass your own --children-json to split
+differently.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		children, err := splitChildren(args[0], taskChildrenJson, cmd.Flags().Changed("children-json"), taskSplitFromRequest, readTaskForSplit)
