@@ -64,6 +64,7 @@ type Check struct {
 // Outcome is what an evaluator returns. DOCUMENT scope: Total is 1.
 type Outcome struct {
 	Passed, Total    int
+	Justified        int      // judged components without the field but with a recognised justification (fda only)
 	Failing          []string // display ids of failing components, unsorted, complete
 	NotAssessed      bool     // the file cannot decide this; INFO checks only
 	NotRepresentable bool     // the input format has no place for the field
@@ -82,6 +83,7 @@ type CheckResult struct {
 	Status           Status   `json:"status"`
 	Passed           int      `json:"passed"`
 	Total            int      `json:"total"`
+	Justified        int      `json:"justified,omitempty"` // reliza:support:justifiedUnknown:* (fda only); omitted when 0
 	Failing          []string `json:"failing"`
 	FailingTruncated bool     `json:"failingTruncated"`
 	Ref              string   `json:"ref"`
@@ -117,7 +119,7 @@ func evaluate(c Check, d *Doc) (res CheckResult, cerr *CheckError) {
 	defer func() {
 		if r := recover(); r != nil {
 			res.Status = StatusError
-			res.Passed, res.Total = 0, 0
+			res.Passed, res.Total, res.Justified = 0, 0, 0
 			res.Failing = []string{}
 			res.FailingTruncated = false
 			res.Note = ""
@@ -127,7 +129,7 @@ func evaluate(c Check, d *Doc) (res CheckResult, cerr *CheckError) {
 		}
 	}()
 	o := c.Eval(d)
-	res.Passed, res.Total, res.Note = o.Passed, o.Total, o.Note
+	res.Passed, res.Total, res.Justified, res.Note = o.Passed, o.Total, o.Justified, o.Note
 	res.ComponentsSkipped, res.SkippedTypes = o.Skipped, o.SkippedTypes
 	res.SelfComponentsSkipped = o.SelfSkipped
 	if o.NotRepresentable && c.Level == LevelRequired {
@@ -136,7 +138,7 @@ func evaluate(c Check, d *Doc) (res CheckResult, cerr *CheckError) {
 	switch {
 	case o.NotAssessed:
 		res.Status = StatusNotAssessed
-	case o.Total > 0 && o.Passed == o.Total:
+	case o.Total > 0 && o.Passed+o.Justified == o.Total:
 		res.Status = StatusPass
 	default:
 		res.Status = StatusFail

@@ -362,8 +362,9 @@ func TestSupportSkipGoldens(t *testing.T) {
 		} `json:"profiles"`
 	}
 	files, err := filepath.Glob(filepath.Join("testdata", "golden", "*.json"))
-	if err != nil || len(files) != 12 {
-		t.Fatalf("goldens %v (%v), want 12", files, err)
+	// 15: five fixtures under three profiles (full.justified.cdx.json added by FDAW-13).
+	if err != nil || len(files) != 15 {
+		t.Fatalf("goldens %v (%v), want 15", files, err)
 	}
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
