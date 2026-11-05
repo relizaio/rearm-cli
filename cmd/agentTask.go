@@ -17,7 +17,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -530,12 +530,16 @@ var agentTaskSignoffCmd = &cobra.Command{
 var agentTaskReturnCmd = &cobra.Command{
 	Use:   "return <task-uuid>",
 	Short: "Hand the task back to the coordinator with a reason",
-	Long:  `Reasons: TASK_UNCLEAR | ROLE_MISMATCH | MISSING_CAPABILITY | BLOCKED_ON_DEPENDENCY | NEEDS_HUMAN | OTHER (OTHER requires --description).`,
+	Long:  `Reasons: TASK_UNCLEAR | ROLE_MISMATCH | MISSING_CAPABILITY | BLOCKED_ON_DEPENDENCY | NEEDS_HUMAN | SPLIT | OTHER. OTHER requires --description. SPLIT (requires --description, one line why; --children-json proposes the children) asks the coordinator to split the task: it splits it with task split --from-request or sends it on with task authorize --note, which task brief prints on your next hop.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskReturnReason}
 		if taskReturnDesc != "" {
 			variables["description"] = taskReturnDesc
+		}
+		if err := addProposedChildren(variables, taskReturnChildrenJson, cmd.Flags().Changed("children-json")); err != nil {
+			printRefusal(err)
+			os.Exit(1)
 		}
 		// Nothing is required of a return, but partial findings from an aborted hop are worth far
 		// more to the next agent than a free-text reason.
@@ -575,7 +579,12 @@ At the design checkpoint (a task AWAITING_COORDINATOR whose designCheckpoint is
 PENDING) this is how the coordinator sends the task on: --role names the
 checkpoint role (usually coder) or a later one, and the record is settled
 SENT_ON in the seat's name. Authorizing a design role instead keeps the record
-PENDING and the task comes back to the checkpoint on its next pass.`,
+PENDING and the task comes back to the checkpoint on its next pass.
+
+A split request (a task AWAITING_COORDINATOR whose splitRequest.state is
+REQUESTED: a role returned it with --reason SPLIT) is declined by this verb:
+--role sends the task on and --note says why; the requester reads the note in
+task brief. To accept the request instead, run task split <key> --from-request.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "role": taskRole}
@@ -602,6 +611,7 @@ PENDING and the task comes back to the checkpoint on its next pass.`,
 			}
 			variables["budgetMicros"] = micros
 		}
+		addAuthorizeNote(variables, taskNote)
 		runGqlCompact(rearm.AgentTaskAuthorizeProgrammatic_Operation, variables, "agentTaskAuthorizeProgrammatic")
 	},
 }
@@ -747,11 +757,20 @@ var agentTaskSplitCmd = &cobra.Command{
 	Long: `Splits a task into PENDING_INTAKE children, given as --children-json: a list of
 {"title", "description", "externalRef", "sourceUrl", "workLevel", "producesComponent",
 "dependsOnSiblingIndexes"}. Each title is one line of at most 120 characters;
-the rest goes in the child's description.`,
+the rest goes in the child's description.
+
+--from-request takes the children a role proposed when it returned the task
+with --reason SPLIT (task show prints them under splitRequest); the server
+reads the list sent, not the request, so pass your own --children-json to split
+differently.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		var children []map[string]interface{}
-		if err := json.Unmarshal([]byte(taskChildrenJson), &children); err != nil {
+		children, err := splitChildren(args[0], taskChildrenJson, cmd.Flags().Changed("children-json"), taskSplitFromRequest, readTaskForSplit)
+		if errors.Is(err, errSplitNeedsChildren) {
+			fmt.Fprintln(os.Stderr, "rearm:", err)
+			os.Exit(1)
+		}
+		if err != nil {
 			printRefusal(err)
 			os.Exit(1)
 		}
@@ -969,7 +988,9 @@ func init() {
 	agentTaskReturnCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
 		"Document releases produced before returning; defaults to what `doc publish` recorded")
 	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnReason, "reason", "", "Return reason enum — required")
-	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnDesc, "description", "", "Free-text detail (required for OTHER)")
+	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnDesc, "description", "", "Free-text detail (required for OTHER and SPLIT)")
+	agentTaskReturnCmd.PersistentFlags().StringVar(&taskReturnChildrenJson, "children-json", "",
+		`JSON array of the children you propose, with --reason SPLIT: '[{"title":"part 1"},{"title":"part 2","dependsOnSiblingIndexes":[0]}]' (the shape task split takes)`)
 	_ = agentTaskReturnCmd.MarkPersistentFlagRequired("reason")
 	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskRole, "role", "", "Role to queue the task for — required")
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskOrder, "order", 0, "Priority order (lowest served first)")
@@ -980,6 +1001,8 @@ func init() {
 		"Seed what the task may spend, in dollars (only when it has no budget yet)")
 	agentTaskAuthorizeCmd.PersistentFlags().IntVar(&taskLevel, "work-level", 0,
 		"Set the task's work level, a rung of the board's ladder (refused on a board without one); left out, unchanged")
+	agentTaskAuthorizeCmd.PersistentFlags().StringVar(&taskNote, "note", "",
+		`With a split request on the task: why it is sent on rather than split (recorded on the request and on the AUTHORIZE row, posted as an INFO, printed by the requester's next task brief); left out, the request is declined with "authorized for <role>"`)
 	_ = agentTaskAuthorizeCmd.MarkPersistentFlagRequired("role")
 	agentTaskHoldCmd.PersistentFlags().StringVar(&taskSessionUuid, "session", "",
 		"Calling session uuid: the coordinator seat, or with --operator the session holding the task — required")
@@ -1003,8 +1026,9 @@ func init() {
 	agentTaskWorkLevelCmd.PersistentFlags().IntVar(&taskLevel, "work-level", 0, "The task's work level, a rung of the board's ladder")
 	agentTaskWorkLevelCmd.PersistentFlags().BoolVar(&taskLevelClear, "clear", false, "Clear it: the task reads the board's default work level")
 	_ = agentTaskOrderCmd.MarkPersistentFlagRequired("order")
-	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]' — required`)
-	_ = agentTaskSplitCmd.MarkPersistentFlagRequired("children-json")
+	agentTaskSplitCmd.PersistentFlags().StringVar(&taskChildrenJson, "children-json", "", `JSON array of children, e.g. '[{"title":"part 1"}]'`)
+	agentTaskSplitCmd.PersistentFlags().BoolVar(&taskSplitFromRequest, "from-request", false,
+		"Split with the children the task's split request proposes (a return with --reason SPLIT); --children-json, when also given, wins")
 	agentTaskCompleteCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Completion note")
 	agentTaskCancelCmd.PersistentFlags().StringVar(&taskNote, "note", "", "Cancellation reason")
 	agentTaskReopenCmd.PersistentFlags().StringVar(&taskRole, "role", "", "Role that must redo its part — required")

@@ -381,6 +381,9 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	if c, _ := t["designCheckpoint"].(map[string]interface{}); c != nil {
 		out["designCheckpoint"] = c
 	}
+	if r, _ := t["splitRequest"].(map[string]interface{}); r != nil {
+		out["splitRequest"] = r
+	}
 	var pins []string
 	for _, in := range asList(t["requiredInputs"]) {
 		if r := str(in["release"]); r != "" {
@@ -574,6 +577,9 @@ func renderTaskBrief(b *taskBrief) string {
 	}
 	if c, ok := t["designCheckpoint"].(map[string]interface{}); ok {
 		fmt.Fprintf(&sb, "- %s\n", designCheckpointLine(c))
+	}
+	if r, ok := t["splitRequest"].(map[string]interface{}); ok {
+		fmt.Fprintf(&sb, "- %s\n", splitRequestLine(r))
 	}
 	if inv, ok := t["investigation"].(string); ok {
 		fmt.Fprintf(&sb, "- %s. Deliver a BOARD_INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
