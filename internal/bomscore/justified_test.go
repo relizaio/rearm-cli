@@ -144,6 +144,25 @@ func TestJustifiedMutations(t *testing.T) {
 		assertJustified(t, checkOf(t, r, componentHashID), StatusPass, 3, 1, 4)
 	})
 
+	t.Run("a property name that only extends the exact code does not justify", func(t *testing.T) {
+		// Matching is exact on the property name too (architecture 3.1): a document cannot widen
+		// the list by appending to a recognised property name.
+		m, g := gammaWithout(t, true, true)
+		setProperty(g, propJustifiedHash+"Extra", "DISTRIBUTION_PUBLISHES_NO_HASH")
+		setProperty(g, propJustifiedEndOfSupport+"Extra", "NO_COMMITTED_END_OF_SUPPORT")
+		r := scoreOK(t, encode(t, m), ProfileFDA)
+		hash := checkOf(t, r, componentHashID)
+		assertJustified(t, hash, StatusFail, 3, 0, 4)
+		if !contains(hash.Failing, gammaPurl) {
+			t.Errorf("component-hash failing %v, want %s", hash.Failing, gammaPurl)
+		}
+		eos := checkOf(t, r, endOfSupportID)
+		assertJustified(t, eos, StatusFail, 3, 0, 4)
+		if !contains(eos.Failing, gammaPurl) {
+			t.Errorf("end-of-support failing %v, want %s", eos.Failing, gammaPurl)
+		}
+	})
+
 	t.Run("a self component is self-skipped, not justified", func(t *testing.T) {
 		m, g := gammaWithout(t, false, true)
 		setProperty(g, propSelfComponent, "true")
