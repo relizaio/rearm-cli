@@ -18,6 +18,27 @@ const (
 // Only the two fda support checks read it, through perSupportableComponent.
 const propSelfComponent = "reliza:support:selfComponent"
 
+// The justified-unknown properties (D5 of FDAW-1): ReARM writes one on a component that lacks the
+// fact when the manufacturer recorded why it cannot be given (FDA guidance V.A.4(b), "a
+// justification for why the information cannot be included"), and strips uploaded copies. Only the
+// two fda checks read them: fda.component.end-of-support and fda.baseline.component-hash.
+const (
+	propJustifiedEndOfSupport = "reliza:support:justifiedUnknown:endOfSupport"
+	propJustifiedHash         = "reliza:support:justifiedUnknown:hash"
+)
+
+// justifiedReasons are the only values of the two justified-unknown properties that count as
+// justified: the JustifiedUnknownReason enum names of ReARM (cyclonedx-taxonomy.md), exact (no
+// trimming, no case folding, so a document cannot widen the list), one list for both properties.
+var justifiedReasons = map[string]bool{
+	"NO_COMMITTED_END_OF_SUPPORT":    true,
+	"COMMUNITY_PROJECT":              true,
+	"SUPPLIER_PUBLISHES_NO_DATE":     true,
+	"DISTRIBUTION_PUBLISHES_NO_HASH": true,
+	"VENDORED_SOURCE_NO_HASH":        true,
+	"OTHER":                          true,
+}
+
 // supportLevels are the only values of propSupportLevel that pass fda.component.support-level.
 var supportLevels = map[string]bool{
 	"actively maintained":  true,
@@ -50,6 +71,20 @@ func (c *Comp) selfComponent() bool {
 	}
 	return false
 }
+
+// justifiedBy says whether the component carries the property with a recognised reason code (any
+// occurrence).
+func (c *Comp) justifiedBy(prop string) bool {
+	for _, p := range c.Properties {
+		if p.Name == prop && justifiedReasons[p.Value] {
+			return true
+		}
+	}
+	return false
+}
+
+// neverJustified is the justified predicate of every check that does not read a justification.
+func neverJustified(*Comp) bool { return false }
 
 // isPresent says whether a value states something. Operator point O3: a declared-unknown value
 // (SPDX NOASSERTION or NONE, an empty or whitespace-only string) counts as missing. To let declared
@@ -95,16 +130,31 @@ func docNotRepresentable(d *Doc) Outcome {
 
 // perComponent evaluates has on every component of the set.
 func perComponent(d *Doc, has func(c *Comp) bool) Outcome {
+	return perComponentJ(d, has, neverJustified)
+}
+
+// perComponentJ is perComponent with a justification: a component without the field that is
+// justified counts in Justified, not in Failing. The value wins: a component with both is Passed.
+func perComponentJ(d *Doc, has, justified func(c *Comp) bool) Outcome {
 	o := Outcome{Total: len(d.Components)}
 	for i := range d.Components {
 		c := &d.Components[i]
-		if has(c) {
-			o.Passed++
-		} else {
-			o.Failing = append(o.Failing, c.DisplayID)
-		}
+		judge(&o, c, has, justified)
 	}
 	return o
+}
+
+// judge counts one judged component: Passed when it has the field, else Justified when it carries
+// a recognised justification, else Failing.
+func judge(o *Outcome, c *Comp, has, justified func(c *Comp) bool) {
+	switch {
+	case has(c):
+		o.Passed++
+	case justified(c):
+		o.Justified++
+	default:
+		o.Failing = append(o.Failing, c.DisplayID)
+	}
 }
 
 // perSupportableComponent evaluates has on the supportable components only and reports the rest:
@@ -112,6 +162,12 @@ func perComponent(d *Doc, has func(c *Comp) bool) Outcome {
 // skipped by type and their distinct types, sorted. When it skipped every component the check has
 // total 0 (FAIL) and the note noteNoSupportable.
 func perSupportableComponent(d *Doc, has func(c *Comp) bool) Outcome {
+	return perSupportableComponentJ(d, has, neverJustified)
+}
+
+// perSupportableComponentJ is perSupportableComponent with a justification (perComponentJ); the
+// skips come first, so a skipped component is skipped whether or not it carries one.
+func perSupportableComponentJ(d *Doc, has, justified func(c *Comp) bool) Outcome {
 	var o Outcome
 	types := map[string]bool{}
 	for i := range d.Components {
@@ -126,11 +182,7 @@ func perSupportableComponent(d *Doc, has func(c *Comp) bool) Outcome {
 			continue
 		}
 		o.Total++
-		if has(c) {
-			o.Passed++
-		} else {
-			o.Failing = append(o.Failing, c.DisplayID)
-		}
+		judge(&o, c, has, justified)
 	}
 	for t := range types {
 		o.SkippedTypes = append(o.SkippedTypes, t)
@@ -298,16 +350,17 @@ func hasComponentHashValue(d *Doc) Outcome {
 	})
 }
 
-// hasComponentHash: one hash entry with both algorithm and value.
+// hasComponentHash: one hash entry with both algorithm and value; else justified by
+// propJustifiedHash (fda only: cisa-2026 uses hasComponentHashAlgorithm and hasComponentHashValue).
 func hasComponentHash(d *Doc) Outcome {
-	return perComponent(d, func(c *Comp) bool {
+	return perComponentJ(d, func(c *Comp) bool {
 		for _, h := range c.Hashes {
 			if isPresent(h.Algorithm) && isPresent(h.Value) {
 				return true
 			}
 		}
 		return false
-	})
+	}, func(c *Comp) bool { return c.justifiedBy(propJustifiedHash) })
 }
 
 func hasComponentLicense(d *Doc) Outcome {
@@ -332,7 +385,7 @@ func hasEndOfSupport(d *Doc) Outcome {
 	if d.notRepresentable(FieldEndOfSupport) {
 		return compNotRepresentable(d)
 	}
-	return perSupportableComponent(d, func(c *Comp) bool {
+	return perSupportableComponentJ(d, func(c *Comp) bool {
 		if d.Format == FormatSPDX {
 			return parseISODate(c.ValidUntil)
 		}
@@ -342,7 +395,7 @@ func hasEndOfSupport(d *Doc) Outcome {
 			}
 		}
 		return false
-	})
+	}, func(c *Comp) bool { return c.justifiedBy(propJustifiedEndOfSupport) })
 }
 
 // notAssessed is the evaluator of an INFO check that one file cannot decide.

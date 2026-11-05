@@ -182,8 +182,8 @@ func scoreProfile(p Profile, d *Doc) (ProfileReport, []CheckError) {
 	return pr, errs
 }
 
-// scoreOf: over the REQUIRED checks with status PASS or FAIL, the mean of passed/total (0 when
-// total is 0), times 100, rounded down; nil when there is no such check. Computed exactly.
+// scoreOf: over the REQUIRED checks with status PASS or FAIL, the mean of (passed+justified)/total
+// (0 when total is 0), times 100, rounded down; nil when there is no such check. Computed exactly.
 func scoreOf(results []CheckResult) *int {
 	sum := new(big.Rat)
 	count := 0
@@ -193,7 +193,7 @@ func scoreOf(results []CheckResult) *int {
 		}
 		count++
 		if r.Total > 0 {
-			sum.Add(sum, big.NewRat(int64(r.Passed), int64(r.Total)))
+			sum.Add(sum, big.NewRat(int64(r.Passed+r.Justified), int64(r.Total)))
 		}
 	}
 	if count == 0 {
@@ -242,7 +242,7 @@ func (r Report) Text() string {
 			score = strconv.Itoa(*p.Score)
 		}
 		fmt.Fprintf(&b, "%s  %s  %s  score %s\n", p.Key, p.Title, p.Verdict, score)
-		writeFailedChecks(&b, p.Checks)
+		writeReportedChecks(&b, p.Checks)
 		var required, pass, fail, errs int
 		for _, c := range p.Checks {
 			if c.Level != LevelRequired {
@@ -266,7 +266,7 @@ func (r Report) Text() string {
 			b.WriteString("\n")
 		}
 		b.WriteString("structure  BOM structure (informational, never changes a verdict)\n")
-		writeFailedChecks(&b, r.Structure.Checks)
+		writeReportedChecks(&b, r.Structure.Checks)
 	}
 	return b.String()
 }
@@ -280,15 +280,23 @@ func hasFailed(checks []CheckResult) bool {
 	return false
 }
 
-func writeFailedChecks(b *strings.Builder, checks []CheckResult) {
+// writeReportedChecks prints the failed and errored checks, and every check that counted justified
+// components whatever its status, as "PASS (N justified)" or "FAIL (N justified)". A remedy is
+// printed for a failed or errored check only.
+func writeReportedChecks(b *strings.Builder, checks []CheckResult) {
 	for _, c := range checks {
-		if c.Status != StatusFail && c.Status != StatusError {
+		failed := c.Status == StatusFail || c.Status == StatusError
+		if !failed && c.Justified == 0 {
 			continue
 		}
+		status := string(c.Status)
+		if c.Justified > 0 {
+			status = fmt.Sprintf("%s (%d justified)", c.Status, c.Justified)
+		}
 		if c.Scope == ScopeComponent {
-			fmt.Fprintf(b, "  %-4s  %s  %d/%d  (%s)\n", c.Status, c.Title, c.Passed, c.Total, c.Ref)
+			fmt.Fprintf(b, "  %-4s  %s  %d/%d  (%s)\n", status, c.Title, c.Passed, c.Total, c.Ref)
 		} else {
-			fmt.Fprintf(b, "  %-4s  %s  (%s)\n", c.Status, c.Title, c.Ref)
+			fmt.Fprintf(b, "  %-4s  %s  (%s)\n", status, c.Title, c.Ref)
 		}
 		if c.ComponentsSkipped > 0 {
 			fmt.Fprintf(b, "        skipped %d components of type %s (not software packages)\n",
@@ -305,7 +313,7 @@ func writeFailedChecks(b *strings.Builder, checks []CheckResult) {
 			}
 			fmt.Fprintf(b, "        missing in: %s\n", missing)
 		}
-		if c.Remedy != "" {
+		if failed && c.Remedy != "" {
 			fmt.Fprintf(b, "        remedy: %s\n", c.Remedy)
 		}
 		if c.Note != "" {
