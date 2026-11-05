@@ -94,3 +94,26 @@ func TestHelpNamesTheDesignCheckpoint(t *testing.T) {
 		}
 	}
 }
+
+// TPF-153 T-7: the task reads and the board reads come from the pinned rearm-client-go, so this fails when the pin
+// predates the TPF-153 client-go PR (the design checkpoint waiver and the board switch).
+func TestTaskReadsSelectTheWaiverAndBoardReadsTheSwitch(t *testing.T) {
+	for name, op := range map[string]string{
+		"AgentTaskProgrammatic":        rearm.AgentTaskProgrammatic_Operation,
+		"AgentTaskNextProgrammatic":    rearm.AgentTaskNextProgrammatic_Operation,
+		"AgentTaskSignOffProgrammatic": rearm.AgentTaskSignOffProgrammatic_Operation,
+		"AgentTasksProgrammatic":       rearm.AgentTasksProgrammatic_Operation,
+	} {
+		if !strings.Contains(op, "designCheckpointWaiver {") {
+			t.Errorf("%s does not select designCheckpointWaiver; is rearm-client-go pinned at the TPF-153 PR or later?", name)
+		}
+	}
+	for name, op := range map[string]string{
+		"AgentBoardProgrammatic": rearm.AgentBoardProgrammatic_Operation,
+		"ExportBoard":            rearm.ExportBoard_Operation,
+	} {
+		if !strings.Contains(op, "architectCheckpointWaiver") {
+			t.Errorf("%s does not select architectCheckpointWaiver; is rearm-client-go pinned at the TPF-153 PR or later?", name)
+		}
+	}
+}

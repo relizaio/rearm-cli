@@ -114,6 +114,9 @@ type taskBrief struct {
 
 	// The path of the next round of each type the role produces on the task (task RD5-5).
 	NextRounds []briefNextRound `json:"nextRounds"`
+
+	// The board's architectCheckpointWaiver is off (task TPF-153): a waiver on the task is recorded but ignored.
+	ArchitectCheckpointWaiverOff bool `json:"architectCheckpointWaiverOff,omitempty"`
 }
 
 type briefSection struct {
@@ -288,6 +291,8 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		return nil, nil, err
 	}
 	brd, _ := bd["agentBoardProgrammatic"].(map[string]interface{})
+	// Absent or true reads as on; only an explicit false turns the switch off.
+	b.ArchitectCheckpointWaiverOff = brd["effectiveArchitectCheckpointWaiver"] == false
 	repo, _ := brd["documentsRepo"].(map[string]interface{})
 	b.Repository = briefRepository{Uri: str(repo["uri"]), Root: str(brd["documentsRoot"])}
 	if t, err := json.Marshal(brd["documentPaths"]); err == nil && string(t) != "null" {
@@ -380,6 +385,10 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	}
 	if c, _ := t["designCheckpoint"].(map[string]interface{}); c != nil {
 		out["designCheckpoint"] = c
+	}
+	if w, _ := t["designCheckpointWaiver"].(map[string]interface{}); w != nil {
+		out["designCheckpointWaiver"] = w
+		out["architectureRounds"] = architectureRounds(t)
 	}
 	if r, _ := t["splitRequest"].(map[string]interface{}); r != nil {
 		out["splitRequest"] = r
@@ -577,6 +586,10 @@ func renderTaskBrief(b *taskBrief) string {
 	}
 	if c, ok := t["designCheckpoint"].(map[string]interface{}); ok {
 		fmt.Fprintf(&sb, "- %s\n", designCheckpointLine(c))
+	}
+	if w, ok := t["designCheckpointWaiver"].(map[string]interface{}); ok {
+		rounds, _ := t["architectureRounds"].(map[string]any)
+		fmt.Fprintf(&sb, "- %s\n", waiverLine(w, rounds, b.ArchitectCheckpointWaiverOff))
 	}
 	if r, ok := t["splitRequest"].(map[string]interface{}); ok {
 		fmt.Fprintf(&sb, "- %s\n", splitRequestLine(r))

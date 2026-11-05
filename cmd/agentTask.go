@@ -43,7 +43,7 @@ import (
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
 //   rearm agent task next --session <uuid> [--board <uuid>]
 //   rearm agent task assign <task-uuid> --session <uuid>
-//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--pr <url>]...
+//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--no-split] [--pr <url>]...
 //   rearm agent task return <task-uuid> --session <uuid> --reason <enum> [--description d]
 //   rearm agent task authorize <task-uuid> --session <uuid> --role <r> [--order N]
 //   rearm agent task order <task-uuid> --session <uuid> --order N
@@ -77,7 +77,9 @@ var (
 	taskSeen []string
 	// The pass's round changes nothing to build (RD4-13): after a review item about the signing role's own
 	// document, the task goes back to the filer instead of to the role that builds from the round.
-	taskNoChange     bool
+	taskNoChange bool
+	// The design fits one coder pass (TPF-152 W1): a waiver of the coordinator's design checkpoint, per design round.
+	taskNoSplit      bool
 	taskShowSession  string
 	taskRoles        []string
 	taskStrength     string
@@ -491,6 +493,18 @@ var agentTaskSignoffCmd = &cobra.Command{
 	Short: "Record the hop's sign-off (PASSED/REJECTED); the task redirects to the coordinator",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// The two --no-split refusals the command line alone can tell (task TPF-153), in the server's words,
+		// before any link or request. The rest need the task and are the server's.
+		if taskNoSplit {
+			if taskOutcome != "PASSED" {
+				printRefusal(errors.New(noSplitNeedsPassed))
+				os.Exit(1)
+			}
+			if strings.TrimSpace(taskNote) == "" {
+				printRefusal(errors.New(noSplitNeedsNote))
+				os.Exit(1)
+			}
+		}
 		// --pr links come first (task RD5-5): a refused link stops here, before anything is signed off.
 		linked, err := linkSignOffPrs(args[0], taskSignoffPrs)
 		if err != nil {
@@ -518,6 +532,10 @@ var agentTaskSignoffCmd = &cobra.Command{
 		// Sent only when said (RD4-2): a round that changed no code passes the head check for registered PRs.
 		if taskNoCode {
 			variables["noCode"] = true
+		}
+		// Sent only when said (TPF-152 W1): left out, it goes as null and the sign-off records no waiver.
+		if taskNoSplit {
+			variables["noSplit"] = true
 		}
 		printSignOff(runHop(signOffOperation(), variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0]), linked)
 		forgetSeen(taskSessionUuid, args[0])
@@ -879,6 +897,7 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 		read := runGqlTasksRead(op, vars, key)
 		rememberSeenFromRead(taskShowSession, read)
 		printBaseMoved(read)
+		printWaiverLines(read)
 	},
 }
 
@@ -980,6 +999,11 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoCode, "no-code", false,
 		"On a PASSED: this round changed no code (a note-only round). Where CI registers the task's PRs, a pass by a"+
 			" role that pushes code is refused while no linked PR moved since the assignment; this says why none did")
+	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoSplit, "no-split", false,
+		"On a PASSED by the role that produced the design, with --note: the design fits one coder pass; recorded on"+
+			" the task as a checkpoint waiver by this role, per design round, so a coordinator checkpoint before the"+
+			" next building role does not stop the task. Needs a one-line --note saying why; refused on REJECTED and"+
+			" by any other role; recorded but ignored where the board's architectCheckpointWaiver is off")
 	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
 		"Session reading the task: its sign-off acknowledges the shown documents. Without it, nothing is recorded")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
