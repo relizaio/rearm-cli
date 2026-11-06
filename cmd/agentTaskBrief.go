@@ -601,9 +601,6 @@ func renderTaskBrief(b *taskBrief) string {
 	for _, e := range asList(t["rolesSkippedByCondition"]) {
 		fmt.Fprintf(&sb, "- %s\n", conditionSkipLine(e))
 	}
-	if strings.EqualFold(b.Role, "coordinator") && len(liveSkipRoles(t)) > 0 {
-		fmt.Fprintf(&sb, "- %s\n", runWhenHint)
-	}
 	if inv, ok := t["investigation"].(string); ok {
 		fmt.Fprintf(&sb, "- %s. Deliver a BOARD_INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
 	}

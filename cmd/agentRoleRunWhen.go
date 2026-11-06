@@ -15,7 +15,7 @@ import (
 // given together with a list.
 const runWhenClearAlone = "--run-when-clear clears the condition; give it alone, without --run-when-tagged-any or --run-when-tagged-none"
 
-// runWhenHint is the coordinator's run-it-now line, the verb per state, printed whole after the passed-over lines.
+// runWhenHint is the run-it-now line, the verb per state, printed whole by task show after a task's passed-over lines.
 const runWhenHint = "to run a passed-over role now, name it with the verb the task's state admits: task hold then task lifthold --role <role> while QUEUED; task authorize --role <role> while AWAITING_COORDINATOR; task reopen --role <role> --reason '<why>' once COMPLETED"
 
 // keys is a run-when flag's list as sent: each entry trimmed, blanks dropped, never nil, so a list the caller left
@@ -127,12 +127,17 @@ func tasksOf(read interface{}) []map[string]interface{} {
 	return out
 }
 
-// printConditionSkips writes, after the waiver lines, each entry of what task show read to stderr, keyed by task.
+// printConditionSkips writes, after the waiver lines, each entry of what task show read to stderr, keyed by task,
+// then the run-it-now hint once when an entry is live. The hint goes to every caller: only the seat can run its
+// verbs, and the line names verbs, no data.
 func printConditionSkips(read interface{}) {
 	for _, t := range tasksOf(read) {
 		key := orElse(str(t["key"]), str(t["uuid"]))
 		for _, e := range asList(t["rolesSkippedByCondition"]) {
 			fmt.Fprintln(os.Stderr, key+": "+conditionSkipLine(e))
+		}
+		if len(liveSkipRoles(t)) > 0 {
+			fmt.Fprintln(os.Stderr, key+": "+runWhenHint)
 		}
 	}
 }

@@ -326,12 +326,12 @@ func signOffOf(role, at string) map[string]interface{} {
 const (
 	coderSkipLine  = "- passed over mutant_coder at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag\n"
 	testerSkipLine = "- passed over mutant_tester at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag; waives BOARD_TEST_REPORT\n"
-	hintLine       = "- to run a passed-over role now, name it with the verb the task's state admits: task hold then task lifthold --role <role> while QUEUED; task authorize --role <role> while AWAITING_COORDINATOR; task reopen --role <role> --reason '<why>' once COMPLETED\n"
+	hintText       = "to run a passed-over role now, name it with the verb the task's state admits: task hold then task lifthold --role <role> while QUEUED; task authorize --role <role> while AWAITING_COORDINATOR; task reopen --role <role> --reason '<why>' once COMPLETED"
 )
 
-// T-106: the brief's passed-over lines after the split request line, the (since ran) marker read off live, and the
-// coordinator's hint. The fixture leaves the waiver out, so the substring is the checkpoint line, the split request
-// line and the two skip lines.
+// T-106: the brief's passed-over lines after the split request line, the (since ran) marker read off live, and no
+// run-it-now hint for any role (T-1: task show prints it). The fixture leaves the waiver out, so the substring is the
+// checkpoint line, the split request line and the two skip lines.
 func TestBriefPrintsThePassedOverLines(t *testing.T) {
 	checkpoint := map[string]interface{}{"state": "SENT_ON", "beforeRole": "coder", "afterRole": "reviewer",
 		"settledBy": map[string]interface{}{"kind": "SESSION", "uuid": "s-1", "name": "seat"},
@@ -402,27 +402,31 @@ func TestBriefPrintsThePassedOverLines(t *testing.T) {
 		t.Errorf("(f) an entry without live is marked:\n%s", out)
 	}
 
-	// (g) the hint: the coordinator's brief, with a live entry, right after the last passed-over line.
-	if out = render("coordinator", both); !strings.Contains(out, coderSkipLine+testerSkipLine+hintLine) {
-		t.Errorf("(g) the coordinator's brief has no hint after the lines:\n%s", out)
+	// (g) no hint in the brief (T-1), for the seat's name, a worker's role or the task's own role: the brief is the
+	// same brief with the two lines added after the split request line, and nothing else.
+	bare := task("QUEUED", "tester")
+	for _, role := range []string{"coordinator", "coder", "tester"} {
+		out = render(role, both)
+		if strings.Contains(out, "to run a passed-over role") {
+			t.Errorf("(g) the %s brief prints the hint:\n%s", role, out)
+		}
+		splitLine := "- " + splitRequestLine(split) + "\n"
+		if want := strings.Replace(render(role, bare), splitLine, splitLine+coderSkipLine+testerSkipLine, 1); out != want {
+			t.Errorf("(g) the %s brief is not the bare brief plus the two lines:\n%s\nwant:\n%s", role, out, want)
+		}
 	}
-	if out = render("coder", both); strings.Contains(out, "to run a passed-over role") {
-		t.Errorf("(g) a worker's brief prints the hint:\n%s", out)
-	}
-	bothDead := task("QUEUED", "tester", skipEntry("mutant_coder", false), skipEntry("mutant_tester", false, "BOARD_TEST_REPORT"))
-	bothDead["signOffs"] = []interface{}{}
-	if out = render("coordinator", bothDead); strings.Contains(out, "to run a passed-over role") {
-		t.Errorf("(g) a brief with no live entry prints the hint:\n%s", out)
-	}
-	// The window (F-4): the coordinator ran the mutant coder; the entries are still live and print as before.
+	// The window (F-4): the coordinator ran the mutant coder; the entries are still live, print as served, no hint.
 	running := task("ASSIGNED", "mutant_coder", skipEntry("mutant_coder", true), skipEntry("mutant_tester", true, "BOARD_TEST_REPORT"))
 	running["assignment"] = map[string]interface{}{"session": "s9", "role": "mutant_coder", "assignedAt": "2026-11-05T13:30:00Z"}
-	if out = render("coordinator", running); !strings.Contains(out, coderSkipLine+testerSkipLine+hintLine) {
-		t.Errorf("(g) the window: the running role's entry is not printed as served:\n%s", out)
+	for _, role := range []string{"coordinator", "mutant_coder"} {
+		out = render(role, running)
+		if !strings.Contains(out, coderSkipLine+testerSkipLine) || strings.Contains(out, "since ran") || strings.Contains(out, "to run a passed-over role") {
+			t.Errorf("(g) the window: the %s brief does not print the live entries as served, or prints the hint:\n%s", role, out)
+		}
 	}
 }
 
-// T-118: the brief's copy keeps the read's shape, so a JSON-decoded task renders the lines and the hint (F-2).
+// T-118: the brief's copy keeps the read's shape, so a JSON-decoded task renders the lines (F-2), and no hint (T-1).
 func TestBriefCarriesThePassedOverListInTheReadsShape(t *testing.T) {
 	var task map[string]interface{}
 	if err := json.Unmarshal([]byte(`{"key":"TPF-1","title":"t","status":"QUEUED","role":"tester","rolesSkippedByCondition":`+
@@ -441,8 +445,11 @@ func TestBriefCarriesThePassedOverListInTheReadsShape(t *testing.T) {
 		t.Errorf("liveSkipRoles reads %v from the copy", got)
 	}
 	brief := renderTaskBrief(&taskBrief{Key: "TPF-1", Role: "coordinator", Task: out})
-	if want := "- passed over mutant_coder at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag; waives BOARD_TEST_REPORT\n" + hintLine; !strings.Contains(brief, want) {
+	if want := "- passed over mutant_coder at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag; waives BOARD_TEST_REPORT\n"; !strings.Contains(brief, want) {
 		t.Errorf("the brief does not print\n%s\ngot:\n%s", want, brief)
+	}
+	if strings.Contains(brief, "to run a passed-over role") {
+		t.Errorf("the brief prints the hint:\n%s", brief)
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
@@ -457,7 +464,8 @@ func TestBriefCarriesThePassedOverListInTheReadsShape(t *testing.T) {
 	}
 }
 
-// T-107: task show prints the entries on stderr keyed by task, after the base-moved and waiver lines.
+// T-107: task show prints the entries on stderr keyed by task, after the base-moved and waiver lines, then the
+// run-it-now hint once while an entry is live (T-1).
 func TestTaskShowPrintsThePassedOverLinesOnStderr(t *testing.T) {
 	skipped := func(key, uuid string) map[string]any {
 		return map[string]any{"key": key, "uuid": uuid, "status": "QUEUED", "role": "tester",
@@ -466,10 +474,11 @@ func TestTaskShowPrintsThePassedOverLinesOnStderr(t *testing.T) {
 	const (
 		coderShow  = "TPF-156: passed over mutant_coder at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag (since ran)\n"
 		testerShow = "TPF-156: passed over mutant_tester at 2026-11-05T13:00:00Z: runWhen not met: no mutation tag; waives BOARD_TEST_REPORT\n"
+		hintShow   = "TPF-156: " + hintText + "\n"
 	)
-	// (a) the two lines on stderr, the JSON on stdout with live as served.
+	// (a) the two lines and the hint on stderr (one entry is live), the JSON on stdout with live as served.
 	stdout, stderr := showTasks(t, skipped("TPF-156", "t-1"))
-	if want := coderShow + testerShow; stderr != want {
+	if want := coderShow + testerShow + hintShow; stderr != want {
 		t.Errorf("(a) stderr:\n%q\nwant:\n%q", stderr, want)
 	}
 	var read map[string]any
@@ -479,8 +488,8 @@ func TestTaskShowPrintsThePassedOverLinesOnStderr(t *testing.T) {
 	if l, _ := read["rolesSkippedByCondition"].([]any); len(l) != 2 || l[0].(map[string]any)["live"] != false {
 		t.Errorf("(a) stdout carries %v", read["rolesSkippedByCondition"])
 	}
-	if strings.Contains(stdout, "passed over mutant") {
-		t.Error("(a) a passed-over line reached stdout")
+	if strings.Contains(stdout, "passed over mutant") || strings.Contains(stdout, "to run a passed-over role") {
+		t.Error("(a) a passed-over line or the hint reached stdout")
 	}
 	// (b) an empty list: nothing.
 	if _, stderr = showTasks(t, map[string]any{"key": "TPF-2", "uuid": "t-2", "rolesSkippedByCondition": []any{}}); stderr != "" {
@@ -488,7 +497,7 @@ func TestTaskShowPrintsThePassedOverLinesOnStderr(t *testing.T) {
 	}
 	// (c) two tasks: each keyed by its own task, the uuid when it has no key.
 	_, stderr = showTasks(t, skipped("TPF-156", "t-1"), skipped("", "t-9"))
-	if want := coderShow + testerShow + strings.ReplaceAll(coderShow+testerShow, "TPF-156", "t-9"); stderr != want {
+	if want := coderShow + testerShow + hintShow + strings.ReplaceAll(coderShow+testerShow+hintShow, "TPF-156", "t-9"); stderr != want {
 		t.Errorf("(c) stderr:\n%q\nwant:\n%q", stderr, want)
 	}
 	// (d) base-moved first, the two waiver lines, then the skip lines.
@@ -497,8 +506,36 @@ func TestTaskShowPrintsThePassedOverLinesOnStderr(t *testing.T) {
 	all["rolesSkippedByCondition"] = skipped("TPF-156", "t-1")["rolesSkippedByCondition"]
 	_, stderr = showTasks(t, all)
 	if want := "TPF-156: base moved: 2 commits since your round: https://github.com/o/r/pull/1\n" +
-		strings.ReplaceAll(waivedShowLine+waiverShowLine+"\n", "TPF-153", "TPF-156") + coderShow + testerShow; stderr != want {
+		strings.ReplaceAll(waivedShowLine+waiverShowLine+"\n", "TPF-153", "TPF-156") + coderShow + testerShow + hintShow; stderr != want {
 		t.Errorf("(d) stderr:\n%q\nwant:\n%q", stderr, want)
+	}
+	// (e) the hint (T-1): right after the task's last entry line and nothing after it; none without a live entry.
+	if _, stderr = showTasks(t, skipped("TPF-156", "t-1")); !strings.HasSuffix(stderr, testerShow+hintShow) || strings.Count(stderr, hintText) != 1 {
+		t.Errorf("(e) the hint is not once, right after the entry lines, and last:\n%q", stderr)
+	}
+	dead := skipped("TPF-156", "t-1")
+	dead["rolesSkippedByCondition"] = []any{skipEntry("mutant_coder", false), skipEntry("mutant_tester", false, "BOARD_TEST_REPORT")}
+	dead["signOffs"] = []any{signOffOf("mutant_coder", "2026-11-05T14:00:00Z")}
+	if _, stderr = showTasks(t, dead); stderr != coderShow+strings.TrimSuffix(testerShow, "\n")+" (since ran)\n" {
+		t.Errorf("(e) a task with no live entry:\n%q", stderr)
+	}
+	if _, stderr = showTasks(t, map[string]any{"key": "TPF-2", "uuid": "t-2", "rolesSkippedByCondition": []any{}}); stderr != "" {
+		t.Errorf("(e) an empty list prints %q", stderr)
+	}
+	deadOther := map[string]any{"key": "TPF-7", "uuid": "t-7", "status": "QUEUED", "role": "tester",
+		"rolesSkippedByCondition": []any{skipEntry("mutant_coder", false)}}
+	_, stderr = showTasks(t, skipped("TPF-156", "t-1"), deadOther, skipped("", "t-9"))
+	if want := coderShow + testerShow + hintShow + strings.ReplaceAll(coderShow, "TPF-156", "TPF-7") +
+		strings.ReplaceAll(coderShow+testerShow+hintShow, "TPF-156", "t-9"); stderr != want {
+		t.Errorf("(e) the array read: each task's hint after its own lines, none without a live entry:\n%q\nwant:\n%q", stderr, want)
+	}
+	// (f) the window (F-4): the passed-over role runs on an explicit authorize; both entries live, the hint the same.
+	running := skipped("TPF-156", "t-1")
+	running["status"], running["role"] = "ASSIGNED", "mutant_tester"
+	running["assignment"] = map[string]any{"session": "s9", "role": "mutant_tester", "assignedAt": "2026-11-05T13:30:00Z"}
+	running["rolesSkippedByCondition"] = []any{skipEntry("mutant_coder", true), skipEntry("mutant_tester", true, "BOARD_TEST_REPORT")}
+	if _, stderr = showTasks(t, running); stderr != strings.Replace(coderShow, " (since ran)", "", 1)+testerShow+hintShow {
+		t.Errorf("(f) the window:\n%q", stderr)
 	}
 }
 
