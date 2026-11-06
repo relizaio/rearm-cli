@@ -636,8 +636,11 @@ PENDING_INTAKE or AWAITING_COORDINATOR, a hold at the coordinator's level, a DEL
 PR not merged when the board's merge is the coordinator's, or an ALERT. The design checkpoint is one
 such ALERT: a task whose design is reviewed stops at the coordinator before the role that carries
 coordinatorCheckpoint, and the ALERT names the design rounds and the architect's note; send it on
-with 'task authorize <key> --role <role>' or split it with 'task split'. A split request is another: a
-role returned the task with --reason SPLIT and the ALERT names its proposed children; split it with
+with 'task authorize <key> --role <role>' or split it with 'task split'. A checkpoint the architect
+waived with --no-split posts an INFO instead of the ALERT, printed with the events and waking
+nothing: the task is queued for that role, and task list --changed-since shows it. A split request
+is another: a role returned the task with --reason SPLIT and the ALERT names its proposed children;
+split it with
 'task split <key> --from-request' or send it on with 'task authorize <key> --role <role> --note
 <why>'. It prints the triggers, the INFO and ALERT events it read, and nextAfter. It wakes when a
 trigger appears that it has not

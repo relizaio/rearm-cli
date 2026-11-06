@@ -38,12 +38,12 @@ import (
 //   rearm agent board list | show <board>
 //   rearm agent board coordinate <board> --session <uuid>
 //   rearm agent board pause|resume <board> --session <uuid> [--reason r]
-//   rearm agent board roleconfig set <board> --session <uuid> --name <r> [...]
+//   rearm agent board roleconfig set <board> --session <uuid> --name <r> [--run-when-tagged-any <keys>] [--run-when-tagged-none <keys>] [--run-when-clear] [...]
 //   rearm agent board roleconfig list <board>
 //   rearm agent task register --board <uuid> --external-ref <ref> --title <t> [--session <uuid>]
 //   rearm agent task next --session <uuid> [--board <uuid>]
 //   rearm agent task assign <task-uuid> --session <uuid>
-//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--pr <url>]...
+//   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--no-split] [--pr <url>]...
 //   rearm agent task return <task-uuid> --session <uuid> --reason <enum> [--description d]
 //   rearm agent task authorize <task-uuid> --session <uuid> --role <r> [--order N]
 //   rearm agent task order <task-uuid> --session <uuid> --order N
@@ -77,7 +77,9 @@ var (
 	taskSeen []string
 	// The pass's round changes nothing to build (RD4-13): after a review item about the signing role's own
 	// document, the task goes back to the filer instead of to the role that builds from the round.
-	taskNoChange     bool
+	taskNoChange bool
+	// The design fits one coder pass (TPF-152 W1): a waiver of the coordinator's design checkpoint, per design round.
+	taskNoSplit      bool
 	taskShowSession  string
 	taskRoles        []string
 	taskStrength     string
@@ -95,6 +97,9 @@ var (
 	roleDistinct     bool
 	roleInactive     bool
 	roleCheckpoint   bool
+	roleRunWhenAny   []string
+	roleRunWhenNone  []string
+	roleRunWhenClear bool
 )
 
 func runGql(query string, variables map[string]interface{}, key string) {
@@ -246,20 +251,31 @@ var agentBoardRoleconfigSetCmd = &cobra.Command{
 			}
 			prompt = string(b)
 		}
+		if cmd.Flags().Changed("run-when-clear") && roleRunWhenClear &&
+			(cmd.Flags().Changed("run-when-tagged-any") || cmd.Flags().Changed("run-when-tagged-none")) {
+			printRefusal(errors.New(runWhenClearAlone))
+			os.Exit(1)
+		}
 		input := roleconfigSetInput(cmd, prompt)
 		runGql(rearm.AgentTaskRoleConfigSetProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0]), "sessionUuid": taskSessionUuid, "input": input}, "agentTaskRoleConfigSetProgrammatic")
 	},
 }
 
-// roleconfigSetInput is the role config input roleconfig set sends. coordinatorCheckpoint goes only when the flag
-// was given, so a plain set never touches a stored flag (the server reads an absent field as "leave it"), and
-// --coordinator-checkpoint=false sends false (task SPLIT-7).
+// roleconfigSetInput is the role config input roleconfig set sends. Every field goes only when its flag was given;
+// the server reads an absent field as "leave it", so a set that names one field changes only that field
+// (--order 0 and --inactive=false are given, and sent). --coordinator-checkpoint=false sends false (task SPLIT-7).
+// runWhen (task TPF-156): the two lists go together as the whole condition, a list left out sent empty;
+// --run-when-clear sends null, which clears it.
 func roleconfigSetInput(cmd *cobra.Command, prompt string) map[string]interface{} {
-	input := map[string]interface{}{
-		"name":                 roleName,
-		"orderIndex":           roleOrder,
-		"requireDistinctAgent": roleDistinct,
-		"active":               !roleInactive,
+	input := map[string]interface{}{"name": roleName}
+	if cmd.Flags().Changed("order") {
+		input["orderIndex"] = roleOrder
+	}
+	if cmd.Flags().Changed("require-distinct-agent") {
+		input["requireDistinctAgent"] = roleDistinct
+	}
+	if cmd.Flags().Changed("inactive") {
+		input["active"] = !roleInactive
 	}
 	if prompt != "" {
 		input["prompt"] = prompt
@@ -270,15 +286,21 @@ func roleconfigSetInput(cmd *cobra.Command, prompt string) map[string]interface{
 	if cmd.Flags().Changed("coordinator-checkpoint") {
 		input["coordinatorCheckpoint"] = roleCheckpoint
 	}
+	if cmd.Flags().Changed("run-when-clear") && roleRunWhenClear {
+		input["runWhen"] = nil
+	} else if cmd.Flags().Changed("run-when-tagged-any") || cmd.Flags().Changed("run-when-tagged-none") {
+		input["runWhen"] = map[string]interface{}{"taggedAny": keys(roleRunWhenAny), "taggedNone": keys(roleRunWhenNone)}
+	}
 	return input
 }
 
 var agentBoardRoleconfigListCmd = &cobra.Command{
 	Use:   "list <board>",
-	Short: "List a board's role configs in order",
+	Short: "List a board's role configs in order; a role's runWhen condition is printed on stderr",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runGql(rearm.AgentTaskRoleConfigsProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentTaskRoleConfigsProgrammatic")
+		read := runGqlRead(rearm.AgentTaskRoleConfigsProgrammatic_Operation, map[string]interface{}{"boardUuid": boardArg(args[0])}, "agentTaskRoleConfigsProgrammatic")
+		printRunWhenLines(read)
 	},
 }
 
@@ -491,6 +513,18 @@ var agentTaskSignoffCmd = &cobra.Command{
 	Short: "Record the hop's sign-off (PASSED/REJECTED); the task redirects to the coordinator",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// The two --no-split refusals the command line alone can tell (task TPF-153), in the server's words,
+		// before any link or request. The rest need the task and are the server's.
+		if taskNoSplit {
+			if taskOutcome != "PASSED" {
+				printRefusal(errors.New(noSplitNeedsPassed))
+				os.Exit(1)
+			}
+			if strings.TrimSpace(taskNote) == "" {
+				printRefusal(errors.New(noSplitNeedsNote))
+				os.Exit(1)
+			}
+		}
 		// --pr links come first (task RD5-5): a refused link stops here, before anything is signed off.
 		linked, err := linkSignOffPrs(args[0], taskSignoffPrs)
 		if err != nil {
@@ -518,6 +552,10 @@ var agentTaskSignoffCmd = &cobra.Command{
 		// Sent only when said (RD4-2): a round that changed no code passes the head check for registered PRs.
 		if taskNoCode {
 			variables["noCode"] = true
+		}
+		// Sent only when said (TPF-152 W1): left out, it goes as null and the sign-off records no waiver.
+		if taskNoSplit {
+			variables["noSplit"] = true
 		}
 		printSignOff(runHop(signOffOperation(), variables, "agentTaskSignOffProgrammatic", taskSessionUuid, args[0]), linked)
 		forgetSeen(taskSessionUuid, args[0])
@@ -879,6 +917,8 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 		read := runGqlTasksRead(op, vars, key)
 		rememberSeenFromRead(taskShowSession, read)
 		printBaseMoved(read)
+		printWaiverLines(read)
+		printConditionSkips(read)
 	},
 }
 
@@ -916,8 +956,9 @@ sees them. A poll is 'board events --after <seq>' plus 'task list --changed-sinc
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		runGqlTasks(rearm.AgentTasksProgrammatic_Operation, withListFilters(variables, taskListGroup, taskListTags),
+		read := runGqlTasksRead(rearm.AgentTasksProgrammatic_Operation, withListFilters(variables, taskListGroup, taskListTags),
 			"agentTasksProgrammatic")
+		printPassedOverSummary(read)
 	},
 }
 
@@ -939,6 +980,9 @@ func init() {
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleDistinct, "require-distinct-agent", false, "Assigned agent must differ from the last sign-off's agent")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleInactive, "inactive", false, "Deactivate the role")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleCheckpoint, "coordinator-checkpoint", false, "Operator-only: before this role is queued on a task's reviewed design the task stops at the coordinator (design checkpoint; one role per board). The seat's roleconfig set is refused with the operator-only message, true or false: a person sets or clears it in the board file (coordinatorCheckpoint: true|false) applied with rearm agent board apply under a personal key, or in the UI")
+	agentBoardRoleconfigSetCmd.PersistentFlags().StringSliceVar(&roleRunWhenAny, "run-when-tagged-any", nil, "Routing queues this OPTIONAL role only on a task carrying any of these tag keys (comma-separated or repeated); with --run-when-tagged-none, both must hold. Sent as the whole condition with --run-when-tagged-none, so give both lists together: a list left out is sent empty. The server lower-cases the keys and refuses a REQUIRED role, the role carrying the coordinator checkpoint, a key that is not a tag key, a key in both lists, or more than 20 keys. To run the role on a task anyway, name it with the verb the task's state admits: task hold then task lifthold --role while QUEUED, task authorize --role while AWAITING_COORDINATOR, task reopen --role --reason once COMPLETED")
+	agentBoardRoleconfigSetCmd.PersistentFlags().StringSliceVar(&roleRunWhenNone, "run-when-tagged-none", nil, "Routing passes this OPTIONAL role over on a task carrying any of these tag keys (comma-separated or repeated); with --run-when-tagged-any, both must hold. Sent as the whole condition with --run-when-tagged-any, so give both lists together: a list left out is sent empty")
+	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleRunWhenClear, "run-when-clear", false, "Clear the role's runWhen condition: the role runs on every task again. Alone, without --run-when-tagged-any or --run-when-tagged-none")
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("session")
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("name")
 
@@ -980,6 +1024,11 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoCode, "no-code", false,
 		"On a PASSED: this round changed no code (a note-only round). Where CI registers the task's PRs, a pass by a"+
 			" role that pushes code is refused while no linked PR moved since the assignment; this says why none did")
+	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoSplit, "no-split", false,
+		"On a PASSED by the role that produced the design, with --note: the design fits one coder pass; recorded on"+
+			" the task as a checkpoint waiver by this role, per design round, so a coordinator checkpoint before the"+
+			" next building role does not stop the task. Needs a one-line --note saying why; refused on REJECTED and"+
+			" by any other role; recorded but ignored where the board's architectCheckpointWaiver is off")
 	agentTaskShowCmd.Flags().StringVar(&taskShowSession, "session", "",
 		"Session reading the task: its sign-off acknowledges the shown documents. Without it, nothing is recorded")
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskOutputs, "outputs", nil,
