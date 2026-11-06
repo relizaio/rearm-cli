@@ -117,3 +117,34 @@ func TestTaskReadsSelectTheWaiverAndBoardReadsTheSwitch(t *testing.T) {
 		}
 	}
 }
+
+// TPF-156 T-108: the role reads and the task reads come from the pinned rearm-client-go, so this fails when the pin
+// predates the TPF-156 client-go PR (the runWhen condition and the roles routing passed over).
+func TestRoleReadsSelectRunWhen(t *testing.T) {
+	for name, op := range map[string]string{
+		"AgentTaskRoleConfigsProgrammatic":   rearm.AgentTaskRoleConfigsProgrammatic_Operation,
+		"AgentTaskRoleConfigSetProgrammatic": rearm.AgentTaskRoleConfigSetProgrammatic_Operation,
+		"ExportBoard":                        rearm.ExportBoard_Operation,
+	} {
+		if !strings.Contains(op, "runWhen {") {
+			t.Errorf("%s does not select runWhen; is rearm-client-go pinned at the TPF-156 PR or later?", name)
+		}
+	}
+}
+
+func TestTaskReadsSelectTheConditionSkips(t *testing.T) {
+	for name, op := range map[string]string{
+		"AgentTaskProgrammatic":          rearm.AgentTaskProgrammatic_Operation,
+		"AgentTasksByUuidProgrammatic":   rearm.AgentTasksByUuidProgrammatic_Operation,
+		"AgentTasksProgrammatic":         rearm.AgentTasksProgrammatic_Operation,
+		"AgentTaskNextProgrammatic":      rearm.AgentTaskNextProgrammatic_Operation,
+		"AgentTaskNextByPromptVersion":   rearm.AgentTaskNextByPromptVersion_Operation,
+		"AgentTaskAssignProgrammatic":    rearm.AgentTaskAssignProgrammatic_Operation,
+		"AgentTaskAuthorizeProgrammatic": rearm.AgentTaskAuthorizeProgrammatic_Operation,
+		"AgentTaskSignOffProgrammatic":   rearm.AgentTaskSignOffProgrammatic_Operation,
+	} {
+		if !strings.Contains(op, "rolesSkippedByCondition {") {
+			t.Errorf("%s does not select rolesSkippedByCondition; is rearm-client-go pinned at the TPF-156 PR or later?", name)
+		}
+	}
+}

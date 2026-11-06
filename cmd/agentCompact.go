@@ -94,6 +94,9 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 	status := str(t["status"])
 	role := str(t["role"])
 	first := fmt.Sprintf("%s %s, role %s", key, words(status), orElse(role, "none"))
+	if passed := liveSkipRoles(t); len(passed) > 0 {
+		first += ", passed over: " + strings.Join(passed, ", ")
+	}
 	if assignment != nil && str(assignment["promptVersion"]) != "" {
 		first += ", prompt " + str(assignment["promptVersion"])
 	}

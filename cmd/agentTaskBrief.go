@@ -393,6 +393,10 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	if r, _ := t["splitRequest"].(map[string]interface{}); r != nil {
 		out["splitRequest"] = r
 	}
+	// Kept in the read's own shape, so asList and liveSkipRoles read the copy as they read the task (TPF-156 F-2).
+	if l, _ := t["rolesSkippedByCondition"].([]interface{}); len(l) > 0 {
+		out["rolesSkippedByCondition"] = l
+	}
 	var pins []string
 	for _, in := range asList(t["requiredInputs"]) {
 		if r := str(in["release"]); r != "" {
@@ -593,6 +597,9 @@ func renderTaskBrief(b *taskBrief) string {
 	}
 	if r, ok := t["splitRequest"].(map[string]interface{}); ok {
 		fmt.Fprintf(&sb, "- %s\n", splitRequestLine(r))
+	}
+	for _, e := range asList(t["rolesSkippedByCondition"]) {
+		fmt.Fprintf(&sb, "- %s\n", conditionSkipLine(e))
 	}
 	if inv, ok := t["investigation"].(string); ok {
 		fmt.Fprintf(&sb, "- %s. Deliver a BOARD_INVESTIGATION_REPORT and no code: the brief is the description, the inputs are the pinned releases\n", inv)
