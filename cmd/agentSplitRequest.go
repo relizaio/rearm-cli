@@ -85,7 +85,8 @@ func readTaskForSplit(taskUuid string) (map[string]interface{}, error) {
 
 // proposalChildren maps the proposed children of a REQUESTED split request to the split's input (D10): the fields
 // copied when not null, the sibling indexes as read, a null group or tags left out so the child inherits the
-// parent's, each tag as {key, value}. ref names the task in the refusal when the read carries no key.
+// parent's, each tag as {key, value}; designFromParent only when the proposal set it (task TPF-163), so an
+// unflagged child is sent without it. ref names the task in the refusal when the read carries no key.
 func proposalChildren(task map[string]interface{}, ref string) ([]map[string]interface{}, error) {
 	r, _ := task["splitRequest"].(map[string]interface{})
 	var proposed []map[string]interface{}
@@ -100,7 +101,7 @@ func proposalChildren(task map[string]interface{}, ref string) ([]map[string]int
 	for _, p := range proposed {
 		child := map[string]interface{}{}
 		for _, field := range []string{"title", "description", "externalRef", "sourceUrl", "producesComponent",
-			"workLevel", "group", "dependsOnSiblingIndexes"} {
+			"workLevel", "group", "dependsOnSiblingIndexes", "designFromParent"} {
 			if v, ok := p[field]; ok && v != nil {
 				child[field] = v
 			}
@@ -115,6 +116,15 @@ func proposalChildren(task map[string]interface{}, ref string) ([]map[string]int
 		children = append(children, child)
 	}
 	return children, nil
+}
+
+// proposedTitle is a proposed child's title as the split request line prints it: a child flagged to build from
+// the parent's reviewed design is marked, so the seat sees what --from-request would carry (task TPF-163).
+func proposedTitle(c map[string]interface{}) string {
+	if c["designFromParent"] == true {
+		return str(c["title"]) + " [design from parent]"
+	}
+	return str(c["title"])
 }
 
 // splitRequestWaitLine is the compact line for a task AWAITING_COORDINATOR on a REQUESTED split request (D11);
@@ -147,7 +157,7 @@ func splitRequestLine(r map[string]interface{}) string {
 		line += ": " + str(r["description"])
 		var titles []string
 		for _, c := range asList(r["proposedChildren"]) {
-			titles = append(titles, str(c["title"]))
+			titles = append(titles, proposedTitle(c))
 		}
 		if len(titles) == 0 {
 			return line + "; proposes no children"

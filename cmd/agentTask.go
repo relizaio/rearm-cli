@@ -568,7 +568,7 @@ var agentTaskSignoffCmd = &cobra.Command{
 var agentTaskReturnCmd = &cobra.Command{
 	Use:   "return <task-uuid>",
 	Short: "Hand the task back to the coordinator with a reason",
-	Long:  `Reasons: TASK_UNCLEAR | ROLE_MISMATCH | MISSING_CAPABILITY | BLOCKED_ON_DEPENDENCY | NEEDS_HUMAN | SPLIT | OTHER. OTHER requires --description. SPLIT (requires --description, one line why; --children-json proposes the children) asks the coordinator to split the task: it splits it with task split --from-request or sends it on with task authorize --note, which task brief prints on your next hop.`,
+	Long:  `Reasons: TASK_UNCLEAR | ROLE_MISMATCH | MISSING_CAPABILITY | BLOCKED_ON_DEPENDENCY | NEEDS_HUMAN | SPLIT | OTHER. OTHER requires --description. SPLIT (requires --description, one line why; --children-json proposes the children; a proposed child may carry designFromParent: true as a suggestion that the parent's reviewed design covers it, and the seat decides) asks the coordinator to split the task: it splits it with task split --from-request or sends it on with task authorize --note, which task brief prints on your next hop.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		variables := map[string]interface{}{"taskUuid": args[0], "sessionUuid": taskSessionUuid, "reason": taskReturnReason}
@@ -794,13 +794,18 @@ var agentTaskSplitCmd = &cobra.Command{
 	Short: "Coordinator: split into PENDING_INTAKE children (authorize each separately)",
 	Long: `Splits a task into PENDING_INTAKE children, given as --children-json: a list of
 {"title", "description", "externalRef", "sourceUrl", "workLevel", "producesComponent",
-"dependsOnSiblingIndexes"}. Each title is one line of at most 120 characters;
-the rest goes in the child's description.
+"dependsOnSiblingIndexes", "designFromParent"}. Each title is one line of at most
+120 characters; the rest goes in the child's description.
+
+designFromParent (boolean, default false): build the child from the parent's
+reviewed design; it skips its design stage and goes to the build role.
 
 --from-request takes the children a role proposed when it returned the task
 with --reason SPLIT (task show prints them under splitRequest); the server
 reads the list sent, not the request, so pass your own --children-json to split
-differently.`,
+differently. A proposed child's designFromParent is copied with it (task brief
+marks such a title [design from parent]); leave it out of your own
+--children-json to drop it.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		children, err := splitChildren(args[0], taskChildrenJson, cmd.Flags().Changed("children-json"), taskSplitFromRequest, readTaskForSplit)
@@ -918,6 +923,7 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 		rememberSeenFromRead(taskShowSession, read)
 		printBaseMoved(read)
 		printWaiverLines(read)
+		printCarriedDesign(read)
 		printConditionSkips(read)
 	},
 }
