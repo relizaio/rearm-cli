@@ -116,6 +116,9 @@ func compactTask(t map[string]interface{}, assignment map[string]interface{}) st
 	if inv := investigationLine(t); inv != "" {
 		lines = append(lines, inv)
 	}
+	if carried := compactCarriedLine(t); carried != "" {
+		lines = append(lines, carried)
+	}
 	held, _ := t["assignment"].(map[string]interface{})
 	switch status {
 	case "QUEUED":

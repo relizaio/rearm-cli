@@ -44,6 +44,8 @@ type briefBoard struct {
 	// empty), and the operation names and variables of every request, in order.
 	byVersionStatus string
 	requests        []briefRequest
+	// The task the task read answers; briefTaskFixture() when nil.
+	task map[string]any
 }
 
 type briefRequest struct {
@@ -89,7 +91,11 @@ func (b *briefBoard) serve() *httptest.Server {
 		case strings.Contains(q, "AgentTasksByUuidProgrammatic"):
 			data["agentTasksByUuidProgrammatic"] = []any{map[string]any{"uuid": "t-0", "key": "RD-0", "title": "the base", "status": "COMPLETED"}}
 		case strings.Contains(q, "AgentTaskProgrammatic"):
-			data["agentTaskProgrammatic"] = briefTaskFixture()
+			if b.task != nil {
+				data["agentTaskProgrammatic"] = b.task
+			} else {
+				data["agentTaskProgrammatic"] = briefTaskFixture()
+			}
 		case strings.Contains(q, "AgentBoardProgrammatic"):
 			data["agentBoardProgrammatic"] = map[string]any{"uuid": "b-1", "documentsRoot": "boards/x/",
 				"documentsRepo": map[string]any{"uri": "github.com/acme/docs"},
