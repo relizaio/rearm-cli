@@ -117,6 +117,10 @@ type taskBrief struct {
 
 	// The board's architectCheckpointWaiver is off (task TPF-153): a waiver on the task is recorded but ignored.
 	ArchitectCheckpointWaiverOff bool `json:"architectCheckpointWaiverOff,omitempty"`
+
+	// The parent rounds a split child carries as its design (task TPF-163), and the parent's key.
+	CarriedFrom string              `json:"carriedFrom,omitempty"`
+	Carried     []briefCarriedRound `json:"carried,omitempty"`
 }
 
 type briefSection struct {
@@ -285,6 +289,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 	b.Task = briefTaskFields(task)
 	b.Dependencies = briefDependencies(task)
 	b.Documents = briefDocuments(task)
+	b.CarriedFrom, b.Carried = briefCarriedRounds(task)
 
 	bd, err := sendGraphQLRequest(rearm.AgentBoardProgrammatic_Operation, map[string]interface{}{"boardUuid": board})
 	if err != nil {
@@ -313,7 +318,7 @@ func buildTaskBrief(taskUuid, session, role string, inline bool) (*taskBrief, in
 		b.Notes = tailLines(b.NotesPath, briefNotesLines)
 	}
 	if inline {
-		b.Inline = briefInlineInputs(b.Documents, inputs, b.Repository.LocalPath)
+		b.Inline = briefInlineInputs(b.Documents, inputs, b.Repository.LocalPath, b.Carried, boundReleases(task, b.Role))
 	}
 	briefOrientation(b, briefSectionKeys(len(inputs) > 0, pushesCode, !orientationShown(session, "waiting")))
 	return b, task, nil
@@ -392,6 +397,9 @@ func briefTaskFields(t map[string]interface{}) map[string]any {
 	}
 	if r, _ := t["splitRequest"].(map[string]interface{}); r != nil {
 		out["splitRequest"] = r
+	}
+	if c, _ := t["carriedDesign"].(map[string]interface{}); c != nil {
+		out["carriedDesign"] = c
 	}
 	// Kept in the read's own shape, so asList and liveSkipRoles read the copy as they read the task (TPF-156 F-2).
 	if l, _ := t["rolesSkippedByCondition"].([]interface{}); len(l) > 0 {
@@ -488,33 +496,43 @@ func briefDocuments(t map[string]interface{}) []briefDocument {
 	return docs
 }
 
-// briefInlineInputs is the newest round of each input type the role reads, from the session's checkout.
-func briefInlineInputs(docs []briefDocument, inputs []string, local string) []briefInlined {
+// briefInlineInputs is the newest round of each input type the role reads, from the session's checkout; on a
+// split child, the carried round when the input is carried (task TPF-163, carriedInputFor).
+func briefInlineInputs(docs []briefDocument, inputs []string, local string, carried []briefCarriedRound,
+	bound map[string]string) []briefInlined {
 	var out []briefInlined
 	for _, spec := range inputs {
+		if c, ok := carriedInputFor(spec, docs, carried, bound); ok {
+			out = append(out, inlineFile(briefInlined{Specification: spec, Round: c.Round, Path: c.Path}, local))
+			continue
+		}
 		for _, d := range docs {
 			if d.Specification != spec || d.ReplacedBy != "" {
 				continue
 			}
-			in := briefInlined{Specification: spec, Round: d.Round, Path: d.Path}
-			switch {
-			case d.Path == "":
-				in.Missing = "the round has no file"
-			case local == "":
-				in.Missing = "no local checkout of the documents repository for this session"
-			default:
-				b, err := os.ReadFile(filepath.Join(local, d.Path))
-				if err != nil {
-					in.Missing = "not in the checkout: " + err.Error()
-				} else {
-					in.Content = string(b)
-				}
-			}
-			out = append(out, in)
+			out = append(out, inlineFile(briefInlined{Specification: spec, Round: d.Round, Path: d.Path}, local))
 			break
 		}
 	}
 	return out
+}
+
+// inlineFile reads one inlined round's file from the checkout, or says why it is not inlined.
+func inlineFile(in briefInlined, local string) briefInlined {
+	switch {
+	case in.Path == "":
+		in.Missing = "the round has no file"
+	case local == "":
+		in.Missing = "no local checkout of the documents repository for this session"
+	default:
+		b, err := os.ReadFile(filepath.Join(local, in.Path))
+		if err != nil {
+			in.Missing = "not in the checkout: " + err.Error()
+		} else {
+			in.Content = string(b)
+		}
+	}
+	return in
 }
 
 // tailLines is the last n lines of a file, or none when it does not exist.
@@ -607,6 +625,9 @@ func renderTaskBrief(b *taskBrief) string {
 	if pins, ok := t["pinnedInputs"].([]string); ok {
 		fmt.Fprintf(&sb, "- pinned inputs: %s\n", strings.Join(pins, ", "))
 	}
+	if c, ok := t["carriedDesign"].(map[string]interface{}); ok {
+		fmt.Fprintf(&sb, "- %s\n", carriedDesignLine(c))
+	}
 	if back, ok := t["reportsReturned"].([]string); ok {
 		fmt.Fprintf(&sb, "- reports returned: %s\n", strings.Join(back, "; "))
 	}
@@ -628,7 +649,7 @@ func renderTaskBrief(b *taskBrief) string {
 	}
 
 	sb.WriteString("\n## 3. Its documents\n\n")
-	if len(b.Documents) == 0 {
+	if len(b.Documents) == 0 && len(b.Carried) == 0 {
 		sb.WriteString("None yet.\n")
 	}
 	for _, d := range b.Documents {
@@ -650,6 +671,7 @@ func renderTaskBrief(b *taskBrief) string {
 		}
 		sb.WriteString("\n")
 	}
+	renderCarriedRounds(&sb, b.CarriedFrom, b.Carried, len(b.Documents) > 0)
 	for _, n := range b.NextRounds {
 		sb.WriteString(renderNextRound(n) + "\n")
 	}

@@ -261,7 +261,7 @@ func TestTheBriefMarksAReplacedVersionAndInlinesTheNewest(t *testing.T) {
 	if err := os.WriteFile(local+"/impl/RD-1/notes-2.md", []byte("corrected\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	in := briefInlineInputs(docs, []string{"DETAILED_DESIGN"}, local)
+	in := briefInlineInputs(docs, []string{"DETAILED_DESIGN"}, local, nil, nil)
 	if len(in) != 1 || in[0].Round != 2 || in[0].Content != "corrected\n" {
 		t.Errorf("inlined %+v", in)
 	}
