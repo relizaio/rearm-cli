@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.2
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/relizaio/rearm-client-go v0.10.0
+	github.com/relizaio/rearm-client-go v0.10.1-0.20261110182721-076a95ee27fd
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
