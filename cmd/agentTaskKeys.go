@@ -154,6 +154,7 @@ func init() {
 		boardsDecideCmd, boardsAnswerCmd, boardsReviewCmd, boardsSignoffCmd, boardsHoldCmd, boardsLiftholdCmd,
 		boardsRequireReviewCmd, boardsBudgetCmd, boardsStrengthCmd,
 		agentTaskWorkLevelCmd, agentTaskSetGroupCmd, agentTaskTagCmd, boardsTaskWorkLevelCmd, boardsSetGroupCmd, boardsTagCmd,
+		agentTaskConfirmAnswerCmd, boardsConfirmAnswerCmd,
 	} {
 		acceptTaskKeys(c, firstTaskArg, nil, nil)
 	}

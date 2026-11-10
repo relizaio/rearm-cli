@@ -53,6 +53,7 @@ func readJsonWorld(t *testing.T) {
 		supersedeSession, supersedeOld, supersedeBy = "", "", ""
 		unlinkSession, unlinkPr, unlinkNote = "", "", ""
 		unassignReason = ""
+		answerVerdict, answerNote = "", ""
 		taskTagsClear, taskGroupKey = false, ""
 	})
 }
@@ -138,6 +139,7 @@ func TestMutationsPrintCompactWithoutTheFlagAndJsonWithIt(t *testing.T) {
 		{agentTaskHoldCmd, append([]string{"t-1", "--reason", "legal"}, session...)},
 		{agentTaskLiftholdCmd, append([]string{"t-1"}, session...)},
 		{agentTaskEscalateCmd, append([]string{"t-1", "--reason", "decide"}, session...)},
+		{agentTaskConfirmAnswerCmd, append([]string{"t-1", "--verdict", "CONFIRMED"}, session...)},
 		{agentTaskRequireReviewCmd, append([]string{"t-1"}, session...)},
 		{agentTaskOrderCmd, append([]string{"t-1", "--order", "3"}, session...)},
 		{agentTaskWorkLevelCmd, append([]string{"t-1", "--work-level", "2"}, session...)},
