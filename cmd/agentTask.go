@@ -46,6 +46,7 @@ import (
 //   rearm agent task signoff <task-uuid> --session <uuid> --outcome PASSED|REJECTED [--note n] [--no-change] [--no-split] [--pr <url>]...
 //   rearm agent task return <task-uuid> --session <uuid> --reason <enum> [--description d]
 //   rearm agent task authorize <task-uuid> --session <uuid> --role <r> [--order N]
+//   rearm agent task confirm-answer <task-uuid> --session <uuid> --verdict CONFIRMED|REFUSED [--note n]
 //   rearm agent task order <task-uuid> --session <uuid> --order N
 //   rearm agent task split <task-uuid> --session <uuid> --children-json '[{"title":"..."}]'
 //   rearm agent task complete|cancel <task-uuid> --session <uuid> [--note n]
@@ -76,7 +77,8 @@ var (
 	// Task documents read by other means, added to what show and assign recorded (RD2-34).
 	taskSeen []string
 	// The pass's round changes nothing to build (RD4-13): after a review item about the signing role's own
-	// document, the task goes back to the filer instead of to the role that builds from the round.
+	// document, the task goes back to the filer instead of to the role that builds from the round; after a
+	// question, it stops at the coordinator for confirmation (TPF-171).
 	taskNoChange bool
 	// The design fits one coder pass (TPF-152 W1): a waiver of the coordinator's design checkpoint, per design round.
 	taskNoSplit      bool
@@ -925,6 +927,7 @@ request for all of them: reading tasks one by one spends the rate limit.`,
 		printWaiverLines(read)
 		printCarriedDesign(read)
 		printConditionSkips(read)
+		printAnswerConfirmations(read)
 	},
 }
 
@@ -1025,8 +1028,11 @@ func init() {
 	agentTaskSignoffCmd.PersistentFlags().StringSliceVar(&taskSeen, "seen", nil,
 		"Task documents read by other means than task show or assign; added to what they recorded")
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoChange, "no-change", false,
-		"On a PASSED that answers a review item about your own document: the new round changes nothing to build,"+
-			" so the task goes back to whoever filed the review item instead of to the role that builds from the round")
+		"On a PASSED that answers: your round changes nothing to build. Answering a review item about your own"+
+			" document, the task goes back to whoever filed it instead of to the role that builds from the round."+
+			" Answering a question, the task stops at the coordinator, who confirms it (earlier reviews stand; back to"+
+			" the asker unless another pass is stale, which is reviewed first) or refuses it (reviewed as a change);"+
+			" without the flag an answer is reviewed before the asker gets it")
 	agentTaskSignoffCmd.PersistentFlags().BoolVar(&taskNoCode, "no-code", false,
 		"On a PASSED: this round changed no code (a note-only round). Where CI registers the task's PRs, a pass by a"+
 			" role that pushes code is refused while no linked PR moved since the assignment; this says why none did")

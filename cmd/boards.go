@@ -35,6 +35,7 @@ import (
 //   rearm boards tasks <board> [--status S]
 //   rearm boards register <board> --title t [--external-ref r] [--source-url u] [--parent p] [--work-level n]
 //   rearm boards authorize <task> --role r [--order n] [--depends-on t]... [--work-level n]
+//   rearm boards confirm-answer <task> --verdict CONFIRMED|REFUSED [--note n]
 //   rearm boards order <task> --order n
 //   rearm boards complete <task> [--note n] [--skip-required-roles]
 //   rearm boards cancel <task> [--note n]
