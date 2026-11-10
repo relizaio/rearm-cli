@@ -680,6 +680,8 @@ the hold with a note, or by anything else they do on the task (answering its que
 declaration, a supersede, a complete, a reopen, a cancel, a new order or work level); either is recorded
 as the answer, reading "<action> by <person>: <note>", and the task returns to the state it was
 parked from, so a DELIVERING task goes on delivering, before the action moves it on if it does.
+A delivery that needs a role's work again (its PR no longer merges) is not parked: it is reopened
+to that role with task reopen --role --reason.
 Until then every task verb a session runs on it is refused (declare-delivery, --abandoned, supersedepr,
 unlinkpr, complete, reopen, cancel, order, work-level and the rest), except task linkpr, which is accepted,
 recorded on the decision and posted as an INFO; it does not answer the question (task RD4-19).
@@ -849,10 +851,15 @@ var agentTaskCancelCmd = &cobra.Command{
 
 var agentTaskReopenCmd = &cobra.Command{
 	Use:   "reopen <task-uuid>",
-	Short: "Coordinator: send a COMPLETED task back to a role, with a reason (e.g. its PR no longer merges)",
-	Long: `Sends a COMPLETED task back to an active role. The role's earlier passes stop counting,
+	Short: "Coordinator: send a COMPLETED or DELIVERING task back to a role, with a reason (e.g. its PR no longer merges)",
+	Long: `Sends a COMPLETED or DELIVERING task back to an active role. The role's earlier passes stop counting,
 and whoever read its part re-runs once the redone hop republishes. A cancelled task is not
-reopened; register a new one. A round the budget does not cover holds for an operator.`,
+reopened; register a new one. A round the budget does not cover holds for an operator.
+
+A DELIVERING task whose PR no longer merges, typically because the base moved, is reopened to the
+role that redoes the work, not parked: a park for the operator returns the task to DELIVERING when
+it is answered. A task the seat parked for the operator is not reopened by the seat; a person's
+reopen answers the park.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runGqlCompact(rearm.AgentTaskReopenProgrammatic_Operation,
@@ -986,7 +993,7 @@ func init() {
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleDistinct, "require-distinct-agent", false, "Assigned agent must differ from the last sign-off's agent")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleInactive, "inactive", false, "Deactivate the role")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleCheckpoint, "coordinator-checkpoint", false, "Operator-only: before this role is queued on a task's reviewed design the task stops at the coordinator (design checkpoint; one role per board). The seat's roleconfig set is refused with the operator-only message, true or false: a person sets or clears it in the board file (coordinatorCheckpoint: true|false) applied with rearm agent board apply under a personal key, or in the UI")
-	agentBoardRoleconfigSetCmd.PersistentFlags().StringSliceVar(&roleRunWhenAny, "run-when-tagged-any", nil, "Routing queues this OPTIONAL role only on a task carrying any of these tag keys (comma-separated or repeated); with --run-when-tagged-none, both must hold. Sent as the whole condition with --run-when-tagged-none, so give both lists together: a list left out is sent empty. The server lower-cases the keys and refuses a REQUIRED role, the role carrying the coordinator checkpoint, a key that is not a tag key, a key in both lists, or more than 20 keys. To run the role on a task anyway, name it with the verb the task's state admits: task hold then task lifthold --role while QUEUED, task authorize --role while AWAITING_COORDINATOR, task reopen --role --reason once COMPLETED")
+	agentBoardRoleconfigSetCmd.PersistentFlags().StringSliceVar(&roleRunWhenAny, "run-when-tagged-any", nil, "Routing queues this OPTIONAL role only on a task carrying any of these tag keys (comma-separated or repeated); with --run-when-tagged-none, both must hold. Sent as the whole condition with --run-when-tagged-none, so give both lists together: a list left out is sent empty. The server lower-cases the keys and refuses a REQUIRED role, the role carrying the coordinator checkpoint, a key that is not a tag key, a key in both lists, or more than 20 keys. To run the role on a task anyway, name it with the verb the task's state admits: task hold then task lifthold --role while QUEUED, task authorize --role while AWAITING_COORDINATOR, task reopen --role --reason once COMPLETED or DELIVERING")
 	agentBoardRoleconfigSetCmd.PersistentFlags().StringSliceVar(&roleRunWhenNone, "run-when-tagged-none", nil, "Routing passes this OPTIONAL role over on a task carrying any of these tag keys (comma-separated or repeated); with --run-when-tagged-any, both must hold. Sent as the whole condition with --run-when-tagged-any, so give both lists together: a list left out is sent empty")
 	agentBoardRoleconfigSetCmd.PersistentFlags().BoolVar(&roleRunWhenClear, "run-when-clear", false, "Clear the role's runWhen condition: the role runs on every task again. Alone, without --run-when-tagged-any or --run-when-tagged-none")
 	_ = agentBoardRoleconfigSetCmd.MarkPersistentFlagRequired("session")
