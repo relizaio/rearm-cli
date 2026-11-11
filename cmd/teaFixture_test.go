@@ -66,7 +66,8 @@ type teaFixture struct {
 	requireBearer string                                     // when set, every path under /tea/ but the token endpoint needs it
 	tokenKeyID    string                                     // the API key the token endpoint accepts
 	tokenSecret   string
-	tokenIssued   string // the token it issues
+	tokenIssued   string                      // the token it issues
+	raw           map[string]http.HandlerFunc // full path -> a handler that writes itself (streams, stalls, headers)
 }
 
 // teaNet is the dialer of one test: DNS name and port -> fixture listener.
@@ -149,6 +150,17 @@ func (f *teaFixture) routeFunc(path string, fn func(*http.Request) teaAnswer) {
 	f.routes[path] = fn
 }
 
+// handle routes path to a handler that writes the whole answer itself: a streamed, stalled,
+// encoded or binary body, or extra headers.
+func (f *teaFixture) handle(path string, h http.HandlerFunc) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.raw == nil {
+		f.raw = map[string]http.HandlerFunc{}
+	}
+	f.raw[path] = h
+}
+
 func (f *teaFixture) requests() []teaRecorded {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -174,6 +186,7 @@ func (f *teaFixture) serve(w http.ResponseWriter, r *http.Request) {
 		authorization: r.Header.Get("Authorization"), body: string(body),
 	})
 	fn, ok := f.routes[r.URL.Path]
+	rawFn, rawOK := f.raw[r.URL.Path]
 	need := f.requireBearer
 	keyID, secret, issued := f.tokenKeyID, f.tokenSecret, f.tokenIssued
 	f.mu.Unlock()
@@ -194,6 +207,10 @@ func (f *teaFixture) serve(w http.ResponseWriter, r *http.Request) {
 		r.Header.Get("Authorization") != "Bearer "+need {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="tea"`)
 		writeTeaAnswer(w, teaAnswer{status: http.StatusUnauthorized})
+		return
+	}
+	if rawOK {
+		rawFn(w, r)
 		return
 	}
 	if !ok {

@@ -134,6 +134,10 @@ const (
 	teaExitRefusedURL  teaExit = 5
 	teaExitAuth        teaExit = 6
 	teaExitPartial     teaExit = 7
+	// 8, 9 and 10 are returned by the machine mode only (teaMachine.go).
+	teaExitAddressRefused teaExit = 8
+	teaExitLimit          teaExit = 9
+	teaExitConnect        teaExit = 10
 )
 
 // teaStdin says whether standard input is a terminal.
@@ -177,8 +181,9 @@ type teaIO struct {
 	stdin       teaStdin
 	readSecret  func(prompt string) (string, error) // no-echo read on a terminal
 	getenv      func(string) (string, bool)
-	httpClient  *http.Client // nil: the library's default transport
+	httpClient  *http.Client // nil: the library's default transport; the machine mode ignores it
 	extra       []tea.Option // appended last; tests shorten the discovery backoff here
+	machine     *teaNetSeam  // nil in production: what lies under the machine mode's guard
 }
 
 // teaInputs are the flag values of one run.
@@ -285,14 +290,16 @@ type teaBearer struct {
 
 // teaClientConfig is the one input of newTeaClient.
 type teaClientConfig struct {
-	domain     string // the TEI's domain, for the well-known override
-	useHTTP    bool
-	usePort    int
-	portSet    bool
-	bearer     *teaBearer // nil: anonymous
-	trace      func(tea.TraceEvent)
-	httpClient *http.Client
-	extra      []tea.Option
+	domain       string // the TEI's domain, for the well-known override
+	useHTTP      bool
+	usePort      int
+	portSet      bool
+	insecureBase string // the one plain-http API root of a machine verb, "" for none
+	limits       *tea.Limits
+	bearer       *teaBearer // nil: anonymous
+	trace        func(tea.TraceEvent)
+	httpClient   *http.Client
+	extra        []tea.Option
 }
 
 // teaHTTPOrigin is the one plain-http origin the flags allow, "" without --usehttp.
@@ -318,6 +325,12 @@ func newTeaClient(cfg teaClientConfig) (*tea.Client, error) {
 	case cfg.portSet:
 		opts = append(opts, tea.WithWellKnownLocation(d, "https://"+d+":"+strconv.Itoa(cfg.usePort)))
 	}
+	if cfg.insecureBase != "" {
+		opts = append(opts, tea.WithInsecureHTTPBase(cfg.insecureBase))
+	}
+	if cfg.limits != nil {
+		opts = append(opts, tea.WithLimits(*cfg.limits))
+	}
 	if cfg.bearer != nil {
 		opts = append(opts, tea.WithBearerToken(cfg.bearer.root, cfg.bearer.token))
 	}
@@ -337,12 +350,16 @@ type teaRun struct {
 	in          teaInputs
 	cred        teaCredential
 	lastRefusal string // URL of the last response answered 401 or 403
+	lastRequest string // URL of the last request sent (redacted by the library)
 }
 
 // trace is the WithTrace observer of every client of the run: it remembers the last
 // refused URL for the error line and, with --debug, prints each event on stderr. An event
 // carries scheme, host, port and path only, never a header, query string or credential.
 func (r *teaRun) trace(ev tea.TraceEvent) {
+	if ev.Kind == tea.TraceRequest {
+		r.lastRequest = ev.URL
+	}
 	if ev.Kind == tea.TraceResponse && (ev.Status == http.StatusUnauthorized || ev.Status == http.StatusForbidden) {
 		r.lastRefusal = ev.URL
 	}
@@ -392,30 +409,42 @@ func (r *teaRun) prepare(ctx context.Context) (*tea.Client, tei.TEI, error) {
 	if r.in.portSet && (r.in.usePort < 1 || r.in.usePort > 65535) {
 		return nil, tei.TEI{}, teaUsage("invalid --useport %d: a port is 1 to 65535", r.in.usePort)
 	}
-	cred, err := resolveTeaCredential(r.tio, r.in)
+	c, err := r.credentialClient(ctx, r.clientConfig(t))
 	if err != nil {
 		return nil, tei.TEI{}, err
 	}
+	return c, t, nil
+}
+
+// credentialClient resolves the credential of the run (environment, or standard input with
+// --credential-stdin), exchanges an API key for a token once, and builds the client of the
+// run from cfg. It is the credential part of prepare, shared by the interactive verbs and
+// the machine mode. Every failure is a usage error (exit 2), except a token exchange the
+// server refused (exit 6) or could not answer.
+func (r *teaRun) credentialClient(ctx context.Context, cfg teaClientConfig) (*tea.Client, error) {
+	cred, err := resolveTeaCredential(r.tio, r.in)
+	if err != nil {
+		return nil, err
+	}
 	r.cred = cred
 
-	cfg := r.clientConfig(t)
 	anon, err := newTeaClient(cfg)
 	if err != nil {
-		return nil, tei.TEI{}, &teaUsageError{msg: "invalid TEA client option: " + err.Error(), err: err}
+		return nil, &teaUsageError{msg: "invalid TEA client option: " + err.Error(), err: err}
 	}
 	if cred.kind == teaCredentialNone {
 		if r.in.debug {
 			fmt.Fprintln(r.tio.errOut, "TEA credential: none")
 		}
-		return anon, t, nil
+		return anon, nil
 	}
 	base, err := tea.ParseAPIBase(cred.root, teaAPIVersion)
 	if err != nil {
-		return nil, tei.TEI{}, &teaUsageError{msg: teaEnvAuthRoot + " is not a TEA API root: an absolute https (or allowed http) URL without query, fragment or trailing slash", err: err}
+		return nil, &teaUsageError{msg: teaEnvAuthRoot + " is not a TEA API root: an absolute https (or allowed http) URL without query, fragment or trailing slash", err: err}
 	}
 	api, err := anon.API(base)
 	if err != nil {
-		return nil, tei.TEI{}, &teaUsageError{msg: teaEnvAuthRoot + " is plain http outside the origin --usehttp and --useport allow; plain http is for a local server only", err: err}
+		return nil, &teaUsageError{msg: teaEnvAuthRoot + " is plain http outside the origin --usehttp and --useport allow; plain http is for a local server only", err: err}
 	}
 	if r.in.debug {
 		fmt.Fprintf(r.tio.errOut, "TEA credential: %s for %s\n", cred.label(), teaText(cred.root))
@@ -424,15 +453,15 @@ func (r *teaRun) prepare(ctx context.Context) (*tea.Client, tei.TEI, error) {
 	if cred.kind == teaCredentialAPIKey {
 		token, err = r.exchange(ctx, api)
 		if err != nil {
-			return nil, tei.TEI{}, err
+			return nil, err
 		}
 	}
 	cfg.bearer = &teaBearer{root: cred.root, token: token}
 	c, err := newTeaClient(cfg)
 	if err != nil {
-		return nil, tei.TEI{}, &teaUsageError{msg: "invalid TEA client option for " + teaEnvAuthRoot, err: err}
+		return nil, &teaUsageError{msg: "invalid TEA client option for " + teaEnvAuthRoot, err: err}
 	}
-	return c, t, nil
+	return c, nil
 }
 
 // exchange requests a token for the API key, once, before the first request: one POST to
