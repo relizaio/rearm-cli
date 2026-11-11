@@ -1125,7 +1125,7 @@ func TestTeaLibraryPin(t *testing.T) { // T-34
 	pinned := false
 	for _, l := range strings.Split(string(b), "\n") {
 		f := strings.Fields(l)
-		if len(f) >= 2 && f[0] == "github.com/oolong-project/tea-client-go" && f[1] == "v0.0.0" && len(f) == 2 {
+		if len(f) >= 2 && f[0] == "github.com/oolong-project/tea-client-go" && f[1] == "v0.1.0" && len(f) == 2 {
 			pinned = true
 		}
 		if strings.HasPrefix(strings.TrimSpace(l), "replace") && strings.Contains(l, "tea-client-go") {
@@ -1133,7 +1133,7 @@ func TestTeaLibraryPin(t *testing.T) { // T-34
 		}
 	}
 	if !pinned {
-		t.Error("go.mod does not require github.com/oolong-project/tea-client-go v0.0.0 directly")
+		t.Error("go.mod does not require github.com/oolong-project/tea-client-go v0.1.0 directly")
 	}
 	if strings.Contains(string(b), "replace (") {
 		t.Error("go.mod has a replace block")

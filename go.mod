@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.2
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/oolong-project/tea-client-go v0.0.0
+	github.com/oolong-project/tea-client-go v0.1.0
 	github.com/relizaio/rearm-client-go v0.11.0
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2

@@ -62,8 +62,8 @@ github.com/oapi-codegen/nullable v1.1.0 h1:eAh8JVc5430VtYVnq00Hrbpag9PFRGWLjxR1/
 github.com/oapi-codegen/nullable v1.1.0/go.mod h1:KUZ3vUzkmEKY90ksAmit2+5juDIhIZhfDl+0PwOQlFY=
 github.com/oapi-codegen/runtime v1.8.0 h1:RJzEgQSJQADEPaG1cYuSCKYai/cCVRE2xnkrqhJs/3c=
 github.com/oapi-codegen/runtime v1.8.0/go.mod h1:GwV7hC2hviaMzj+ITfHVRESK5J2W/GefVwIND/bMGvU=
-github.com/oolong-project/tea-client-go v0.0.0 h1:pUNdFg9nILpcW17b2I64ZP7y1v+PcZ1GVD6zs34IsP0=
-github.com/oolong-project/tea-client-go v0.0.0/go.mod h1:ap0aB2s/q11kQVIxbWUAVfJcrz1nyBtMAQmDP4DgnBU=
+github.com/oolong-project/tea-client-go v0.1.0 h1:/IQN43C4hGg+t8o5scL2APcDGu6GGdOKsAszc7iPSjY=
+github.com/oolong-project/tea-client-go v0.1.0/go.mod h1:ap0aB2s/q11kQVIxbWUAVfJcrz1nyBtMAQmDP4DgnBU=
 github.com/package-url/packageurl-go v0.1.6 h1:YO3p6u1XmCUliivUg/qWphaY8vI6hxSnnPv7Bfg3m5M=
 github.com/package-url/packageurl-go v0.1.6/go.mod h1:nKAWB8E6uk1MHqiS/lQb9pYBGH2+mdJ2PJc2s50dQY0=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
