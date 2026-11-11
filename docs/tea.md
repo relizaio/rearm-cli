@@ -435,7 +435,7 @@ Code 4 is never returned: several results are data. `reason` is an open enumerat
 {"formatVersion":1,"kind":"TEA_ERROR","exitCode":8,"reason":"ADDRESS_REFUSED","message":"refused to connect to 127.0.0.1 (loopback) for https://tea.example.com/tea/v1.0.0/product/11111111-1111-4111-8111-111111111111","url":"https://tea.example.com/tea/v1.0.0/product/11111111-1111-4111-8111-111111111111","httpStatus":null,"address":"127.0.0.1","addressClass":"LOOPBACK","phase":null,"hint":"this host is refused as a target by default; --allow-this-host lifts it for local testing","ignoredProxyVariables":[]}
 ```
 
-- `message` is printable and at most 2048 characters; `url` is the failing request without query or user name; `httpStatus` the status of an HTTP error.
+- `message` is printable and at most 2048 characters; `url` is the failing request without query or user name (for `ADDRESS_REFUSED`, the refused hop of a redirect chain, not its first request); `httpStatus` the status of an HTTP error.
 - `address` and `addressClass` for `ADDRESS_REFUSED`; `phase` (`RESOLVE` or `CONNECT`) for `CONNECT_FAILED`.
 - `CONNECT_FAILED` covers name resolution failures, refused and unreachable connections and connect timeouts alike: a connection blocked by a network policy looks like either. Its `hint` is always `the connection could not be made; the network policy of the deployment may block this address`, and `ignoredProxyVariables` names the proxy variables that are set and were not used.
 - The object never carries a credential, a key id, a query string or a response body.

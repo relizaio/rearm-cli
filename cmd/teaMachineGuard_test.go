@@ -127,8 +127,17 @@ func TestTeaMachineRefusedRedirect(t *testing.T) { // T-39
 		if c.resolves != "" {
 			r.m.resolveTo(c.host, c.resolves)
 		}
-		f.route(f.api("/product/"+teaProduct), teaAnswer{status: http.StatusFound, location: "https://" + c.host + ":" + victim.port + "/x"})
+		hop := "https://" + c.host + ":" + victim.port + "/x"
+		f.route(f.api("/product/"+teaProduct), teaAnswer{status: http.StatusFound, location: hop + "?q=1"})
 		r.wantRefused(r.exec(teaVerbProduct, "--api-root", f.root, "--uuid", teaProduct), c.addr, c.class)
+		// the error names the refused hop, not the first request (T-3 of test run 2)
+		e := r.errObj()
+		if e["url"] != hop {
+			t.Errorf("%s: url %v, want %s", c.host, e["url"], hop)
+		}
+		if msg, _ := e["message"].(string); !strings.HasSuffix(msg, " for "+hop) || strings.Contains(msg, f.root) {
+			t.Errorf("%s: message %q does not name the hop %s", c.host, msg, hop)
+		}
 		if n := len(f.requests()); n != 1 {
 			t.Errorf("%s: the first server received %d requests", c.host, n)
 		}
@@ -181,6 +190,11 @@ func TestTeaMachineRefusedArtifactURL(t *testing.T) { // T-41
 	d.r.want(d.run(), teaExitPartial)
 	doc := d.r.doc()
 	d.wantRow(doc, 0, "VERIFIED", nil)
+	// the server download redirected to a refused address: the row names the hop
+	hop := "https://127.0.0.1:" + victim.port + "/x"
+	if msg, _ := d.row(doc, len(targets), "message").(string); !strings.HasSuffix(msg, " for "+hop) {
+		t.Errorf("the redirected row's message %q does not name the hop %s", msg, hop)
+	}
 	for i, want := range targets {
 		d.wantRow(doc, i+1, "FAILED", "ADDRESS_REFUSED")
 		if got := fmt.Sprint(d.row(doc, i+1, "address"), " ", d.row(doc, i+1, "addressClass")); got != want {

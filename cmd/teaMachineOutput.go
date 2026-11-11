@@ -302,6 +302,9 @@ func teaErrorURL(err error, reason teaReason, lastRequest string) *string {
 	if errors.As(err, &pe) {
 		return teaRedactURL(pe.URL)
 	}
+	if u := teaRefusedHopURL(err, lastRequest); u != nil {
+		return u
+	}
 	var ue *url.Error
 	if errors.As(err, &ue) {
 		return teaRedactURL(ue.URL)
@@ -309,6 +312,22 @@ func teaErrorURL(err error, reason teaReason, lastRequest string) *string {
 	switch reason {
 	case teaReasonUsage, teaReasonStringBytes, teaReasonOutputBytes, teaReasonFileCount,
 		teaReasonLocalIO, teaReasonInterrupted, teaReasonDeadline:
+		return nil
+	}
+	return teaRedactURL(lastRequest)
+}
+
+// teaRefusedHopURL is the redacted URL of the request the guard refused. The library
+// reports an error of a redirect chain with the URL of the chain's first request, so for
+// a refusal the URL comes from the trace: the last request sent is the hop whose
+// connection was refused, taken only when its host is the host the guard refused.
+func teaRefusedHopURL(err error, lastRequest string) *string {
+	var refused *teaAddressRefusedError
+	if !errors.As(err, &refused) || lastRequest == "" {
+		return nil
+	}
+	u, perr := url.Parse(lastRequest)
+	if perr != nil || !strings.EqualFold(u.Hostname(), refused.Host) {
 		return nil
 	}
 	return teaRedactURL(lastRequest)
