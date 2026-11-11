@@ -54,6 +54,7 @@ In API-key mode the CLI keeps the exchanged access token in `~/.rearm.env.tokens
     3. [Authentication](docs/tea.md#113-authentication)
     4. [Exit codes](docs/tea.md#114-exit-codes)
     5. [Changes from earlier versions](docs/tea.md#115-changes-from-earlier-versions)
+    6. [Machine mode](docs/tea.md#116-machine-mode)
 12. [Oolong TEA Server Content Management Commands](docs/oolong.md)
     1. [Add Product](docs/oolong.md#121-add-product)
     2. [Add Component](docs/oolong.md#122-add-component)
