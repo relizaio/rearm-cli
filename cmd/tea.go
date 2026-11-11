@@ -1,7 +1,7 @@
 /*
 The MIT License (MIT)
 
-Copyright (c) 2020 - 2025 Reliza Incorporated (Reliza (tm), https://reliza.io)
+Copyright (c) 2020 - 2026 Reliza Incorporated (Reliza (tm), https://reliza.io)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
 to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
@@ -18,981 +18,724 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 package cmd
 
 import (
-	"bufio"
-	"crypto/tls"
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
+	"os/signal"
+	"strconv"
 	"strings"
-	"time"
 
+	tea "github.com/oolong-project/tea-client-go"
+	"github.com/oolong-project/tea-client-go/tei"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
+
+// The TEA commands are a client of the Transparency Exchange API 1.0.0, built on
+// github.com/oolong-project/tea-client-go: everything on the wire (TEI parsing, the
+// well-known document, endpoint and server selection, discovery, the typed API calls,
+// the URL policy and the credential rules) is the library's. What stays here is the
+// command line: flags, credentials from the environment or standard input, the choice
+// among several discovery results, printing (teaOutput.go) and exit codes.
 
 // teaCmd represents the tea command
 var teaCmd = &cobra.Command{
 	Use:   "tea",
 	Short: "Transparency Exchange API commands",
-	Long:  `Commands for interacting with Transparency Exchange API (TEA) endpoints.`,
+	Long: `Commands for reading a Transparency Exchange API (TEA) 1.0.0 server: resolve a
+Transparency Exchange Identifier (TEI) and read the product release it names.`,
 }
 
-var tei string
-var useHttp bool
-var usePort int
+// The flag values of both commands. teaTeiFlag is not called tei: a package-level tei
+// would collide with the import of package tei.
+var teaTeiFlag string
+var teaUseHTTPFlag bool
+var teaUsePortFlag int
+var teaCredentialStdinFlag bool
+
+const teaCommandsHelp = `
+A TEI has the form tei://<domain>/<type>/<id>, for example
+  tei://demo.rearmhq.com/uuid/b9f115fb-6688-4a3f-a262-3acc04e1fc9e
+The legacy urn:tei: form is not accepted.
+
+Plain http is used only with --usehttp, and only on the origin http://<domain>[:<useport>].
+
+Credentials for a server that requires them come from the environment or standard input,
+never from a flag value: REARM_TEA_AUTH_ROOT with REARM_TEA_TOKEN, or with
+REARM_TEA_APIKEYID and REARM_TEA_APIKEY; --credential-stdin reads the token (or the key
+secret) from standard input. The ReARM API key is never sent to a TEA server.
+
+Exit codes: 0 success, 1 failure, 2 usage, 3 not resolved, 4 several product releases
+and none chosen, 5 refused by the URL policy, 6 authentication, 7 a component could not
+be read.`
 
 // discoveryCmd represents the discovery command
 var discoveryCmd = &cobra.Command{
 	Use:   "discovery",
 	Short: "Discover product release UUID from TEI",
-	Long: `Resolves a Transparency Exchange Identifier (TEI) to a product release UUID.
-	
-The command follows the TEA discovery flow:
-1. Parse the TEI to extract the domain name
-2. Resolve DNS records for the domain
-3. Query the .well-known/tea endpoint
-4. Call the discovery API endpoint with the TEI
-5. Return the product release UUID
-
-Example TEI formats:
-  urn:tei:uuid:products.example.com:d4d9f54a-abcf-11ee-ac79-1a52914d44b
-  urn:tei:purl:cyclonedx.org:pkg:pypi/cyclonedx-python-lib@8.4.0
-  urn:tei:hash:localhost:SHA256:fd44efd601f651c8865acf0dfeacb0df19a2b50ec69ead0262096fd2f67197b9`,
+	Long: `Resolves a Transparency Exchange Identifier (TEI) to a product release UUID with TEA 1.0.0
+discovery: the well-known document of the TEI's domain, then the discovery endpoint it names.
+Prints the product release UUID. When the TEI resolves to several product releases, the
+command lists them on stderr and asks which one to print (only when standard input is a
+terminal).
+` + teaCommandsHelp,
 	Run: func(cmd *cobra.Command, args []string) {
-		if debug == "true" {
-			fmt.Println("Resolving TEI:", tei)
-		}
-
-		productReleaseUuid, err := resolveTEI(tei)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Failed to retrieve product release UUID: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Println(productReleaseUuid)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		code := runTeaDiscovery(ctx, systemTeaIO(), teaInputsFromFlags(cmd))
+		stop()
+		os.Exit(int(code))
 	},
-}
-
-// TEAWellKnownEndpoint represents the structure of the .well-known/tea endpoint response
-type TEAWellKnownEndpoint struct {
-	URL      string   `json:"url"`
-	Versions []string `json:"versions"`
-	Priority *float64 `json:"priority,omitempty"` // Pointer to distinguish between 0 and unset
-}
-
-// TEAWellKnownResponse represents the structure of the .well-known/tea response
-type TEAWellKnownResponse struct {
-	SchemaVersion int                    `json:"schemaVersion"`
-	Endpoints     []TEAWellKnownEndpoint `json:"endpoints"`
-}
-
-// TEADiscoveryResponse represents the structure of the discovery API response (array of discovery info)
-type TEADiscoveryResponse []TEADiscoveryInfo
-
-// TEADiscoveryInfo represents a single discovery result
-type TEADiscoveryInfo struct {
-	ProductReleaseUuid string          `json:"productReleaseUuid"`
-	Servers            []TEAServerInfo `json:"servers"`
-}
-
-// TEAServerInfo represents TEA server information
-type TEAServerInfo struct {
-	RootURL  string   `json:"rootUrl"`
-	Versions []string `json:"versions"`
-	Priority *float64 `json:"priority,omitempty"`
-}
-
-// TEA API response structures
-
-type TEAIdentifier struct {
-	IdType  string `json:"idType"`
-	IdValue string `json:"idValue"`
-}
-
-type TEAChecksum struct {
-	AlgType  string `json:"algType"`
-	AlgValue string `json:"algValue"`
-}
-
-type TEAReleaseDistribution struct {
-	DistributionId string          `json:"distributionId"`
-	Description    string          `json:"description,omitempty"`
-	Identifiers    []TEAIdentifier `json:"identifiers,omitempty"`
-	URL            string          `json:"url,omitempty"`
-	SignatureURL   string          `json:"signatureUrl,omitempty"`
-	Checksums      []TEAChecksum   `json:"checksums,omitempty"`
-}
-
-type TEAProductRelease struct {
-	UUID        string            `json:"uuid"`
-	Product     string            `json:"product,omitempty"`
-	ProductName string            `json:"productName,omitempty"`
-	Version     string            `json:"version"`
-	CreatedDate string            `json:"createdDate,omitempty"`
-	ReleaseDate string            `json:"releaseDate,omitempty"`
-	PreRelease  bool              `json:"preRelease,omitempty"`
-	Identifiers []TEAIdentifier   `json:"identifiers,omitempty"`
-	Components  []TEAComponentRef `json:"components"`
-}
-
-type TEAComponentRef struct {
-	UUID    string  `json:"uuid"`
-	Release *string `json:"release,omitempty"`
-}
-
-type TEAComponent struct {
-	UUID        string          `json:"uuid"`
-	Name        string          `json:"name"`
-	Identifiers []TEAIdentifier `json:"identifiers,omitempty"`
-}
-
-type TEAComponentRelease struct {
-	Release          TEAReleaseInfo `json:"release"`
-	LatestCollection *TEACollection `json:"latestCollection,omitempty"`
-}
-
-type TEAReleaseInfo struct {
-	UUID          string                   `json:"uuid"`
-	Component     string                   `json:"component,omitempty"`
-	ComponentName string                   `json:"componentName,omitempty"`
-	Version       string                   `json:"version"`
-	CreatedDate   string                   `json:"createdDate,omitempty"`
-	ReleaseDate   string                   `json:"releaseDate,omitempty"`
-	PreRelease    bool                     `json:"preRelease,omitempty"`
-	Identifiers   []TEAIdentifier          `json:"identifiers,omitempty"`
-	Distributions []TEAReleaseDistribution `json:"distributions,omitempty"`
-}
-
-type TEARelease struct {
-	UUID string `json:"uuid"`
-}
-
-// CLE (Common Lifecycle Enumeration) types
-
-type TEACLEVersionSpecifier struct {
-	Version string `json:"version,omitempty"`
-	Range   string `json:"range,omitempty"`
-}
-
-type TEACLEEvent struct {
-	Id                  int                      `json:"id"`
-	Type                string                   `json:"type"`
-	Effective           string                   `json:"effective"`
-	Published           string                   `json:"published"`
-	Version             string                   `json:"version,omitempty"`
-	Versions            []TEACLEVersionSpecifier `json:"versions,omitempty"`
-	SupportId           string                   `json:"supportId,omitempty"`
-	License             string                   `json:"license,omitempty"`
-	SupersededByVersion string                   `json:"supersededByVersion,omitempty"`
-	Identifiers         []TEAIdentifier          `json:"identifiers,omitempty"`
-	EventId             *int                     `json:"eventId,omitempty"`
-	Reason              string                   `json:"reason,omitempty"`
-	Description         string                   `json:"description,omitempty"`
-	References          []string                 `json:"references,omitempty"`
-}
-
-type TEACLESupportDefinition struct {
-	Id          string `json:"id"`
-	Description string `json:"description"`
-	URL         string `json:"url,omitempty"`
-}
-
-type TEACLEDefinitions struct {
-	Support []TEACLESupportDefinition `json:"support,omitempty"`
-}
-
-type TEACLE struct {
-	Events      []TEACLEEvent      `json:"events"`
-	Definitions *TEACLEDefinitions `json:"definitions,omitempty"`
-}
-
-type TEACollectionUpdateReason struct {
-	Type    string `json:"type"`
-	Comment string `json:"comment,omitempty"`
-}
-
-type TEACollection struct {
-	UUID         string                     `json:"uuid,omitempty"`
-	Version      int                        `json:"version,omitempty"`
-	Date         string                     `json:"date,omitempty"`
-	BelongsTo    string                     `json:"belongsTo,omitempty"`
-	UpdateReason *TEACollectionUpdateReason `json:"updateReason,omitempty"`
-	Artifacts    []TEAArtifact              `json:"artifacts"`
-}
-
-type TEAArtifact struct {
-	UUID            string              `json:"uuid"`
-	Version         int                 `json:"version,omitempty"`
-	Name            string              `json:"name,omitempty"`
-	Type            string              `json:"type"`
-	CreatedDate     string              `json:"createdDate,omitempty"`
-	DistributionIds []string            `json:"distributionIds,omitempty"`
-	Formats         []TEAArtifactFormat `json:"formats"`
-}
-
-type TEAArtifactFormat struct {
-	MediaType    string        `json:"mediaType"`
-	Description  string        `json:"description,omitempty"`
-	URL          string        `json:"url,omitempty"`
-	SignatureURL string        `json:"signatureUrl,omitempty"`
-	Checksums    []TEAChecksum `json:"checksums,omitempty"`
 }
 
 // fullTeaFlowCmd represents the full_tea_flow command
 var fullTeaFlowCmd = &cobra.Command{
 	Use:   "full_tea_flow",
 	Short: "Perform complete TEA discovery and data retrieval flow",
-	Long: `Discovers a product release from TEI and retrieves complete product information including:
-- Product name and version
-- Component releases with their versions
-- Artifacts and their formats for each component`,
+	Long: `Discovers a product release from a TEI and reads it from the TEA 1.0.0 server, printing:
+- product name and version, its lifecycle events (CLE) and its artifacts
+- each component release with its version, lifecycle events and artifacts
+  (an unpinned component shows its newest release)
+` + teaCommandsHelp,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := executeFullTeaFlow(tei); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		code := runTeaFullFlow(ctx, systemTeaIO(), teaInputsFromFlags(cmd))
+		stop()
+		os.Exit(int(code))
 	},
 }
 
 func init() {
-	discoveryCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
-	discoveryCmd.MarkFlagRequired("tei")
-	discoveryCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
-	discoveryCmd.Flags().IntVar(&usePort, "useport", 443, "Port to use for resolving well-known resource (default: 443)")
-
-	fullTeaFlowCmd.Flags().StringVar(&tei, "tei", "", "Transparency Exchange Identifier (TEI) to resolve")
-	fullTeaFlowCmd.MarkFlagRequired("tei")
-	fullTeaFlowCmd.Flags().BoolVar(&useHttp, "usehttp", false, "Use HTTP instead of HTTPS (default: false)")
-	fullTeaFlowCmd.Flags().IntVar(&usePort, "useport", 443, "Port to use for resolving well-known resource (default: 443)")
+	for _, c := range []*cobra.Command{discoveryCmd, fullTeaFlowCmd} {
+		c.Flags().StringVar(&teaTeiFlag, "tei", "", "Transparency Exchange Identifier (TEI) to resolve, tei://<domain>/<type>/<id>")
+		c.MarkFlagRequired("tei")
+		c.Flags().BoolVar(&teaUseHTTPFlag, "usehttp", false, "Allow plain http, on the origin http://<domain>[:<useport>] only (for local testing)")
+		c.Flags().IntVar(&teaUsePortFlag, "useport", 443, "Port of the well-known resource (default: 443, or 80 with --usehttp)")
+		c.Flags().BoolVar(&teaCredentialStdinFlag, "credential-stdin", false, "Read the TEA token (or, with REARM_TEA_APIKEYID, the key secret) from standard input")
+	}
 
 	teaCmd.AddCommand(discoveryCmd)
 	teaCmd.AddCommand(fullTeaFlowCmd)
 }
 
-// resolveTEI resolves a TEI to a product release UUID following the TEA discovery flow
-func resolveTEI(tei string) (string, error) {
-	// Parse TEI to extract domain name
-	domainName, err := extractDomainFromTEI(tei)
-	if err != nil {
-		return "", fmt.Errorf("invalid TEI format: %w", err)
-	}
+// teaExit is the exit code of a TEA command (task text: typed exit codes). A machine mode
+// adds codes; it does not renumber these.
+type teaExit int
 
-	if debug == "true" {
-		fmt.Println("Extracted domain:", domainName)
-	}
+const (
+	teaExitOK          teaExit = 0
+	teaExitFailed      teaExit = 1
+	teaExitUsage       teaExit = 2
+	teaExitNotResolved teaExit = 3
+	teaExitAmbiguous   teaExit = 4
+	teaExitRefusedURL  teaExit = 5
+	teaExitAuth        teaExit = 6
+	teaExitPartial     teaExit = 7
+)
 
-	// Resolve DNS for the domain
-	hosts, err := resolveDNS(domainName)
-	if err != nil {
-		return "", fmt.Errorf("DNS resolution failed: %w", err)
-	}
+// teaStdin says whether standard input is a terminal.
+type teaStdin int
 
-	if debug == "true" {
-		fmt.Println("Resolved hosts:", hosts)
-	}
+const (
+	teaStdinOther teaStdin = iota
+	teaStdinTerminal
+)
 
-	// Query .well-known/tea endpoint
-	wellKnownResp, err := queryWellKnown(domainName)
-	if err != nil {
-		return "", fmt.Errorf("failed to query .well-known/tea endpoint: %w", err)
-	}
+// teaCredentialKind is the kind of TEA credential the user configured.
+type teaCredentialKind int
 
-	if debug == "true" {
-		fmt.Printf("Well-known response: %+v\n", wellKnownResp)
-	}
+const (
+	teaCredentialNone teaCredentialKind = iota
+	teaCredentialBearer
+	teaCredentialAPIKey
+)
 
-	// Select the best endpoint
-	endpoint := selectBestEndpoint(wellKnownResp.Endpoints)
-	if endpoint == nil {
-		return "", fmt.Errorf("no suitable endpoint found in .well-known/tea response")
-	}
+// The environment variables of a TEA credential. They are read with teaIO.getenv, not
+// through viper, so no flag and no configuration file key exists for them.
+const (
+	teaEnvAuthRoot = "REARM_TEA_AUTH_ROOT"
+	teaEnvToken    = "REARM_TEA_TOKEN"
+	teaEnvKeyID    = "REARM_TEA_APIKEYID"
+	teaEnvKey      = "REARM_TEA_APIKEY"
+)
 
-	if debug == "true" {
-		fmt.Printf("Selected endpoint: %s (version: %s)\n", endpoint.URL, endpoint.Versions[0])
-	}
+// teaAPIVersion is the one TEA version the commands speak.
+const teaAPIVersion = "1.0.0"
 
-	// Call discovery API
-	discoveryResp, err := callDiscoveryAPI(endpoint, tei)
-	if err != nil {
-		return "", fmt.Errorf("discovery API call failed: %w", err)
-	}
+const (
+	teaChoiceMaxBytes = 64       // the answer read at the prompt
+	teaSecretMaxBytes = 16 << 10 // a secret read from standard input that is not a terminal
+)
 
-	// Handle the array response
-	if len(*discoveryResp) == 1 {
-		// Single element - extract and return the productReleaseUuid
-		return (*discoveryResp)[0].ProductReleaseUuid, nil
-	}
-
-	// Multiple elements - need to disambiguate by asking user about component versions
-	if debug == "true" {
-		fmt.Printf("Multiple discovery results found (%d results), disambiguating...\n", len(*discoveryResp))
-	}
-
-	// Get the first server from the first discovery result to use for API calls
-	if len((*discoveryResp)[0].Servers) == 0 {
-		return "", fmt.Errorf("no servers found in discovery response")
-	}
-	firstServer := (*discoveryResp)[0].Servers[0]
-	baseURL := fmt.Sprintf("%s/v%s", firstServer.RootURL, firstServer.Versions[0])
-
-	productReleaseUuid, err := disambiguateProductRelease(*discoveryResp, baseURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to disambiguate product release: %w", err)
-	}
-
-	return productReleaseUuid, nil
+// teaIO is everything a TEA command reads and writes, so tests run the commands in-process.
+type teaIO struct {
+	in          io.Reader // standard input
+	out, errOut io.Writer
+	stdin       teaStdin
+	readSecret  func(prompt string) (string, error) // no-echo read on a terminal
+	getenv      func(string) (string, bool)
+	httpClient  *http.Client // nil: the library's default transport
+	extra       []tea.Option // appended last; tests shorten the discovery backoff here
 }
 
-// disambiguateProductRelease disambiguates between multiple product releases by asking user about component versions
-func disambiguateProductRelease(discoveryResults []TEADiscoveryInfo, baseURL string) (string, error) {
-	fmt.Printf("\nMultiple discovery results found (%d results).\n", len(discoveryResults))
-	fmt.Println("To help determine the proper result, please answer questions about your component versions.")
+// teaInputs are the flag values of one run.
+type teaInputs struct {
+	tei             string
+	useHTTP         bool
+	usePort         int
+	portSet         bool
+	debug           bool
+	credentialStdin bool
+}
 
-	// Step 1: Fetch all product releases
-	productReleases := make([]*TEAProductRelease, len(discoveryResults))
-	for i, result := range discoveryResults {
-		pr, err := getProductRelease(baseURL, result.ProductReleaseUuid)
+func systemTeaIO() teaIO {
+	stdin := teaStdinOther
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		stdin = teaStdinTerminal
+	}
+	return teaIO{
+		in:     os.Stdin,
+		out:    os.Stdout,
+		errOut: os.Stderr,
+		stdin:  stdin,
+		readSecret: func(prompt string) (string, error) {
+			fmt.Fprint(os.Stderr, prompt)
+			b, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Fprintln(os.Stderr)
+			return string(b), err
+		},
+		getenv: os.LookupEnv,
+	}
+}
+
+func teaInputsFromFlags(cmd *cobra.Command) teaInputs {
+	return teaInputs{
+		tei:             teaTeiFlag,
+		useHTTP:         teaUseHTTPFlag,
+		usePort:         teaUsePortFlag,
+		portSet:         cmd.Flags().Changed("useport"),
+		debug:           debug == "true",
+		credentialStdin: teaCredentialStdinFlag,
+	}
+}
+
+// teaUsageError marks a failure of the preparation (flags, TEI, credential variables,
+// client options), whatever it wraps: exit 2. Its text is the CLI's own.
+type teaUsageError struct {
+	msg string
+	err error
+}
+
+func (e *teaUsageError) Error() string { return e.msg }
+func (e *teaUsageError) Unwrap() error { return e.err }
+
+func teaUsage(format string, args ...any) error {
+	return &teaUsageError{msg: fmt.Sprintf(format, args...)}
+}
+
+// teaAuthError is a failed token exchange, rendered with its own line: exit 6.
+type teaAuthError struct {
+	msg string
+	err error
+}
+
+func (e *teaAuthError) Error() string { return e.msg }
+func (e *teaAuthError) Unwrap() error { return e.err }
+
+// errTeaAmbiguous: several product releases and none chosen.
+var errTeaAmbiguous = errors.New("no product release chosen")
+
+// teaChoiceError is a choice among several discovery results that was not made; its text
+// is the whole error line.
+type teaChoiceError struct {
+	msg string
+}
+
+func (e *teaChoiceError) Error() string { return e.msg }
+func (e *teaChoiceError) Unwrap() error { return errTeaAmbiguous }
+
+// teaCredential is the credential of one run, resolved and validated.
+type teaCredential struct {
+	kind   teaCredentialKind
+	root   string
+	token  string // teaCredentialBearer
+	keyID  string // teaCredentialAPIKey
+	secret string // teaCredentialAPIKey
+}
+
+func (c teaCredential) label() string {
+	switch c.kind {
+	case teaCredentialBearer:
+		return "bearer token"
+	case teaCredentialAPIKey:
+		return "API key"
+	default:
+		return "none"
+	}
+}
+
+// teaBearer is the token the client sends under its root.
+type teaBearer struct {
+	root  string
+	token string
+}
+
+// teaClientConfig is the one input of newTeaClient.
+type teaClientConfig struct {
+	domain     string // the TEI's domain, for the well-known override
+	useHTTP    bool
+	usePort    int
+	portSet    bool
+	bearer     *teaBearer // nil: anonymous
+	trace      func(tea.TraceEvent)
+	httpClient *http.Client
+	extra      []tea.Option
+}
+
+// teaHTTPOrigin is the one plain-http origin the flags allow, "" without --usehttp.
+func (cfg teaClientConfig) teaHTTPOrigin() string {
+	if !cfg.useHTTP {
+		return ""
+	}
+	d := strings.ToLower(cfg.domain)
+	if cfg.portSet {
+		return "http://" + d + ":" + strconv.Itoa(cfg.usePort)
+	}
+	return "http://" + d
+}
+
+// newTeaClient is the only place a tea.Client is built in the CLI.
+func newTeaClient(cfg teaClientConfig) (*tea.Client, error) {
+	var opts []tea.Option
+	d := strings.ToLower(cfg.domain)
+	switch {
+	case cfg.useHTTP:
+		o := cfg.teaHTTPOrigin()
+		opts = append(opts, tea.WithInsecureHTTPBase(o), tea.WithWellKnownLocation(d, o))
+	case cfg.portSet:
+		opts = append(opts, tea.WithWellKnownLocation(d, "https://"+d+":"+strconv.Itoa(cfg.usePort)))
+	}
+	if cfg.bearer != nil {
+		opts = append(opts, tea.WithBearerToken(cfg.bearer.root, cfg.bearer.token))
+	}
+	if cfg.trace != nil {
+		opts = append(opts, tea.WithTrace(cfg.trace))
+	}
+	if cfg.httpClient != nil {
+		opts = append(opts, tea.WithHTTPClient(cfg.httpClient))
+	}
+	opts = append(opts, cfg.extra...)
+	return tea.New(opts...)
+}
+
+// teaRun is the state of one command run: what the error line and the debug trace need.
+type teaRun struct {
+	tio         teaIO
+	in          teaInputs
+	cred        teaCredential
+	lastRefusal string // URL of the last response answered 401 or 403
+}
+
+// trace is the WithTrace observer of every client of the run: it remembers the last
+// refused URL for the error line and, with --debug, prints each event on stderr. An event
+// carries scheme, host, port and path only, never a header, query string or credential.
+func (r *teaRun) trace(ev tea.TraceEvent) {
+	if ev.Kind == tea.TraceResponse && (ev.Status == http.StatusUnauthorized || ev.Status == http.StatusForbidden) {
+		r.lastRefusal = ev.URL
+	}
+	if !r.in.debug {
+		return
+	}
+	w := r.tio.errOut
+	switch ev.Kind {
+	case tea.TraceRequest:
+		fmt.Fprintf(w, "TEA request [%s]: %s %s\n", ev.Stage, teaText(ev.Method), teaText(ev.URL))
+	case tea.TraceResponse:
+		fmt.Fprintf(w, "TEA response [%s]: %d %s\n", ev.Stage, ev.Status, teaText(ev.URL))
+	case tea.TraceAttemptFailed:
+		fmt.Fprintf(w, "TEA attempt failed [%s]: %s: %s\n", ev.Stage, teaText(ev.URL), teaText(ev.Reason))
+	case tea.TraceBackoff:
+		fmt.Fprintf(w, "TEA backoff [%s]: %s\n", ev.Stage, ev.Wait)
+	}
+}
+
+func (r *teaRun) clientConfig(t tei.TEI) teaClientConfig {
+	return teaClientConfig{
+		domain:     t.Domain(),
+		useHTTP:    r.in.useHTTP,
+		usePort:    r.in.usePort,
+		portSet:    r.in.portSet,
+		trace:      r.trace,
+		httpClient: r.tio.httpClient,
+		extra:      r.tio.extra,
+	}
+}
+
+// prepare parses the TEI, checks the flags, resolves the credential and builds the client
+// the run works with. Every failure here is a usage error (exit 2), except a token
+// exchange the server refused (exit 6) or could not answer (exit 1). Nothing is printed
+// in debug before it has been validated.
+func (r *teaRun) prepare(ctx context.Context) (*tea.Client, tei.TEI, error) {
+	t, err := tei.Parse(r.in.tei)
+	if err != nil {
+		if errors.Is(err, tei.ErrLegacyForm) {
+			return nil, tei.TEI{}, &teaUsageError{msg: "the urn:tei: form is no longer accepted; write the TEI as tei://<domain>/<type>/<id>", err: err}
+		}
+		return nil, tei.TEI{}, &teaUsageError{msg: "invalid TEI: " + err.Error(), err: err}
+	}
+	if r.in.debug {
+		fmt.Fprintln(r.tio.errOut, "Resolving TEI:", teaText(t.String()))
+	}
+	if r.in.portSet && (r.in.usePort < 1 || r.in.usePort > 65535) {
+		return nil, tei.TEI{}, teaUsage("invalid --useport %d: a port is 1 to 65535", r.in.usePort)
+	}
+	cred, err := resolveTeaCredential(r.tio, r.in)
+	if err != nil {
+		return nil, tei.TEI{}, err
+	}
+	r.cred = cred
+
+	cfg := r.clientConfig(t)
+	anon, err := newTeaClient(cfg)
+	if err != nil {
+		return nil, tei.TEI{}, &teaUsageError{msg: "invalid TEA client option: " + err.Error(), err: err}
+	}
+	if cred.kind == teaCredentialNone {
+		if r.in.debug {
+			fmt.Fprintln(r.tio.errOut, "TEA credential: none")
+		}
+		return anon, t, nil
+	}
+	base, err := tea.ParseAPIBase(cred.root, teaAPIVersion)
+	if err != nil {
+		return nil, tei.TEI{}, &teaUsageError{msg: teaEnvAuthRoot + " is not a TEA API root: an absolute https (or allowed http) URL without query, fragment or trailing slash", err: err}
+	}
+	api, err := anon.API(base)
+	if err != nil {
+		return nil, tei.TEI{}, &teaUsageError{msg: teaEnvAuthRoot + " is plain http outside the origin --usehttp and --useport allow; plain http is for a local server only", err: err}
+	}
+	if r.in.debug {
+		fmt.Fprintf(r.tio.errOut, "TEA credential: %s for %s\n", cred.label(), teaText(cred.root))
+	}
+	token := cred.token
+	if cred.kind == teaCredentialAPIKey {
+		token, err = r.exchange(ctx, api)
 		if err != nil {
-			return "", fmt.Errorf("failed to get product release %s: %w", result.ProductReleaseUuid, err)
-		}
-		productReleases[i] = pr
-		if debug == "true" {
-			fmt.Printf("Loaded product release: %s (version: %s)\n", pr.ProductName, pr.Version)
+			return nil, tei.TEI{}, err
 		}
 	}
-
-	// Step 2: Analyze components to find differences
-	type ComponentReleaseInfo struct {
-		ComponentUUID string
-		ComponentName string
-		ReleaseUUID   string
-		Version       string
+	cfg.bearer = &teaBearer{root: cred.root, token: token}
+	c, err := newTeaClient(cfg)
+	if err != nil {
+		return nil, tei.TEI{}, &teaUsageError{msg: "invalid TEA client option for " + teaEnvAuthRoot, err: err}
 	}
+	return c, t, nil
+}
 
-	// Map of component UUID -> set of release UUIDs across all product releases
-	componentReleaseMap := make(map[string]map[string]bool)
+// exchange requests a token for the API key, once, before the first request: one POST to
+// <root>/v1.0.0/token, built from the user's root, following no redirect. tea.WithAPIKey
+// is not used: it requests a token only on a challenge, never for discovery, and a server
+// that answers an anonymous caller with less instead of a challenge would go unnoticed.
+func (r *teaRun) exchange(ctx context.Context, api *tea.API) (string, error) {
+	tok, err := api.RequestToken(ctx, r.cred.keyID, r.cred.secret)
+	if err == nil {
+		return tok.AccessToken, nil
+	}
+	var tokErr *tea.TokenError
+	var apiErr *tea.APIError
+	var unexpected *tea.UnexpectedResponseError
+	switch {
+	case errors.As(err, &tokErr):
+		return "", &teaAuthError{msg: "the TEA token endpoint refused the API key: " + err.Error(), err: err}
+	case errors.Is(err, tea.ErrNotImplemented):
+		return "", &teaAuthError{msg: fmt.Sprintf("the TEA server at %s has no token endpoint (HTTP 404): unset %s and %s to call it without a credential",
+			r.cred.root, teaEnvKeyID, teaEnvKey), err: err}
+	case errors.As(err, &unexpected):
+		return "", &teaAuthError{msg: "no TEA access token: " + err.Error(), err: err}
+	case errors.As(err, &apiErr) && !errors.Is(err, tea.ErrServer):
+		return "", &teaAuthError{msg: "no TEA access token: " + err.Error(), err: err}
+	}
+	return "", err
+}
 
-	// Build the map
-	for _, pr := range productReleases {
-		for _, compRef := range pr.Components {
-			if componentReleaseMap[compRef.UUID] == nil {
-				componentReleaseMap[compRef.UUID] = make(map[string]bool)
-			}
-			if compRef.Release != nil {
-				componentReleaseMap[compRef.UUID][*compRef.Release] = true
-			}
+// resolveTeaCredential reads the TEA credential from the environment, and the secret from
+// standard input with --credential-stdin. Contradictions are refused before anything is
+// read; no error names a value, only the variables.
+func resolveTeaCredential(tio teaIO, in teaInputs) (teaCredential, error) {
+	root, hasRoot := tio.getenv(teaEnvAuthRoot)
+	token, hasToken := tio.getenv(teaEnvToken)
+	keyID, hasID := tio.getenv(teaEnvKeyID)
+	secret, hasKey := tio.getenv(teaEnvKey)
+
+	if hasToken && (hasID || hasKey) {
+		return teaCredential{}, teaUsage("%s cannot be combined with %s or %s: set one credential", teaEnvToken, teaEnvKeyID, teaEnvKey)
+	}
+	if in.credentialStdin {
+		switch {
+		case hasID && hasKey:
+			return teaCredential{}, teaUsage("--credential-stdin reads the key secret in place of %s: unset %s", teaEnvKey, teaEnvKey)
+		case hasToken:
+			return teaCredential{}, teaUsage("--credential-stdin reads the token in place of %s: unset %s", teaEnvToken, teaEnvToken)
+		case hasKey:
+			return teaCredential{}, teaUsage("%s is set without %s", teaEnvKey, teaEnvKeyID)
+		}
+	} else {
+		switch {
+		case hasID && !hasKey:
+			return teaCredential{}, teaUsage("%s is set without %s", teaEnvKeyID, teaEnvKey)
+		case hasKey && !hasID:
+			return teaCredential{}, teaUsage("%s is set without %s", teaEnvKey, teaEnvKeyID)
 		}
 	}
-
-	// Step 3: Find components with different releases (discriminating components)
-	discriminatingComponents := []string{}
-	for componentUUID, releases := range componentReleaseMap {
-		if len(releases) > 1 {
-			discriminatingComponents = append(discriminatingComponents, componentUUID)
-		}
+	kind := teaCredentialNone
+	switch {
+	case hasID:
+		kind = teaCredentialAPIKey
+	case hasToken || in.credentialStdin:
+		kind = teaCredentialBearer
 	}
-
-	if len(discriminatingComponents) == 0 {
-		return "", fmt.Errorf("unable to disambiguate: all product releases have identical component versions")
+	if kind == teaCredentialNone {
+		// REARM_TEA_AUTH_ROOT alone, with no credential, is ignored.
+		return teaCredential{}, nil
 	}
-
-	if debug == "true" {
-		fmt.Printf("Found %d discriminating components\n", len(discriminatingComponents))
+	if !hasRoot || root == "" {
+		return teaCredential{}, teaUsage("a TEA credential needs %s, the API root it belongs to (the url in https://<domain>/.well-known/tea)", teaEnvAuthRoot)
 	}
-
-	// Step 4: Ask user about component versions to narrow down
-	candidateReleases := make(map[string]bool)
-	for _, pr := range productReleases {
-		candidateReleases[pr.UUID] = true
+	if err := checkTeaAuthRoot(root); err != nil {
+		return teaCredential{}, err
 	}
-
-	reader := bufio.NewReader(os.Stdin)
-
-	for _, componentUUID := range discriminatingComponents {
-		if len(candidateReleases) == 1 {
-			// We've uniquely identified the product release
-			break
-		}
-
-		// Get component name and collect release versions
-		var componentName string
-		releaseVersions := make(map[string]string)            // releaseUUID -> version
-		releaseCache := make(map[string]*TEAComponentRelease) // cache to avoid duplicate API calls
-
-		for _, pr := range productReleases {
-			if !candidateReleases[pr.UUID] {
-				continue
-			}
-			for _, compRef := range pr.Components {
-				if compRef.UUID == componentUUID && compRef.Release != nil {
-					// Check cache first
-					compRelease, cached := releaseCache[*compRef.Release]
-					if !cached {
-						// Get component release info
-						var err error
-						compRelease, err = getComponentRelease(baseURL, *compRef.Release)
-						if err == nil {
-							releaseCache[*compRef.Release] = compRelease
-						}
-					}
-
-					if compRelease != nil {
-						if componentName == "" {
-							componentName = compRelease.Release.ComponentName
-						}
-						releaseVersions[*compRef.Release] = compRelease.Release.Version
-					}
-				}
-			}
-		}
-
-		if componentName == "" {
-			componentName = componentUUID // fallback to UUID
-		}
-
-		// Collect unique versions for this component across candidates
-		uniqueVersions := make(map[string]bool)
-		for _, version := range releaseVersions {
-			uniqueVersions[version] = true
-		}
-
-		if len(uniqueVersions) <= 1 {
-			// This component doesn't help discriminate among remaining candidates
-			continue
-		}
-
-		// Ask user
-		fmt.Printf("Which release of component '%s' are you currently using?\n", componentName)
-		versionList := []string{}
-		for version := range uniqueVersions {
-			versionList = append(versionList, version)
-		}
-		for i, version := range versionList {
-			fmt.Printf("  %d) %s\n", i+1, version)
-		}
-		fmt.Print("Enter your choice (number): ")
-
-		input, err := reader.ReadString('\n')
+	if in.credentialStdin {
+		s, err := readTeaSecret(tio)
 		if err != nil {
-			return "", fmt.Errorf("failed to read user input: %w", err)
+			return teaCredential{}, err
 		}
-		input = strings.TrimSpace(input)
-
-		var selectedVersion string
-		var choiceNum int
-		_, err = fmt.Sscanf(input, "%d", &choiceNum)
-		if err == nil && choiceNum >= 1 && choiceNum <= len(versionList) {
-			selectedVersion = versionList[choiceNum-1]
+		if kind == teaCredentialAPIKey {
+			secret = s
 		} else {
-			// Try direct version match
-			selectedVersion = input
+			token = s
 		}
-
-		if debug == "true" {
-			fmt.Printf("User selected version: %s\n", selectedVersion)
+	}
+	switch kind {
+	case teaCredentialAPIKey:
+		if keyID == "" {
+			return teaCredential{}, teaUsage("%s is empty", teaEnvKeyID)
 		}
-
-		// Filter candidate releases based on user's answer
-		newCandidates := make(map[string]bool)
-		for prUUID := range candidateReleases {
-			var pr *TEAProductRelease
-			for _, p := range productReleases {
-				if p.UUID == prUUID {
-					pr = p
-					break
-				}
+		if secret == "" {
+			if in.credentialStdin {
+				return teaCredential{}, teaUsage("the key secret read from standard input is empty")
 			}
-			if pr == nil {
-				continue
+			return teaCredential{}, teaUsage("%s is empty", teaEnvKey)
+		}
+		return teaCredential{kind: kind, root: root, keyID: keyID, secret: secret}, nil
+	default:
+		if token == "" {
+			if in.credentialStdin {
+				return teaCredential{}, teaUsage("the token read from standard input is empty")
 			}
-
-			// Check if this product release has the selected version
-			for _, compRef := range pr.Components {
-				if compRef.UUID == componentUUID && compRef.Release != nil {
-					if version, exists := releaseVersions[*compRef.Release]; exists && version == selectedVersion {
-						newCandidates[prUUID] = true
-						break
-					}
-				}
-			}
+			return teaCredential{}, teaUsage("%s is empty", teaEnvToken)
 		}
-
-		candidateReleases = newCandidates
-
-		if len(candidateReleases) == 0 {
-			return "", fmt.Errorf("no product releases match the provided component versions")
-		}
+		return teaCredential{kind: kind, root: root, token: token}, nil
 	}
-
-	// Return the uniquely identified product release
-	if len(candidateReleases) == 1 {
-		for uuid := range candidateReleases {
-			fmt.Printf("\nProduct release uniquely identified: %s\n\n", uuid)
-			return uuid, nil
-		}
-	}
-
-	return "", fmt.Errorf("unable to uniquely identify product release after asking about all discriminating components")
 }
 
-// extractDomainFromTEI extracts the domain name from a TEI
-// TEI format: urn:tei:<type>:<domain-name>:<unique-identifier>
-// Supported types: uuid, purl, hash, swid
-func extractDomainFromTEI(tei string) (string, error) {
-	// Validate TEI format
-	if !strings.HasPrefix(tei, "urn:tei:") {
-		return "", fmt.Errorf("TEI must start with 'urn:tei:'")
-	}
-
-	// Remove the "urn:tei:" prefix
-	remainder := strings.TrimPrefix(tei, "urn:tei:")
-
-	// Split by colons
-	parts := strings.Split(remainder, ":")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("TEI must have format urn:tei:<type>:<domain-name>:<unique-identifier>")
-	}
-
-	// parts[0] = type (uuid, purl, hash, swid)
-	// parts[1] = domain-name
-	// parts[2+] = unique-identifier (which may contain colons)
-
-	teiType := parts[0]
-	domainName := parts[1]
-
-	// Validate TEI type
-	validTypes := map[string]bool{"uuid": true, "purl": true, "hash": true, "swid": true, "asin": true, "gs1": true}
-	if !validTypes[teiType] {
-		return "", fmt.Errorf("invalid TEI type: %s (must be uuid, purl, hash, swid, asin, or gs1)", teiType)
-	}
-
-	// Validate domain name format
-	if domainName == "" {
-		return "", fmt.Errorf("domain name cannot be empty")
-	}
-
-	// Basic domain validation
-	// Matches: domain.com, localhost, etc.
-	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
-	if !domainRegex.MatchString(domainName) {
-		return "", fmt.Errorf("invalid domain name format")
-	}
-
-	return domainName, nil
-}
-
-// resolveDNS resolves DNS records for a domain (A, AAAA, CNAME)
-func resolveDNS(domainName string) ([]string, error) {
-	// Use net.LookupHost which handles A, AAAA, and CNAME records
-	hosts, err := net.LookupHost(domainName)
+// checkTeaAuthRoot refuses a root the library would refuse with a text that repeats it:
+// a user who wrote https://user:secret@host/tea must not see that on screen or in a log.
+func checkTeaAuthRoot(root string) error {
+	u, err := url.Parse(root)
 	if err != nil {
-		return nil, fmt.Errorf("DNS lookup failed for %s: %w", domainName, err)
+		return teaUsage("%s is not a valid URL", teaEnvAuthRoot)
 	}
-
-	if len(hosts) == 0 {
-		return nil, fmt.Errorf("no DNS records found for %s", domainName)
+	if u.User != nil {
+		return teaUsage("%s must not carry a user name or password", teaEnvAuthRoot)
 	}
-
-	return hosts, nil
-}
-
-// createHTTPClient creates an HTTP client with appropriate TLS configuration
-func createHTTPClient() *http.Client {
-	client := &http.Client{
-		Timeout: 30 * time.Second,
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(root, "#") {
+		return teaUsage("%s must not carry a query or a fragment", teaEnvAuthRoot)
 	}
-
-	// Only configure TLS if using HTTPS
-	if !useHttp {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
-		}
+	if strings.HasSuffix(root, "/") {
+		return teaUsage("%s must not end with a slash", teaEnvAuthRoot)
 	}
-
-	return client
-}
-
-// queryWellKnown queries the .well-known/tea endpoint
-func queryWellKnown(domainName string) (*TEAWellKnownResponse, error) {
-	protocol := "https"
-	if useHttp {
-		protocol = "http"
-	}
-	// Use usePort parameter for well-known resource resolution
-	domainWithPort := fmt.Sprintf("%s:%d", domainName, usePort)
-	wellKnownURL := fmt.Sprintf("%s://%s/.well-known/tea", protocol, domainWithPort)
-
-	if debug == "true" {
-		fmt.Println("Querying well-known endpoint:", wellKnownURL)
-	}
-
-	// Create HTTP client
-	client := createHTTPClient()
-
-	resp, err := client.Get(wellKnownURL)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP request returned status %d", resp.StatusCode)
-	}
-
-	var wellKnownResp TEAWellKnownResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wellKnownResp); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %w", err)
-	}
-
-	if len(wellKnownResp.Endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints found in .well-known/tea response")
-	}
-
-	return &wellKnownResp, nil
-}
-
-// selectBestEndpoint selects the best endpoint based on priority and version
-func selectBestEndpoint(endpoints []TEAWellKnownEndpoint) *TEAWellKnownEndpoint {
-	if len(endpoints) == 0 {
-		return nil
-	}
-
-	// For simplicity, select the endpoint with the highest priority
-	// In a production implementation, you would also consider version compatibility
-	var bestEndpoint *TEAWellKnownEndpoint
-	highestPriority := -1.0
-
-	for i := range endpoints {
-		endpoint := &endpoints[i]
-		if len(endpoint.Versions) == 0 {
-			continue
-		}
-
-		// If priority is not set, default to 1.0
-		priority := 1.0
-		if endpoint.Priority != nil {
-			priority = *endpoint.Priority
-		}
-
-		if priority > highestPriority {
-			highestPriority = priority
-			bestEndpoint = endpoint
-		}
-	}
-
-	return bestEndpoint
-}
-
-// callDiscoveryAPI calls the TEA discovery API endpoint
-func callDiscoveryAPI(endpoint *TEAWellKnownEndpoint, tei string) (*TEADiscoveryResponse, error) {
-	// Select the latest version from the endpoint
-	if len(endpoint.Versions) == 0 {
-		return nil, fmt.Errorf("no versions available for endpoint")
-	}
-
-	// Use the first version (in production, you'd select based on semver)
-	version := endpoint.Versions[0]
-
-	// URL-encode the TEI
-	encodedTEI := url.QueryEscape(tei)
-
-	// Construct the discovery API URL
-	discoveryURL := fmt.Sprintf("%s/v%s/discovery?tei=%s", endpoint.URL, version, encodedTEI)
-
-	if debug == "true" {
-		fmt.Println("Calling discovery API:", discoveryURL)
-	}
-
-	// Create HTTP client
-	client := createHTTPClient()
-
-	resp, err := client.Get(discoveryURL)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("TEI not found on the server")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP request returned status %d", resp.StatusCode)
-	}
-
-	var discoveryResp TEADiscoveryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&discoveryResp); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %w", err)
-	}
-
-	if len(discoveryResp) == 0 {
-		return nil, fmt.Errorf("no discovery results found in response")
-	}
-
-	return &discoveryResp, nil
-}
-
-// executeFullTeaFlow performs the complete TEA discovery and data retrieval flow
-func executeFullTeaFlow(tei string) error {
-	// Step 1: Perform discovery
-	if debug == "true" {
-		fmt.Println("Step 1: Performing TEI discovery...")
-	}
-
-	productReleaseUuid, err := resolveTEI(tei)
-	if err != nil {
-		return fmt.Errorf("discovery failed: %w", err)
-	}
-
-	if debug == "true" {
-		fmt.Printf("Discovered product release UUID: %s\n", productReleaseUuid)
-	}
-
-	// Extract domain and endpoint info for subsequent API calls
-	domainName, err := extractDomainFromTEI(tei)
-	if err != nil {
-		return fmt.Errorf("failed to extract domain: %w", err)
-	}
-
-	wellKnownResp, err := queryWellKnown(domainName)
-	if err != nil {
-		return fmt.Errorf("failed to query well-known endpoint: %w", err)
-	}
-
-	endpoint := selectBestEndpoint(wellKnownResp.Endpoints)
-	if endpoint == nil {
-		return fmt.Errorf("no suitable endpoint found")
-	}
-
-	version := endpoint.Versions[0]
-	baseURL := fmt.Sprintf("%s/v%s", endpoint.URL, version)
-
-	// Step 2: Get product release details
-	if debug == "true" {
-		fmt.Println("\nStep 2: Fetching product release details...")
-	}
-
-	productRelease, err := getProductRelease(baseURL, productReleaseUuid)
-	if err != nil {
-		return fmt.Errorf("failed to get product release: %w", err)
-	}
-
-	// Print product information
-	fmt.Printf("\n=== Product Information ===\n")
-	fmt.Printf("Product Name: %s\n", productRelease.ProductName)
-	fmt.Printf("Version: %s\n", productRelease.Version)
-
-	// Fetch and display product release CLE
-	if cle, err := getCle(baseURL + "/productRelease/" + productReleaseUuid + "/cle"); err == nil && cle != nil {
-		printCLE(cle)
-	}
-	fmt.Printf("\n")
-
-	// Step 3: Process each component
-	for i, compRef := range productRelease.Components {
-		if debug == "true" {
-			fmt.Printf("\nStep 3.%d: Processing component %s...\n", i+1, compRef.UUID)
-		}
-
-		var releaseUUID string
-		var componentName string
-
-		if compRef.Release != nil {
-			// Component has a pinned release
-			releaseUUID = *compRef.Release
-		} else {
-			// Component does not have a pinned release, get the latest
-			component, err := getComponent(baseURL, compRef.UUID)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to get component %s: %v\n", compRef.UUID, err)
-				continue
-			}
-			componentName = component.Name
-
-			releases, err := getComponentReleases(baseURL, compRef.UUID)
-			if err != nil || len(releases) == 0 {
-				fmt.Fprintf(os.Stderr, "Warning: No releases found for component %s\n", componentName)
-				continue
-			}
-
-			releaseUUID = releases[0].UUID
-			fmt.Printf("Note: Component '%s' does not have a pinned release. Selecting latest available release.\n", componentName)
-		}
-
-		// Get component release details
-		componentRelease, err := getComponentRelease(baseURL, releaseUUID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to get component release %s: %v\n", releaseUUID, err)
-			continue
-		}
-
-		// Print component information
-		fmt.Printf("\n--- Component: %s ---\n", componentRelease.Release.ComponentName)
-		fmt.Printf("Version: %s\n", componentRelease.Release.Version)
-
-		// Fetch and display component release CLE
-		if cle, err := getCle(baseURL + "/componentRelease/" + releaseUUID + "/cle"); err == nil && cle != nil {
-			printCLE(cle)
-		}
-
-		// Process artifacts in latest collection
-		if componentRelease.LatestCollection != nil {
-			for _, artifact := range componentRelease.LatestCollection.Artifacts {
-				artifactLabel := artifact.Type
-				if artifact.Name != "" {
-					artifactLabel = fmt.Sprintf("%s (%s)", artifact.Name, artifact.Type)
-				}
-				fmt.Printf("\n  Artifact: %s\n", artifactLabel)
-				for _, format := range artifact.Formats {
-					fmt.Printf("    - Description: %s\n", format.Description)
-					fmt.Printf("      Media Type: %s\n", format.MediaType)
-					fmt.Printf("      URL: %s\n", format.URL)
-					if format.SignatureURL != "" {
-						fmt.Printf("      Signature URL: %s\n", format.SignatureURL)
-					}
-				}
-			}
-		} else {
-			fmt.Printf("  No collection available for this component release.\n")
-		}
-	}
-
 	return nil
 }
 
-// getCle fetches CLE data from a /cle endpoint, returning nil if unavailable or empty
-func getCle(url string) (*TEACLE, error) {
-	if debug == "true" {
-		fmt.Printf("API Call: %s\n", url)
+// readTeaSecret reads the secret of --credential-stdin: without echo on a terminal, else
+// the first line (at most teaSecretMaxBytes, the trailing CR LF removed).
+func readTeaSecret(tio teaIO) (string, error) {
+	if tio.stdin == teaStdinTerminal {
+		s, err := tio.readSecret("TEA credential: ")
+		if err != nil {
+			return "", teaUsage("reading the credential from the terminal failed")
+		}
+		return s, nil
 	}
-	client := createHTTPClient()
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
+	line, err := readTeaLine(tio.in, teaSecretMaxBytes)
+	switch {
+	case errors.Is(err, errTeaLineTooLong):
+		return "", teaUsage("the credential read from standard input is longer than %d bytes", teaSecretMaxBytes)
+	case err != nil && !errors.Is(err, io.EOF):
+		return "", teaUsage("reading the credential from standard input failed")
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	var cle TEACLE
-	if err := json.NewDecoder(resp.Body).Decode(&cle); err != nil {
-		return nil, err
-	}
-	if len(cle.Events) == 0 {
-		return nil, nil
-	}
-	return &cle, nil
+	return line, nil
 }
 
-// printCLE prints CLE lifecycle events, omitting null/empty fields
-func printCLE(cle *TEACLE) {
-	fmt.Printf("  Lifecycle Events (CLE):\n")
-	for _, event := range cle.Events {
-		fmt.Printf("    [%d] type=%s effective=%s published=%s", event.Id, event.Type, event.Effective, event.Published)
-		if event.Version != "" {
-			fmt.Printf(" version=%s", event.Version)
-		}
-		if len(event.Versions) > 0 {
-			parts := []string{}
-			for _, v := range event.Versions {
-				if v.Version != "" {
-					parts = append(parts, v.Version)
-				} else if v.Range != "" {
-					parts = append(parts, v.Range)
-				}
+var errTeaLineTooLong = errors.New("line too long")
+
+// readTeaLine reads one line of at most max bytes, one byte at a time so nothing past the
+// line is consumed. The line feed and a CR before it are removed. A line longer than max
+// is errTeaLineTooLong after max+1 bytes, so the read is bounded; end of input before a
+// line feed returns what was read with io.EOF.
+func readTeaLine(r io.Reader, max int) (string, error) {
+	var b []byte
+	one := make([]byte, 1)
+	for {
+		n, err := r.Read(one)
+		if n == 1 {
+			if one[0] == '\n' {
+				return strings.TrimSuffix(string(b), "\r"), nil
 			}
-			if len(parts) > 0 {
-				fmt.Printf(" versions=%s", strings.Join(parts, ","))
+			if len(b) == max {
+				return "", errTeaLineTooLong
 			}
+			b = append(b, one[0])
 		}
-		if event.License != "" {
-			fmt.Printf(" license=%s", event.License)
+		if err != nil {
+			return strings.TrimSuffix(string(b), "\r"), err
 		}
-		if event.SupportId != "" {
-			fmt.Printf(" supportId=%s", event.SupportId)
-		}
-		if event.SupersededByVersion != "" {
-			fmt.Printf(" supersededBy=%s", event.SupersededByVersion)
-		}
-		if event.Description != "" {
-			fmt.Printf(" description=%q", event.Description)
-		}
-		if event.Reason != "" {
-			fmt.Printf(" reason=%q", event.Reason)
-		}
-		if len(event.References) > 0 {
-			fmt.Printf(" references=%s", strings.Join(event.References, ","))
-		}
-		fmt.Println()
 	}
 }
 
-// getProductRelease retrieves product release details from TEA API
-func getProductRelease(baseURL, uuid string) (*TEAProductRelease, error) {
-	url := fmt.Sprintf("%s/productRelease/%s", baseURL, uuid)
-	var productRelease TEAProductRelease
-	if err := makeTeaAPICall(url, &productRelease); err != nil {
-		return nil, err
-	}
-	return &productRelease, nil
-}
-
-// getComponent retrieves component details from TEA API
-func getComponent(baseURL, uuid string) (*TEAComponent, error) {
-	url := fmt.Sprintf("%s/component/%s", baseURL, uuid)
-	var component TEAComponent
-	if err := makeTeaAPICall(url, &component); err != nil {
-		return nil, err
-	}
-	return &component, nil
-}
-
-// getComponentReleases retrieves component releases from TEA API
-func getComponentReleases(baseURL, componentUUID string) ([]TEARelease, error) {
-	url := fmt.Sprintf("%s/component/%s/releases", baseURL, componentUUID)
-	var releases []TEARelease
-	if err := makeTeaAPICall(url, &releases); err != nil {
-		return nil, err
-	}
-	return releases, nil
-}
-
-// getComponentRelease retrieves component release details from TEA API
-func getComponentRelease(baseURL, uuid string) (*TEAComponentRelease, error) {
-	url := fmt.Sprintf("%s/componentRelease/%s", baseURL, uuid)
-	var componentRelease TEAComponentRelease
-	if err := makeTeaAPICall(url, &componentRelease); err != nil {
-		return nil, err
-	}
-	return &componentRelease, nil
-}
-
-// makeTeaAPICall makes a generic HTTP GET call to TEA API and decodes JSON response
-func makeTeaAPICall(url string, result interface{}) error {
-	if debug == "true" {
-		fmt.Printf("API Call: %s\n", url)
-	}
-
-	client := createHTTPClient()
-
-	resp, err := client.Get(url)
+// runTeaDiscovery is tea discovery: print the product release uuid the TEI resolves to.
+func runTeaDiscovery(ctx context.Context, tio teaIO, in teaInputs) teaExit {
+	r := &teaRun{tio: tio, in: in}
+	c, t, err := r.prepare(ctx)
 	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
+		return r.fail(err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP request returned status %d", resp.StatusCode)
+	results, err := c.Discover(ctx, t)
+	if err != nil {
+		return r.fail(err)
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-		return fmt.Errorf("failed to decode JSON response: %w", err)
+	if len(results) == 0 {
+		return r.fail(errors.New("discovery returned no result"))
 	}
+	chosen := results[0]
+	if len(results) > 1 {
+		cands, err := c.Candidates(ctx, results)
+		if err != nil {
+			return r.fail(err)
+		}
+		i, err := tio.chooseTeaCandidate(ctx, cands)
+		if err != nil {
+			return r.fail(err)
+		}
+		chosen = cands[i].Result
+	}
+	fmt.Fprintln(tio.out, chosen.ProductReleaseUUID.String())
+	return teaExitOK
+}
 
-	return nil
+// runTeaFullFlow is tea full_tea_flow: print the product release, its lifecycle, its
+// artifacts and its components.
+func runTeaFullFlow(ctx context.Context, tio teaIO, in teaInputs) teaExit {
+	r := &teaRun{tio: tio, in: in}
+	c, t, err := r.prepare(ctx)
+	if err != nil {
+		return r.fail(err)
+	}
+	res, err := c.FullFlow(ctx, t, tea.FlowOptions{Select: tio.chooseTeaCandidate})
+	if err != nil {
+		return r.fail(err)
+	}
+	if printTeaFlow(tio.out, tio.errOut, res) {
+		return teaExitPartial
+	}
+	return teaExitOK
+}
+
+// fail prints the one error line of a failed run and returns its exit code.
+func (r *teaRun) fail(err error) teaExit {
+	code := teaExitFor(err)
+	fmt.Fprintln(r.tio.errOut, "Error: "+teaText(r.errorText(code, err)))
+	return code
+}
+
+// teaExitFor is the one mapping from an error to an exit code; the first match wins.
+func teaExitFor(err error) teaExit {
+	var usage *teaUsageError
+	var tokErr *tea.TokenError
+	var authErr *teaAuthError
+	var notResolved *tea.NotResolvedError
+	var ambiguous *tea.AmbiguousError
+	switch {
+	case err == nil:
+		return teaExitOK
+	case errors.As(err, &usage),
+		errors.Is(err, tei.ErrSyntax), errors.Is(err, tei.ErrLegacyForm),
+		errors.Is(err, tea.ErrInvalidOption):
+		return teaExitUsage
+	case errors.Is(err, tea.ErrInsecureURL), errors.Is(err, tea.ErrRedirectLimit):
+		return teaExitRefusedURL
+	case errors.Is(err, tea.ErrUnauthorized), errors.Is(err, tea.ErrForbidden),
+		errors.As(err, &tokErr), errors.As(err, &authErr):
+		return teaExitAuth
+	case errors.As(err, &notResolved), errors.Is(err, tea.ErrObjectUnknown):
+		return teaExitNotResolved
+	case errors.Is(err, errTeaAmbiguous), errors.As(err, &ambiguous):
+		return teaExitAmbiguous
+	default:
+		return teaExitFailed
+	}
+}
+
+// errorText is the text after "Error: " for a failed run with exit code code.
+func (r *teaRun) errorText(code teaExit, err error) string {
+	var usage *teaUsageError
+	var authErr *teaAuthError
+	var choice *teaChoiceError
+	switch code {
+	case teaExitUsage:
+		if errors.As(err, &usage) {
+			return usage.msg
+		}
+		return err.Error()
+	case teaExitNotResolved:
+		return "TEI not resolved: " + err.Error()
+	case teaExitRefusedURL:
+		s := "refused by the URL policy: " + err.Error()
+		if errors.Is(err, tea.ErrInsecureURL) {
+			s += "; over plain http only the origin given with --usehttp and --useport is allowed"
+		}
+		return s
+	case teaExitAuth:
+		if errors.As(err, &authErr) {
+			return authErr.msg
+		}
+		status := http.StatusUnauthorized
+		if errors.Is(err, tea.ErrForbidden) {
+			status = http.StatusForbidden
+		}
+		var apiErr *tea.APIError
+		if errors.As(err, &apiErr) {
+			status = apiErr.Status
+		}
+		if r.cred.kind == teaCredentialNone {
+			return fmt.Sprintf("the TEA server requires a credential (HTTP %d): %s; set %s with %s, or with %s and %s",
+				status, err.Error(), teaEnvAuthRoot, teaEnvToken, teaEnvKeyID, teaEnvKey)
+		}
+		where := r.lastRefusal
+		if where == "" {
+			where = "an unknown URL"
+		}
+		return fmt.Sprintf("the TEA server refused the request (HTTP %d): %s; the credential is sent only under %s, the refused request went to %s",
+			status, err.Error(), r.cred.root, where)
+	case teaExitAmbiguous:
+		if errors.As(err, &choice) {
+			return choice.msg
+		}
+		return err.Error()
+	default:
+		return err.Error()
+	}
 }
