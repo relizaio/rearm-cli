@@ -28,6 +28,8 @@ RUN sh pin-rearm-client-go-script/pin-client-go.sh --check
 
 RUN go test ./tests
 RUN go test ./internal/bomscore/...
+# The TEA commands' suite: hermetic, in-process fixtures (cmd/tea_test.go).
+RUN go test -count=1 -run '^TestTea' ./cmd/
 RUN go version
 ARG TARGETOS
 ARG TARGETARCH
