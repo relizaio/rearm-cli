@@ -59,6 +59,9 @@ var (
 	gudidStatus        string
 	eos                string
 	eol                string
+
+	// FDAW-74: the version the device shows its user.
+	displayedVersion string
 )
 
 type Identifier struct {
@@ -503,6 +506,7 @@ var addreleaseCmd = &cobra.Command{
 		if len(eol) > 0 {
 			body["eol"] = eol
 		}
+		setDisplayedVersion(body, cmd.Flags().Changed("displayed-version"), displayedVersion)
 
 		// `--scearts` artifacts are attached to the source-code entry via
 		// buildCommitMap above (which puts them on
@@ -524,6 +528,15 @@ var addreleaseCmd = &cobra.Command{
 
 		printGraphQLMultipart(rearm.AddReleaseProgrammatic_Operation, map[string]interface{}{"releaseInputProg": body}, locationMap, filesMap)
 	},
+}
+
+// setDisplayedVersion puts the displayed version into the release body when the flag was given, an
+// empty value included: with --rebuild an empty value clears the stored one (FDAW-74 3.7a). The
+// server is the one judge of length and characters; the CLI sends the value as given.
+func setDisplayedVersion(body map[string]interface{}, given bool, value string) {
+	if given {
+		body["displayedVersion"] = value
+	}
 }
 
 func init() {
@@ -588,5 +601,6 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringVar(&gudidStatus, "gudid-status", "", "(Optional) GUDID submission status: NOT_SUBMITTED | SUBMITTED | PUBLISHED.")
 	addreleaseCmd.PersistentFlags().StringVar(&eos, "eos", "", "(Optional) End-of-support date (ISO-8601, e.g. 2027-01-31).")
 	addreleaseCmd.PersistentFlags().StringVar(&eol, "eol", "", "(Optional) End-of-life date (ISO-8601, e.g. 2028-01-31).")
+	addreleaseCmd.PersistentFlags().StringVar(&displayedVersion, "displayed-version", "", "(Optional) The version the device shows its user, at most 128 characters on one line. Written into the release SBOM and the support documents.")
 	rootCmd.AddCommand(addreleaseCmd)
 }
