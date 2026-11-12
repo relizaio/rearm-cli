@@ -4,6 +4,15 @@ Base Command: `oolong`
 
 The `oolong` command provides tools for managing content in an Oolong TEA Server, including products, components, releases, and artifacts. These commands create and update YAML files in a structured content directory that can be used by the Oolong TEA Server.
 
+The files follow the TEA 1.0.0 content layout that the Oolong server reads:
+- each artifact revision is `artifacts/<uuid>/v<version>.yaml`, with `mediaType` formats; a format served by URL carries its checksums
+- collections carry `createdDate` and `belongsTo`, and reference artifacts as `{uuid, version}`
+- releases name their product or component; every distribution has a `distributionId`
+- TEIs use the TEA 1.0.0 syntax `tei://<domain>/<type>/<identifier>`; a `purl` TEI carries the Package URL Base64URL-encoded without padding
+- dates are stored in UTC (RFC 3339); UUIDs are lowercase
+
+Content written by earlier versions of these commands (artifacts as `artifacts/<uuid>.yaml`, collections with `date` and plain artifact UUIDs) is not readable by an Oolong TEA 1.0.0 server and has to be converted.
+
 **Global Flag:**
 - **--contentdir** - Path to the content directory (required for all subcommands)
 
@@ -171,7 +180,7 @@ rearm oolong add_component_release \
     --contentdir ./content \
     --component "Database Component" \
     --version "1.0.0" \
-    --tei "urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --tei "tei://demo.rearmhq.com/uuid/7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
     --purl "pkg:generic/database-component@1.0.0"
 ```
 
@@ -197,8 +206,8 @@ rearm oolong add_component_release \
     --createddate "2025-10-16T19:07:55Z" \
     --releasedate "2025-10-16T19:07:55Z" \
     --prerelease \
-    --tei "urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
-    --tei "urn:tei:purl:demo.rearmhq.com:pkg:generic/database-component@1.0.0-beta" \
+    --tei "tei://demo.rearmhq.com/uuid/7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
+    --tei "tei://demo.rearmhq.com/purl/cGtnOmdlbmVyaWMvZGF0YWJhc2UtY29tcG9uZW50QDEuMC4wLWJldGE" \
     --purl "pkg:generic/database-component@1.0.0-beta" \
     --artifact "173cedd7-fabb-4d3a-9315-7d7465d236b6"
 ```
@@ -208,10 +217,10 @@ rearm oolong add_component_release \
 - **--component** - Component name or UUID (required)
 - **--version** - Release version string (required)
 - **--uuid** - Release UUID (optional, auto-generated if not provided)
-- **--createddate** - Created date in RFC3339 format (optional, defaults to current UTC time)
-- **--releasedate** - Release date in RFC3339 format (optional, defaults to current UTC time)
+- **--createddate** - Created date, RFC 3339, stored in UTC (optional, defaults to current UTC time)
+- **--releasedate** - Release date, RFC 3339, stored in UTC (optional, defaults to current UTC time)
 - **--prerelease** - Mark as pre-release (optional, defaults to false)
-- **--tei** - TEI identifier (optional, can be specified multiple times)
+- **--tei** - TEI identifier, `tei://<domain>/<type>/<identifier>` (optional, can be specified multiple times)
 - **--purl** - PURL identifier (optional, can be specified multiple times)
 - **--artifact** - Artifact UUID to add to initial collection (optional, can be specified multiple times)
 
@@ -254,13 +263,14 @@ content/
 
 ```yaml
 uuid: 7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+component: adc0909a-3039-47eb-82ba-7686767c0d52
 version: 1.0.0
 createdDate: "2025-10-16T19:07:55Z"
 releaseDate: "2025-10-16T19:07:55Z"
 preRelease: false
 identifiers:
 - idType: TEI
-  idValue: urn:tei:uuid:demo.rearmhq.com:7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
+  idValue: tei://demo.rearmhq.com/uuid/7a7fa4da-bf9b-478f-b934-2fe9e0fc317c
 - idType: PURL
   idValue: pkg:generic/database-component@1.0.0
 distributions: []
@@ -270,10 +280,10 @@ distributions: []
 
 ```yaml
 version: 1
-date: "2025-10-16T19:07:56Z"
+createdDate: "2025-10-16T19:07:56Z"
+belongsTo: COMPONENT_RELEASE
 updateReason:
   type: INITIAL_RELEASE
-  comment: ""
 artifacts: []
 ```
 
@@ -287,7 +297,7 @@ The command will search through all components in the content directory and matc
 
 **Date Format:**
 
-Dates must be in RFC3339 format with UTC timezone:
+Dates are RFC 3339. A date with an offset is converted to UTC, which TEA 1.0.0 requires:
 ```
 2025-10-16T19:07:55Z
 ```
@@ -366,7 +376,7 @@ rearm oolong add_product_release \
     --createddate "2025-10-16T19:26:57Z" \
     --releasedate "2025-10-16T19:26:57Z" \
     --prerelease \
-    --tei "urn:tei:uuid:demo.rearmhq.com:9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073" \
+    --tei "tei://demo.rearmhq.com/uuid/9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073" \
     --purl "pkg:generic/my-product@1.0.0-beta" \
     --component "adc0909a-3039-47eb-82ba-7686767c0d52" \
     --component_release "7a7fa4da-bf9b-478f-b934-2fe9e0fc317c" \
@@ -378,10 +388,10 @@ rearm oolong add_product_release \
 - **--product** - Product name or UUID (required)
 - **--version** - Release version string (required)
 - **--uuid** - Release UUID (optional, auto-generated if not provided)
-- **--createddate** - Created date in RFC3339 format (optional, defaults to current UTC time)
-- **--releasedate** - Release date in RFC3339 format (optional, defaults to current UTC time)
+- **--createddate** - Created date, RFC 3339, stored in UTC (optional, defaults to current UTC time)
+- **--releasedate** - Release date, RFC 3339, stored in UTC (optional, defaults to current UTC time)
 - **--prerelease** - Mark as pre-release (optional, defaults to false)
-- **--tei** - TEI identifier (optional, can be specified multiple times)
+- **--tei** - TEI identifier, `tei://<domain>/<type>/<identifier>` (optional, can be specified multiple times)
 - **--purl** - PURL identifier (optional, can be specified multiple times)
 - **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--component_release`)
 - **--component_release** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
@@ -428,13 +438,14 @@ content/
 
 ```yaml
 uuid: 9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+product: 8ab3c557-7f36-4ebd-a593-026c28337630
 version: 1.0.0
 createdDate: "2025-10-16T19:26:57Z"
 releaseDate: "2025-10-16T19:26:57Z"
 preRelease: false
 identifiers:
 - idType: TEI
-  idValue: urn:tei:uuid:demo.rearmhq.com:9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
+  idValue: tei://demo.rearmhq.com/uuid/9485fbc9-aa7d-4c26-95c9-d5a8ccb1c073
 - idType: PURL
   idValue: pkg:generic/my-product@1.0.0
 components:
@@ -448,10 +459,10 @@ components:
 
 ```yaml
 version: 1
-date: "2025-10-16T19:07:56Z"
+createdDate: "2025-10-16T19:07:56Z"
+belongsTo: PRODUCT_RELEASE
 updateReason:
   type: INITIAL_RELEASE
-  comment: ""
 artifacts: []
 ```
 
@@ -476,7 +487,7 @@ The command will search through all products in the content directory and match 
 
 **Date Format:**
 
-Dates must be in RFC3339 format with UTC timezone:
+Dates are RFC 3339. A date with an offset is converted to UTC, which TEA 1.0.0 requires:
 ```
 2025-10-16T19:26:57Z
 ```
@@ -491,8 +502,8 @@ The `oolong add_artifact` command creates a new artifact in the content director
 1. Validates the artifact type against allowed TEA artifact types
 2. Generates a UUID if not provided
 3. Creates the artifacts directory if it doesn't exist
-4. Creates a YAML file named `<uuid>.yaml` in the artifacts directory
-5. Parses hash values and normalizes algorithm names
+4. Creates revision 1 of the artifact at `artifacts/<uuid>/v1.yaml`
+5. Parses hash values, normalizes algorithm names and lowercases the values; at least one hash is required, because TEA 1.0.0 requires checksums for an artifact served by URL
 6. Creates a single format entry with the provided metadata
 7. Checks for existing artifact UUIDs to prevent duplicates
 8. Optionally links the artifact to specified component and/or product releases by:
@@ -509,7 +520,8 @@ rearm oolong add_artifact \
     --name "Product SBOM" \
     --type BOM \
     --mediatype "application/vnd.cyclonedx+json" \
-    --url "https://example.com/artifacts/sbom.json"
+    --url "https://example.com/artifacts/sbom.json" \
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe"
 ```
 
 Sample command with signature and checksums:
@@ -535,8 +547,8 @@ rearm oolong add_artifact \
     --type ATTESTATION \
     --mediatype "application/vnd.in-toto+json" \
     --url "https://example.com/attestation.json" \
-    --hash "sha256=abc123def456" \
-    --hash "sha512=fedcba654321"
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe" \
+    --hash "sha1=a9ac7d6e8b5aae33125cd3c3d58c9bb5e3924e35"
 ```
 
 Sample command with custom UUID:
@@ -548,7 +560,8 @@ rearm oolong add_artifact \
     --type LICENSE \
     --mediatype "text/plain" \
     --url "https://example.com/LICENSE" \
-    --uuid "173cedd7-fabb-4d3a-9315-7d7465d236b6"
+    --uuid "173cedd7-fabb-4d3a-9315-7d7465d236b6" \
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe"
 ```
 
 Sample command with release linking:
@@ -560,7 +573,7 @@ rearm oolong add_artifact \
     --type BOM \
     --mediatype "application/vnd.cyclonedx+json" \
     --url "https://example.com/artifacts/sbom.json" \
-    --hash "sha256=abc123def456" \
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe" \
     --component "Database Component" \
     --component_release "1.0.0" \
     --product "My Product" \
@@ -587,7 +600,8 @@ rearm oolong add_artifact \
 - **--uuid** - Artifact UUID (optional, auto-generated if not provided)
 - **--signatureurl** - Signature URL (optional)
 - **--description** - Artifact description (optional, defaults to empty)
-- **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
+- **--hash** - Hash in format `algorithm=value` (at least one required, can be specified multiple times)
+- **--distributionid** - distributionId of a component release distribution this artifact applies to (optional, can be specified multiple times)
 - **--component** - Component name or UUID to link (optional, can be specified multiple times, must be paired with `--component_release`)
 - **--component_release** - Component release version or UUID to link (optional, can be specified multiple times, must be paired with `--component`)
 - **--product** - Product name or UUID to link (optional, can be specified multiple times, must be paired with `--product_release`)
@@ -598,7 +612,7 @@ rearm oolong add_artifact \
 ```
 Successfully created artifact: Product SBOM
   Type: BOM
-  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6/v1.yaml
   UUID: 173cedd7-fabb-4d3a-9315-7d7465d236b6
 ```
 
@@ -607,12 +621,12 @@ Successfully created artifact: Product SBOM
 ```
 Successfully created artifact: Product SBOM
   Type: BOM
-  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+  File: ./content/artifacts/173cedd7-fabb-4d3a-9315-7d7465d236b6/v1.yaml
   UUID: 173cedd7-fabb-4d3a-9315-7d7465d236b6
 
 Linking artifact to releases...
-Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to component 'Database Component' release '1.0.0' (collection version 2)
-Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to product 'My Product' release '1.0.0' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 in component 'Database Component' release '1.0.0' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 in product 'My Product' release '1.0.0' (collection version 2)
 
 Successfully processed 2 release(s)
 ```
@@ -622,18 +636,20 @@ Successfully processed 2 release(s)
 ```
 content/
 └── artifacts/
-    └── 173cedd7-fabb-4d3a-9315-7d7465d236b6.yaml
+    └── 173cedd7-fabb-4d3a-9315-7d7465d236b6/
+        └── v1.yaml
 ```
 
 **Artifact YAML Format:**
 
 ```yaml
+uuid: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+version: 1
 name: Product SBOM
 type: BOM
-version: 1
-distributionTypes: []
+createdDate: "2025-10-16T19:07:56Z"
 formats:
-- mimeType: application/vnd.cyclonedx+json
+- mediaType: application/vnd.cyclonedx+json
   description: CycloneDX SBOM in JSON format
   url: https://example.com/artifacts/sbom.json
   signatureUrl: https://example.com/artifacts/sbom.json.sig
@@ -643,19 +659,20 @@ formats:
 ```
 
 **Notes:**
-- If `--description` is not provided, the `description` field will be empty in the YAML output.
+- Fields left empty (`--description`, `--signatureurl`) are omitted from the YAML output.
+- `--distributionid` (repeatable) links the artifact to the component release distributions it applies to (`distributionIds`).
 - When linking to releases, the artifact is added to a new collection version with update reason `ARTIFACT_ADDED`. This is the same behavior as the `add_artifact_to_releases` command.
 - You can link the artifact to multiple component and product releases in a single command by specifying the flags multiple times.
 
 **Hash Format:**
 
 Hashes must be specified in the format `algorithm=value`:
-- `sha256=abc123def456`
-- `sha512=fedcba654321`
-- `blake3=123abc456def`
+- `sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe`
+- `sha1=a9ac7d6e8b5aae33125cd3c3d58c9bb5e3924e35`
 
-**Supported Hash Algorithms:**
-- `MD5`
+The value is checked against the algorithm's digest length and stored in lowercase.
+
+**Supported Hash Algorithms** (the TEA 1.0.0 checksum types):
 - `SHA-1` (or `sha1`)
 - `SHA-256` (or `sha256`)
 - `SHA-384` (or `sha384`)
@@ -747,8 +764,8 @@ rearm oolong add_artifact_to_releases \
 **Output when artifact is added:**
 
 ```
-Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to component 'Kauf Bulb Hardware' release 'BLF10' (collection version 2)
-Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 to product 'Kauf Bulb' release 'BLF10-1m-1.95' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 in component 'Kauf Bulb Hardware' release 'BLF10' (collection version 2)
+Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 in product 'Kauf Bulb' release 'BLF10-1m-1.95' (collection version 2)
 
 Successfully processed 2 release(s)
 ```
@@ -756,8 +773,8 @@ Successfully processed 2 release(s)
 **Output when artifact already exists:**
 
 ```
-Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 already added to component 'Kauf Bulb Hardware' release 'BLF10'
-Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 already added to product 'Kauf Bulb' release 'BLF10-1m-1.95'
+Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 already added to component 'Kauf Bulb Hardware' release 'BLF10'
+Artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1 already added to product 'Kauf Bulb' release 'BLF10-1m-1.95'
 
 Successfully processed 2 release(s)
 ```
@@ -768,26 +785,35 @@ When a new collection is created, it increments the version number and adds the 
 
 ```yaml
 version: 2
-date: "2025-10-28T16:26:48Z"
+createdDate: "2025-10-28T16:26:48Z"
+belongsTo: COMPONENT_RELEASE
 updateReason:
   type: ARTIFACT_ADDED
-  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6
+  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1
 artifacts:
-- 173cedd7-fabb-4d3a-9315-7d7465d236b6
+- uuid: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+  version: 1
 ```
+
+The collection references the artifact's latest revision (the highest `v<version>.yaml`).
 
 If the previous collection already had artifacts, they are preserved:
 
 ```yaml
 version: 3
-date: "2025-10-28T16:30:00Z"
+createdDate: "2025-10-28T16:30:00Z"
+belongsTo: COMPONENT_RELEASE
 updateReason:
   type: ARTIFACT_ADDED
-  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6
+  comment: Added artifact 173cedd7-fabb-4d3a-9315-7d7465d236b6 version 1
 artifacts:
-- abc12345-1234-5678-9abc-def012345678
-- 173cedd7-fabb-4d3a-9315-7d7465d236b6
+- uuid: abc12345-1234-4678-9abc-def012345678
+  version: 1
+- uuid: 173cedd7-fabb-4d3a-9315-7d7465d236b6
+  version: 1
 ```
+
+If the collection already lists an older revision of the same artifact, the new collection replaces it with the latest revision and records `ARTIFACT_UPDATED`.
 
 **Pairing Rules:**
 
@@ -810,7 +836,7 @@ The command validates ALL releases before making ANY changes:
 **Idempotent Behavior:**
 
 Running the command multiple times with the same artifact and releases is safe:
-- If the artifact is already in the latest collection, no new collection is created
+- If the artifact's latest revision is already in the latest collection, no new collection is created
 - A message is logged indicating the artifact is already present
 - The command succeeds without making changes
 
@@ -822,7 +848,7 @@ The `oolong add_distribution_to_component_release` command adds a distribution e
 1. Resolves the component by name or UUID
 2. Resolves the component release by version or UUID
 3. Reads the existing release.yaml
-4. Creates a new distribution entry with the provided metadata
+4. Creates a new distribution entry with the provided metadata and a `distributionId` (generated unless `--distributionid` is given)
 5. Appends the distribution to the release's distributions array
 6. Writes the updated release.yaml
 
@@ -847,10 +873,10 @@ rearm oolong add_distribution_to_component_release \
     --url "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin" \
     --signatureurl "https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin.sig" \
     --description "4MB firmware update binary" \
-    --distributiontype "FIRMWARE_UPDATE" \
+    --distributionid "0f5a3c2e-6b1d-4c8e-9a7f-2d4b6e8c1a35" \
     --hash "sha256=7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9" \
     --purl "pkg:generic/kauf-bulb-firmware@1.96?variant=4m" \
-    --tei "urn:tei:hash:kaufha.com:SHA256:7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9"
+    --tei "tei://kaufha.com/hash/SHA-256:7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9"
 ```
 
 Sample command with multiple hashes:
@@ -861,8 +887,8 @@ rearm oolong add_distribution_to_component_release \
     --component "35218a8a-7e08-4502-8165-fa2b7a4a0b8a" \
     --component_release "ff742766-4925-4b97-871b-e3285b7f932a" \
     --url "https://example.com/firmware/v2.0.bin" \
-    --hash "sha256=abc123def456" \
-    --hash "sha512=fedcba654321"
+    --hash "sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe" \
+    --hash "sha1=a9ac7d6e8b5aae33125cd3c3d58c9bb5e3924e35"
 ```
 
 **Flags:**
@@ -872,10 +898,11 @@ rearm oolong add_distribution_to_component_release \
 - **--url** - Distribution URL (required)
 - **--signatureurl** - Signature URL (optional)
 - **--description** - Distribution description (optional)
-- **--distributiontype** - Distribution type (optional)
+- **--distributionid** - Distribution UUID (optional, generated if not provided); artifacts reference it with `--distributionid`
+- **--distributiontype** - Deprecated and ignored: TEA 1.0.0 has no distribution type
 - **--hash** - Hash in format `algorithm=value` (optional, can be specified multiple times)
 - **--purl** - PURL identifier (optional, can be specified multiple times)
-- **--tei** - TEI identifier (optional, can be specified multiple times)
+- **--tei** - TEI identifier, `tei://<domain>/<type>/<identifier>` (optional, can be specified multiple times)
 
 **Output:**
 
@@ -883,6 +910,7 @@ rearm oolong add_distribution_to_component_release \
 Successfully added distribution to component release
   Component: Kauf Bulb Firmware
   Release: 1.96
+  Distribution ID: 3b1c9a52-7d4e-4f0a-8c6b-5e2d1f9a7c40
   Distribution URL: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin
 ```
 
@@ -892,25 +920,27 @@ After adding distributions, the release.yaml will include a distributions array:
 
 ```yaml
 uuid: ff742766-4925-4b97-871b-e3285b7f932a
-version: 1.96
+component: 35218a8a-7e08-4502-8165-fa2b7a4a0b8a
+version: "1.96"
 createdDate: "2025-10-16T18:03:53Z"
 releaseDate: "2025-10-16T18:03:53Z"
 preRelease: false
 identifiers: []
 distributions:
-- distributionType: ""
-  description: ""
-  identifiers: []
+- distributionId: 3b1c9a52-7d4e-4f0a-8c6b-5e2d1f9a7c40
   url: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-1m.bin
-  signatureUrl: ""
   checksums:
   - algType: SHA-256
     algValue: 5db2debf05bf9d7dcf7397cf2d780acf6079589dfbd474183cf4da80d8564e29
-- distributionType: ""
-  description: ""
-  identifiers: []
+- distributionId: 0f5a3c2e-6b1d-4c8e-9a7f-2d4b6e8c1a35
+  description: 4MB firmware update binary
+  identifiers:
+  - idType: PURL
+    idValue: pkg:generic/kauf-bulb-firmware@1.96?variant=4m
+  - idType: TEI
+    idValue: tei://kaufha.com/hash/SHA-256:7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9
   url: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin
-  signatureUrl: ""
+  signatureUrl: https://github.com/KaufHA/kauf-rgbww-bulbs/releases/download/v1.96/kauf-bulb-v1.96-update-4m.bin.sig
   checksums:
   - algType: SHA-256
     algValue: 7429339b03f418ccc89408b3392388b3181c373d45f2279395811e38829d43e9
@@ -927,12 +957,12 @@ The command will search through the content directory and match by either identi
 **Hash Format:**
 
 Hashes must be specified in the format `algorithm=value`:
-- `sha256=abc123def456`
-- `sha512=fedcba654321`
-- `blake3=123abc456def`
+- `sha256=05ca5f89a206f5863ae3327d52daed8b760a91c3ce465708447bd3499c4492fe`
+- `sha1=a9ac7d6e8b5aae33125cd3c3d58c9bb5e3924e35`
 
-**Supported Hash Algorithms:**
-- `MD5`
+The value is checked against the algorithm's digest length and stored in lowercase.
+
+**Supported Hash Algorithms** (the TEA 1.0.0 checksum types):
 - `SHA-1` (or `sha1`)
 - `SHA-256` (or `sha256`)
 - `SHA-384` (or `sha384`)
