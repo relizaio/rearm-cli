@@ -98,20 +98,28 @@ var distUrl string
 var distSignatureUrl string
 var distDescription string
 var distDistributionType string
+var distDistributionId string
 var distHashes []string
+
+// Artifact distribution links
+var artifactDistributionIds []string
+
+// The structures below are the Oolong content layout for TEA 1.0.0, as the Oolong server's
+// loader reads it (oolong-server/src/tea/content-store.ts). Optional fields are omitted when
+// empty: the loader rejects an empty string where it expects a URI and an empty checksum list.
 
 // Product represents the structure of product.yaml
 type Product struct {
-	UUID        string   `yaml:"uuid"`
-	Name        string   `yaml:"name"`
-	Identifiers []string `yaml:"identifiers"`
+	UUID        string             `yaml:"uuid"`
+	Name        string             `yaml:"name"`
+	Identifiers []OolongIdentifier `yaml:"identifiers"`
 }
 
 // Component represents the structure of component.yaml
 type Component struct {
-	UUID        string   `yaml:"uuid"`
-	Name        string   `yaml:"name"`
-	Identifiers []string `yaml:"identifiers"`
+	UUID        string             `yaml:"uuid"`
+	Name        string             `yaml:"name"`
+	Identifiers []OolongIdentifier `yaml:"identifiers"`
 }
 
 // OolongIdentifier represents an identifier in release.yaml
@@ -122,20 +130,21 @@ type OolongIdentifier struct {
 
 // Distribution represents a distribution entry in component release.yaml
 type Distribution struct {
-	DistributionType string             `yaml:"distributionType"`
-	Description      string             `yaml:"description"`
-	Identifiers      []OolongIdentifier `yaml:"identifiers"`
-	Url              string             `yaml:"url"`
-	SignatureUrl     string             `yaml:"signatureUrl"`
-	Checksums        []Checksum         `yaml:"checksums"`
+	DistributionId string             `yaml:"distributionId"`
+	Description    string             `yaml:"description,omitempty"`
+	Identifiers    []OolongIdentifier `yaml:"identifiers,omitempty"`
+	Url            string             `yaml:"url,omitempty"`
+	SignatureUrl   string             `yaml:"signatureUrl,omitempty"`
+	Checksums      []Checksum         `yaml:"checksums,omitempty"`
 }
 
 // ComponentRelease represents the structure of component release.yaml
 type ComponentRelease struct {
 	UUID          string             `yaml:"uuid"`
+	Component     string             `yaml:"component,omitempty"`
 	Version       string             `yaml:"version"`
 	CreatedDate   string             `yaml:"createdDate"`
-	ReleaseDate   string             `yaml:"releaseDate"`
+	ReleaseDate   string             `yaml:"releaseDate,omitempty"`
 	PreRelease    bool               `yaml:"preRelease"`
 	Identifiers   []OolongIdentifier `yaml:"identifiers"`
 	Distributions []Distribution     `yaml:"distributions"`
@@ -150,9 +159,10 @@ type ProductReleaseComponent struct {
 // ProductRelease represents the structure of product release.yaml
 type ProductRelease struct {
 	UUID        string                    `yaml:"uuid"`
+	Product     string                    `yaml:"product,omitempty"`
 	Version     string                    `yaml:"version"`
 	CreatedDate string                    `yaml:"createdDate"`
-	ReleaseDate string                    `yaml:"releaseDate"`
+	ReleaseDate string                    `yaml:"releaseDate,omitempty"`
 	PreRelease  bool                      `yaml:"preRelease"`
 	Identifiers []OolongIdentifier        `yaml:"identifiers"`
 	Components  []ProductReleaseComponent `yaml:"components"`
@@ -161,16 +171,29 @@ type ProductRelease struct {
 // UpdateReason represents the update reason in collection.yaml
 type UpdateReason struct {
 	Type    string `yaml:"type"`
-	Comment string `yaml:"comment"`
+	Comment string `yaml:"comment,omitempty"`
 }
 
-// Collection represents the structure of collection.yaml
-type Collection struct {
-	Version      int          `yaml:"version"`
-	Date         string       `yaml:"date"`
-	UpdateReason UpdateReason `yaml:"updateReason"`
-	Artifacts    []string     `yaml:"artifacts"`
+// CollectionArtifact references one revision of an artifact from a collection
+type CollectionArtifact struct {
+	UUID    string `yaml:"uuid"`
+	Version int    `yaml:"version"`
 }
+
+// Collection represents the structure of collections/<version>.yaml
+type Collection struct {
+	Version      int                  `yaml:"version"`
+	CreatedDate  string               `yaml:"createdDate"`
+	BelongsTo    string               `yaml:"belongsTo"`
+	UpdateReason UpdateReason         `yaml:"updateReason"`
+	Artifacts    []CollectionArtifact `yaml:"artifacts"`
+}
+
+// Collection owners (TEA 1.0.0 belongsTo)
+const (
+	belongsToComponentRelease = "COMPONENT_RELEASE"
+	belongsToProductRelease   = "PRODUCT_RELEASE"
+)
 
 // Checksum represents a checksum in artifact format
 type Checksum struct {
@@ -178,22 +201,24 @@ type Checksum struct {
 	AlgValue string `yaml:"algValue"`
 }
 
-// ArtifactFormat represents a format entry in artifact.yaml
+// ArtifactFormat represents a format entry in an artifact revision
 type ArtifactFormat struct {
-	MimeType     string     `yaml:"mimeType"`
-	Description  string     `yaml:"description"`
-	Url          string     `yaml:"url"`
-	SignatureUrl string     `yaml:"signatureUrl"`
-	Checksums    []Checksum `yaml:"checksums"`
+	MediaType    string     `yaml:"mediaType"`
+	Description  string     `yaml:"description,omitempty"`
+	Url          string     `yaml:"url,omitempty"`
+	SignatureUrl string     `yaml:"signatureUrl,omitempty"`
+	Checksums    []Checksum `yaml:"checksums,omitempty"`
 }
 
-// OolongArtifact represents the structure of artifact.yaml
+// OolongArtifact represents one artifact revision, artifacts/<uuid>/v<version>.yaml
 type OolongArtifact struct {
-	Name              string           `yaml:"name"`
-	Type              string           `yaml:"type"`
-	Version           int              `yaml:"version"`
-	DistributionTypes []string         `yaml:"distributionTypes"`
-	Formats           []ArtifactFormat `yaml:"formats"`
+	UUID            string           `yaml:"uuid"`
+	Version         int              `yaml:"version"`
+	Name            string           `yaml:"name,omitempty"`
+	Type            string           `yaml:"type"`
+	CreatedDate     string           `yaml:"createdDate"`
+	DistributionIds []string         `yaml:"distributionIds,omitempty"`
+	Formats         []ArtifactFormat `yaml:"formats"`
 }
 
 // add_productCmd represents the add_product command
@@ -209,11 +234,10 @@ The product directory name will be the lowercase snake_case version of the produ
 		}
 
 		// Generate UUID if not provided
-		var prodUuid string
-		if productUuid != "" {
-			prodUuid = productUuid
-		} else {
-			prodUuid = uuid.New().String()
+		prodUuid, err := getOrGenerateUUID(productUuid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --uuid: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Convert name to lowercase snake_case
@@ -237,7 +261,7 @@ The product directory name will be the lowercase snake_case version of the produ
 		product := Product{
 			UUID:        prodUuid,
 			Name:        productName,
-			Identifiers: []string{},
+			Identifiers: []OolongIdentifier{},
 		}
 
 		// Write YAML file
@@ -266,11 +290,10 @@ The component directory name will be the lowercase snake_case version of the com
 		}
 
 		// Generate UUID if not provided
-		var compUuid string
-		if componentUuid != "" {
-			compUuid = componentUuid
-		} else {
-			compUuid = uuid.New().String()
+		compUuid, err := getOrGenerateUUID(componentUuid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --uuid: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Convert name to lowercase snake_case
@@ -294,7 +317,7 @@ The component directory name will be the lowercase snake_case version of the com
 		component := Component{
 			UUID:        compUuid,
 			Name:        componentNameFlag,
-			Identifiers: []string{},
+			Identifiers: []OolongIdentifier{},
 		}
 
 		// Write YAML file
@@ -333,12 +356,31 @@ The component can be specified by name or UUID.`,
 			os.Exit(1)
 		}
 
-		// Validate artifacts exist if provided (BEFORE creating any directories)
-		if len(componentReleaseArtifacts) > 0 {
-			if err := validateArtifactsExist(contentDir, componentReleaseArtifacts); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
+		// Validate every input BEFORE creating any directories
+		relUuid, err := getOrGenerateUUID(componentReleaseUuid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --uuid: %v\n", err)
+			os.Exit(1)
+		}
+		createdDate, err := parseOrDefaultDate(releaseCreatedDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --createddate: %v\n", err)
+			os.Exit(1)
+		}
+		relDate, err := parseOrDefaultDate(releaseReleaseDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --releasedate: %v\n", err)
+			os.Exit(1)
+		}
+		identifiers, err := buildIdentifiers(releaseTeis, releasePurls)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		artifacts, err := artifactRefs(contentDir, componentReleaseArtifacts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Create release directory
@@ -355,20 +397,10 @@ The component can be specified by name or UUID.`,
 			os.Exit(1)
 		}
 
-		// Generate UUID if not provided
-		relUuid := getOrGenerateUUID(componentReleaseUuid)
-
-		// Set timestamps if not provided
-		currentTime := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		createdDate := parseOrDefaultDate(releaseCreatedDate)
-		relDate := parseOrDefaultDate(releaseReleaseDate)
-
-		// Build identifiers list
-		identifiers := buildIdentifiers(releaseTeis, releasePurls)
-
 		// Create component release structure
 		release := ComponentRelease{
 			UUID:          relUuid,
+			Component:     componentData.UUID,
 			Version:       componentReleaseVersion,
 			CreatedDate:   createdDate,
 			ReleaseDate:   relDate,
@@ -393,13 +425,11 @@ The component can be specified by name or UUID.`,
 
 		// Create initial collection
 		collection := Collection{
-			Version: 1,
-			Date:    currentTime,
-			UpdateReason: UpdateReason{
-				Type:    "INITIAL_RELEASE",
-				Comment: "",
-			},
-			Artifacts: componentReleaseArtifacts,
+			Version:      1,
+			CreatedDate:  time.Now().UTC().Format(teaTimeFormat),
+			BelongsTo:    belongsToComponentRelease,
+			UpdateReason: UpdateReason{Type: "INITIAL_RELEASE"},
+			Artifacts:    artifacts,
 		}
 
 		collectionYamlPath := filepath.Join(collectionsDir, "1.yaml")
@@ -423,8 +453,8 @@ The component can be specified by name or UUID.`,
 var add_artifactCmd = &cobra.Command{
 	Use:   "add_artifact",
 	Short: "Add an artifact to the content directory",
-	Long: `Creates an artifact YAML file in the artifacts directory.
-The artifact file is named with its UUID.`,
+	Long: `Creates revision 1 of an artifact, artifacts/<uuid>/v1.yaml, in the TEA 1.0.0 content layout.
+The artifact is served by URL, so at least one --hash is required.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if artifactName == "" {
 			fmt.Fprintf(os.Stderr, "Error: artifact name is required\n")
@@ -462,64 +492,67 @@ The artifact file is named with its UUID.`,
 			os.Exit(1)
 		}
 
-		// Generate UUID if not provided
-		artUuid := getOrGenerateUUID(artifactUuid)
-
-		// Create artifacts directory if it doesn't exist
-		artifactsDir := filepath.Join(contentDir, "artifacts")
-		if err := os.MkdirAll(artifactsDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create artifacts directory: %v\n", err)
+		// Validate every input before writing anything
+		artUuid, err := getOrGenerateUUID(artifactUuid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --uuid: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Check if artifact file already exists
-		artifactPath := filepath.Join(artifactsDir, artUuid+".yaml")
-		if _, err := os.Stat(artifactPath); err == nil {
-			fmt.Fprintf(os.Stderr, "Error: artifact with UUID '%s' already exists at %s\n", artUuid, artifactPath)
+		checksums, err := parseChecksums(artifactHashes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Parse hashes
-		checksums := []Checksum{}
-		for _, hash := range artifactHashes {
-			parts := strings.SplitN(hash, "=", 2)
-			if len(parts) != 2 {
-				fmt.Fprintf(os.Stderr, "Error: invalid hash format '%s'. Expected format: algorithm=value (e.g., sha256=abcd)\n", hash)
+		// TEA 1.0.0: a format that points at a URL must carry its checksums
+		if len(checksums) == 0 {
+			fmt.Fprintf(os.Stderr, "Error: at least one --hash is required: TEA 1.0.0 requires checksums for an artifact served by URL\n")
+			os.Exit(1)
+		}
+		distributionIds := []string{}
+		for _, d := range artifactDistributionIds {
+			id, err := getOrGenerateUUID(d)
+			if err != nil || d == "" {
+				fmt.Fprintf(os.Stderr, "Error: --distributionid: '%s' is not a UUID\n", d)
 				os.Exit(1)
 			}
-			// Normalize algorithm name
-			algType, err := normalizeHashAlgorithm(parts[0])
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			checksums = append(checksums, Checksum{
-				AlgType:  algType,
-				AlgValue: parts[1],
-			})
+			distributionIds = append(distributionIds, id)
 		}
 
-		// Create artifact format
-		format := ArtifactFormat{
-			MimeType:     artifactMediaType,
-			Description:  artifactDescription,
-			Url:          artifactUrl,
-			SignatureUrl: artifactSignatureUrl,
-			Checksums:    checksums,
+		// Each revision of an artifact is artifacts/<uuid>/v<version>.yaml; this creates revision 1
+		artifactDir := filepath.Join(contentDir, "artifacts", artUuid)
+		if _, err := os.Stat(artifactDir); err == nil {
+			fmt.Fprintf(os.Stderr, "Error: artifact with UUID '%s' already exists at %s\n", artUuid, artifactDir)
+			os.Exit(1)
 		}
+		if _, err := os.Stat(filepath.Join(contentDir, "artifacts", artUuid+".yaml")); err == nil {
+			fmt.Fprintf(os.Stderr, "Error: artifact with UUID '%s' already exists in the pre-TEA 1.0.0 layout (artifacts/%s.yaml)\n", artUuid, artUuid)
+			os.Exit(1)
+		}
+		if err := os.MkdirAll(artifactDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create artifact directory: %v\n", err)
+			os.Exit(1)
+		}
+		artifactPath := filepath.Join(artifactDir, "v1.yaml")
 
-		// Create artifact structure
 		artifact := OolongArtifact{
-			Name:              artifactName,
-			Type:              artifactType,
-			Version:           1,
-			DistributionTypes: []string{},
-			Formats:           []ArtifactFormat{format},
+			UUID:            artUuid,
+			Version:         1,
+			Name:            artifactName,
+			Type:            artifactType,
+			CreatedDate:     time.Now().UTC().Format(teaTimeFormat),
+			DistributionIds: distributionIds,
+			Formats: []ArtifactFormat{{
+				MediaType:    artifactMediaType,
+				Description:  artifactDescription,
+				Url:          artifactUrl,
+				SignatureUrl: artifactSignatureUrl,
+				Checksums:    checksums,
+			}},
 		}
 
 		// Write YAML file
 		if err := writeYAML(artifactPath, artifact); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to write artifact.yaml: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error: failed to write %s: %v\n", artifactPath, err)
 			os.Exit(1)
 		}
 
@@ -569,38 +602,32 @@ Optionally, components can be linked to the release by providing paired componen
 			os.Exit(1)
 		}
 
-		// Validate artifacts exist if provided (BEFORE creating any directories)
-		if len(productReleaseArtifacts) > 0 {
-			if err := validateArtifactsExist(contentDir, productReleaseArtifacts); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-		}
-
-		// Create release directory
-		releaseDir := filepath.Join(productDir, "releases", productReleaseVersion)
-
-		// Check if release already exists
-		if _, err := os.Stat(releaseDir); err == nil {
-			fmt.Fprintf(os.Stderr, "Error: release version '%s' already exists for product '%s'\n", productReleaseVersion, productData.Name)
+		// Validate every input BEFORE creating any directories
+		relUuid, err := getOrGenerateUUID(productReleaseUuid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --uuid: %v\n", err)
 			os.Exit(1)
 		}
-
-		if err := os.MkdirAll(releaseDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create release directory %s: %v\n", releaseDir, err)
+		createdDate, err := parseOrDefaultDate(productReleaseCreatedDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --createddate: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Generate UUID if not provided
-		relUuid := getOrGenerateUUID(productReleaseUuid)
-
-		// Set timestamps if not provided
-		currentTime := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		createdDate := parseOrDefaultDate(productReleaseCreatedDate)
-		relDate := parseOrDefaultDate(productReleaseReleaseDate)
-
-		// Build identifiers list
-		identifiers := buildIdentifiers(productReleaseTeis, productReleasePurls)
+		relDate, err := parseOrDefaultDate(productReleaseReleaseDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --releasedate: %v\n", err)
+			os.Exit(1)
+		}
+		identifiers, err := buildIdentifiers(productReleaseTeis, productReleasePurls)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		artifacts, err := artifactRefs(contentDir, productReleaseArtifacts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Process component references
 		components := []ProductReleaseComponent{}
@@ -628,9 +655,24 @@ Optionally, components can be linked to the release by providing paired componen
 			})
 		}
 
+		// Create release directory
+		releaseDir := filepath.Join(productDir, "releases", productReleaseVersion)
+
+		// Check if release already exists
+		if _, err := os.Stat(releaseDir); err == nil {
+			fmt.Fprintf(os.Stderr, "Error: release version '%s' already exists for product '%s'\n", productReleaseVersion, productData.Name)
+			os.Exit(1)
+		}
+
+		if err := os.MkdirAll(releaseDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create release directory %s: %v\n", releaseDir, err)
+			os.Exit(1)
+		}
+
 		// Create product release structure
 		release := ProductRelease{
 			UUID:        relUuid,
+			Product:     productData.UUID,
 			Version:     productReleaseVersion,
 			CreatedDate: createdDate,
 			ReleaseDate: relDate,
@@ -655,13 +697,11 @@ Optionally, components can be linked to the release by providing paired componen
 
 		// Create initial collection
 		collection := Collection{
-			Version: 1,
-			Date:    currentTime,
-			UpdateReason: UpdateReason{
-				Type:    "INITIAL_RELEASE",
-				Comment: "",
-			},
-			Artifacts: productReleaseArtifacts,
+			Version:      1,
+			CreatedDate:  time.Now().UTC().Format(teaTimeFormat),
+			BelongsTo:    belongsToProductRelease,
+			UpdateReason: UpdateReason{Type: "INITIAL_RELEASE"},
+			Artifacts:    artifacts,
 		}
 
 		collectionYamlPath := filepath.Join(collectionsDir, "1.yaml")
@@ -752,40 +792,42 @@ var add_distribution_to_component_releaseCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error: failed to parse release.yaml: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Parse hashes
-		checksums := []Checksum{}
-		for _, hash := range distHashes {
-			parts := strings.SplitN(hash, "=", 2)
-			if len(parts) != 2 {
-				fmt.Fprintf(os.Stderr, "Error: invalid hash format '%s'. Expected format: algorithm=value\n", hash)
-				os.Exit(1)
-			}
-
-			algorithm, value := parts[0], parts[1]
-			normalizedAlg, err := normalizeHashAlgorithm(algorithm)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-
-			checksums = append(checksums, Checksum{
-				AlgType:  normalizedAlg,
-				AlgValue: value,
-			})
+		if release.Component == "" {
+			release.Component = componentData.UUID
 		}
 
-		// Build identifiers
-		identifiers := buildIdentifiers(distTeis, distPurls)
+		checksums, err := parseChecksums(distHashes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 
-		// Create distribution entry
+		identifiers, err := buildIdentifiers(distTeis, distPurls)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		distributionId, err := getOrGenerateUUID(distDistributionId)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --distributionid: %v\n", err)
+			os.Exit(1)
+		}
+		for _, existing := range release.Distributions {
+			if existing.DistributionId == distributionId {
+				fmt.Fprintf(os.Stderr, "Error: distribution '%s' already exists in this release\n", distributionId)
+				os.Exit(1)
+			}
+		}
+
+		// TEA 1.0.0 identifies a distribution by distributionId; it has no distribution type
 		distribution := Distribution{
-			DistributionType: distDistributionType,
-			Description:      distDescription,
-			Identifiers:      identifiers,
-			Url:              distUrl,
-			SignatureUrl:     distSignatureUrl,
-			Checksums:        checksums,
+			DistributionId: distributionId,
+			Description:    distDescription,
+			Identifiers:    identifiers,
+			Url:            distUrl,
+			SignatureUrl:   distSignatureUrl,
+			Checksums:      checksums,
 		}
 
 		// Add distribution to release
@@ -800,6 +842,7 @@ var add_distribution_to_component_releaseCmd = &cobra.Command{
 		fmt.Printf("Successfully added distribution to component release\n")
 		fmt.Printf("  Component: %s\n", componentData.Name)
 		fmt.Printf("  Release: %s\n", release.Version)
+		fmt.Printf("  Distribution ID: %s\n", distributionId)
 		fmt.Printf("  Distribution URL: %s\n", distUrl)
 	},
 }
@@ -823,10 +866,10 @@ func init() {
 	add_component_releaseCmd.Flags().StringVar(&releaseComponent, "component", "", "Component name or UUID (required)")
 	add_component_releaseCmd.Flags().StringVar(&componentReleaseVersion, "version", "", "Release version (required)")
 	add_component_releaseCmd.Flags().StringVar(&componentReleaseUuid, "uuid", "", "Release UUID (optional, will be generated if not provided)")
-	add_component_releaseCmd.Flags().StringVar(&releaseCreatedDate, "createddate", "", "Created date in RFC3339 format (optional, defaults to current time)")
-	add_component_releaseCmd.Flags().StringVar(&releaseReleaseDate, "releasedate", "", "Release date in RFC3339 format (optional, defaults to current time)")
+	add_component_releaseCmd.Flags().StringVar(&releaseCreatedDate, "createddate", "", "Created date, RFC 3339; stored in UTC (optional, defaults to current time)")
+	add_component_releaseCmd.Flags().StringVar(&releaseReleaseDate, "releasedate", "", "Release date, RFC 3339; stored in UTC (optional, defaults to current time)")
 	add_component_releaseCmd.Flags().BoolVar(&releasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
-	add_component_releaseCmd.Flags().StringArrayVar(&releaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
+	add_component_releaseCmd.Flags().StringArrayVar(&releaseTeis, "tei", []string{}, "TEI identifier, tei://<domain>/<type>/<identifier> (can be specified multiple times)")
 	add_component_releaseCmd.Flags().StringArrayVar(&releasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
 	add_component_releaseCmd.Flags().StringArrayVar(&componentReleaseArtifacts, "artifact", []string{}, "Artifact UUID to add to initial collection (optional, can be specified multiple times)")
 	add_component_releaseCmd.MarkFlagRequired("component")
@@ -836,10 +879,10 @@ func init() {
 	add_product_releaseCmd.Flags().StringVar(&productReleaseProduct, "product", "", "Product name or UUID (required)")
 	add_product_releaseCmd.Flags().StringVar(&productReleaseVersion, "version", "", "Release version (required)")
 	add_product_releaseCmd.Flags().StringVar(&productReleaseUuid, "uuid", "", "Release UUID (optional, will be generated if not provided)")
-	add_product_releaseCmd.Flags().StringVar(&productReleaseCreatedDate, "createddate", "", "Created date in RFC3339 format (optional, defaults to current time)")
-	add_product_releaseCmd.Flags().StringVar(&productReleaseReleaseDate, "releasedate", "", "Release date in RFC3339 format (optional, defaults to current time)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseCreatedDate, "createddate", "", "Created date, RFC 3339; stored in UTC (optional, defaults to current time)")
+	add_product_releaseCmd.Flags().StringVar(&productReleaseReleaseDate, "releasedate", "", "Release date, RFC 3339; stored in UTC (optional, defaults to current time)")
 	add_product_releaseCmd.Flags().BoolVar(&productReleasePrerelease, "prerelease", false, "Mark as pre-release (optional, defaults to false)")
-	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseTeis, "tei", []string{}, "TEI identifier (can be specified multiple times)")
+	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseTeis, "tei", []string{}, "TEI identifier, tei://<domain>/<type>/<identifier> (can be specified multiple times)")
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleasePurls, "purl", []string{}, "PURL identifier (can be specified multiple times)")
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --component_release)")
 	add_product_releaseCmd.Flags().StringArrayVar(&productReleaseComponentReleases, "component_release", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
@@ -855,7 +898,8 @@ func init() {
 	add_artifactCmd.Flags().StringVar(&artifactUrl, "url", "", "Artifact URL (required)")
 	add_artifactCmd.Flags().StringVar(&artifactSignatureUrl, "signatureurl", "", "Signature URL (optional)")
 	add_artifactCmd.Flags().StringVar(&artifactDescription, "description", "", "Artifact description (optional, defaults to empty)")
-	add_artifactCmd.Flags().StringArrayVar(&artifactHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (at least one required: TEA 1.0.0 requires checksums for an artifact served by URL; can be specified multiple times)")
+	add_artifactCmd.Flags().StringArrayVar(&artifactDistributionIds, "distributionid", []string{}, "distributionId of a component release distribution this artifact applies to (optional, can be specified multiple times)")
 	add_artifactCmd.Flags().StringArrayVar(&artifactComponents, "component", []string{}, "Component name or UUID to link (optional, can be specified multiple times, must be paired with --component_release)")
 	add_artifactCmd.Flags().StringArrayVar(&artifactComponentReleases, "component_release", []string{}, "Component release version or UUID to link (optional, can be specified multiple times, must be paired with --component)")
 	add_artifactCmd.Flags().StringArrayVar(&artifactProducts, "product", []string{}, "Product name or UUID to link (optional, can be specified multiple times, must be paired with --product_release)")
@@ -877,11 +921,13 @@ func init() {
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponent, "component", "", "Component name or UUID (required)")
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distComponentRelease, "component_release", "", "Component release version or UUID (required)")
 	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distPurls, "purl", []string{}, "PURL identifier (optional, can be specified multiple times)")
-	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distTeis, "tei", []string{}, "TEI identifier (optional, can be specified multiple times)")
+	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distTeis, "tei", []string{}, "TEI identifier, tei://<domain>/<type>/<identifier> (optional, can be specified multiple times)")
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distUrl, "url", "", "Distribution URL (required)")
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distSignatureUrl, "signatureurl", "", "Signature URL (optional)")
 	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDescription, "description", "", "Distribution description (optional)")
-	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDistributionType, "distributiontype", "", "Distribution type (optional)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDistributionId, "distributionid", "", "Distribution UUID (optional, will be generated if not provided)")
+	add_distribution_to_component_releaseCmd.Flags().StringVar(&distDistributionType, "distributiontype", "", "Ignored: TEA 1.0.0 has no distribution type")
+	add_distribution_to_component_releaseCmd.Flags().MarkDeprecated("distributiontype", "TEA 1.0.0 identifies a distribution by --distributionid and has no distribution type; the value is ignored")
 	add_distribution_to_component_releaseCmd.Flags().StringArrayVar(&distHashes, "hash", []string{}, "Hash in format algorithm=value, e.g., sha256=abcd (optional, can be specified multiple times)")
 	add_distribution_to_component_releaseCmd.MarkFlagRequired("component")
 	add_distribution_to_component_releaseCmd.MarkFlagRequired("component_release")
@@ -903,30 +949,68 @@ func isUUID(s string) bool {
 	return uuidPattern.MatchString(s)
 }
 
+// teiPattern is the TEA 1.0.0 TEI syntax, tei://<domain-name>/<type>/<unique identifier>
+var teiPattern = regexp.MustCompile(`^tei://[^/\s]+/[a-z0-9]+/\S+$`)
+
 // buildIdentifiers creates a list of OolongIdentifier from TEI and PURL lists
-func buildIdentifiers(teis, purls []string) []OolongIdentifier {
+func buildIdentifiers(teis, purls []string) ([]OolongIdentifier, error) {
 	identifiers := []OolongIdentifier{}
 	for _, tei := range teis {
+		if !teiPattern.MatchString(tei) {
+			return nil, fmt.Errorf("invalid TEI '%s': TEA 1.0.0 uses tei://<domain>/<type>/<identifier>, e.g. tei://example.com/uuid/%s (a purl TEI carries the Package URL Base64URL-encoded without padding)", tei, uuid.Nil.String())
+		}
 		identifiers = append(identifiers, OolongIdentifier{
 			IdType:  "TEI",
 			IdValue: tei,
 		})
 	}
 	for _, purl := range purls {
+		if !strings.HasPrefix(purl, "pkg:") {
+			return nil, fmt.Errorf("invalid PURL '%s': a Package URL starts with pkg:", purl)
+		}
 		identifiers = append(identifiers, OolongIdentifier{
 			IdType:  "PURL",
 			IdValue: purl,
 		})
 	}
-	return identifiers
+	return identifiers, nil
 }
 
-// normalizeHashAlgorithm normalizes hash algorithm names to standard format
+// teaChecksumHexLength is the length of each checksum type's lowercase hex value, as TEA 1.0.0 pins it
+var teaChecksumHexLength = map[string]int{
+	"SHA-1": 40, "SHA-256": 64, "SHA-384": 96, "SHA-512": 128,
+	"SHA3-256": 64, "SHA3-384": 96, "SHA3-512": 128,
+	"BLAKE2b-256": 64, "BLAKE2b-384": 96, "BLAKE2b-512": 128, "BLAKE3": 64,
+}
+
+var hexPattern = regexp.MustCompile(`^[0-9a-f]+$`)
+
+// parseChecksums turns algorithm=value flags into TEA checksums: the algorithm is normalized,
+// the value lowercased and checked against the algorithm's digest length.
+func parseChecksums(hashes []string) ([]Checksum, error) {
+	checksums := []Checksum{}
+	for _, hash := range hashes {
+		parts := strings.SplitN(hash, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid hash format '%s'. Expected format: algorithm=value (e.g., sha256=abcd)", hash)
+		}
+		algType, err := normalizeHashAlgorithm(parts[0])
+		if err != nil {
+			return nil, err
+		}
+		value := strings.ToLower(strings.TrimSpace(parts[1]))
+		if len(value) != teaChecksumHexLength[algType] || !hexPattern.MatchString(value) {
+			return nil, fmt.Errorf("invalid %s value '%s': expected %d hex characters", algType, parts[1], teaChecksumHexLength[algType])
+		}
+		checksums = append(checksums, Checksum{AlgType: algType, AlgValue: value})
+	}
+	return checksums, nil
+}
+
+// normalizeHashAlgorithm normalizes hash algorithm names to the TEA 1.0.0 checksum types
 func normalizeHashAlgorithm(algorithm string) (string, error) {
 	algType := strings.ToUpper(algorithm)
 	switch algType {
-	case "MD5":
-		return "MD5", nil
 	case "SHA1", "SHA-1":
 		return "SHA-1", nil
 	case "SHA256", "SHA-256":
@@ -950,42 +1034,94 @@ func normalizeHashAlgorithm(algorithm string) (string, error) {
 	case "BLAKE3":
 		return "BLAKE3", nil
 	default:
-		return "", fmt.Errorf("invalid hash algorithm '%s'. Must be one of: MD5, SHA-1, SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3", algorithm)
+		return "", fmt.Errorf("invalid hash algorithm '%s'. Must be one of: SHA-1, SHA-256, SHA-384, SHA-512, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3", algorithm)
 	}
 }
 
-// getOrGenerateUUID returns the provided UUID if not empty, otherwise generates a new one
-func getOrGenerateUUID(providedUUID string) string {
-	if providedUUID != "" {
-		return providedUUID
+// getOrGenerateUUID returns the provided UUID, lowercased and validated, or a new one when none
+// was provided. TEA 1.0.0 identifiers are lowercase UUIDs.
+func getOrGenerateUUID(providedUUID string) (string, error) {
+	if providedUUID == "" {
+		return uuid.New().String(), nil
 	}
-	return uuid.New().String()
+	u := strings.ToLower(providedUUID)
+	if !isUUID(u) {
+		return "", fmt.Errorf("'%s' is not a UUID", providedUUID)
+	}
+	return u, nil
 }
 
-// parseOrDefaultDate parses the provided date string or returns current UTC time in RFC3339 format
-func parseOrDefaultDate(dateStr string) string {
-	if dateStr != "" {
-		return dateStr
+// teaTimeFormat is the UTC RFC 3339 form the Oolong loader accepts
+const teaTimeFormat = "2006-01-02T15:04:05Z"
+
+// parseOrDefaultDate parses an RFC 3339 date and returns it in UTC (TEA 1.0.0 requires UTC);
+// an empty string gives the current time.
+func parseOrDefaultDate(dateStr string) (string, error) {
+	if dateStr == "" {
+		return time.Now().UTC().Format(teaTimeFormat), nil
 	}
-	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid date '%s': expected RFC 3339, e.g. 2026-01-15T10:00:00Z", dateStr)
+	}
+	return t.UTC().Format(teaTimeFormat), nil
 }
 
-// validateArtifactsExist checks if all artifact UUIDs exist in the artifacts directory
-func validateArtifactsExist(contentDir string, artifactUUIDs []string) error {
-	artifactsDir := filepath.Join(contentDir, "artifacts")
+// artifactRevisionPattern matches an artifact revision file name, v<version>.yaml
+var artifactRevisionPattern = regexp.MustCompile(`^v([1-9][0-9]*)\.yaml$`)
 
-	for _, artifactUUID := range artifactUUIDs {
-		artifactPath := filepath.Join(artifactsDir, artifactUUID+".yaml")
-		if _, err := os.Stat(artifactPath); os.IsNotExist(err) {
-			return fmt.Errorf("artifact with UUID '%s' not found at %s", artifactUUID, artifactPath)
+// latestArtifactVersion returns the highest revision of an artifact, read from
+// artifacts/<uuid>/v<version>.yaml
+func latestArtifactVersion(contentDir, artifactUUID string) (int, error) {
+	dir := filepath.Join(contentDir, "artifacts", artifactUUID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if _, legacy := os.Stat(filepath.Join(contentDir, "artifacts", artifactUUID+".yaml")); legacy == nil {
+				return 0, fmt.Errorf("artifact '%s' is in the pre-TEA 1.0.0 layout (artifacts/%s.yaml); move it to artifacts/%s/v1.yaml", artifactUUID, artifactUUID, artifactUUID)
+			}
+			return 0, fmt.Errorf("artifact with UUID '%s' not found at %s", artifactUUID, dir)
+		}
+		return 0, err
+	}
+	latest := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if m := artifactRevisionPattern.FindStringSubmatch(entry.Name()); m != nil {
+			if v, err := strconv.Atoi(m[1]); err == nil && v > latest {
+				latest = v
+			}
 		}
 	}
-	return nil
+	if latest == 0 {
+		return 0, fmt.Errorf("artifact with UUID '%s' has no revision file (v<version>.yaml) in %s", artifactUUID, dir)
+	}
+	return latest, nil
+}
+
+// artifactRefs resolves artifact UUIDs to collection references at each artifact's latest revision
+func artifactRefs(contentDir string, artifactUUIDs []string) ([]CollectionArtifact, error) {
+	refs := []CollectionArtifact{}
+	for _, artifactUUID := range artifactUUIDs {
+		u, err := getOrGenerateUUID(artifactUUID)
+		if err != nil || artifactUUID == "" {
+			return nil, fmt.Errorf("invalid artifact UUID '%s'", artifactUUID)
+		}
+		version, err := latestArtifactVersion(contentDir, u)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, CollectionArtifact{UUID: u, Version: version})
+	}
+	return refs, nil
 }
 
 // releaseInfo holds information about a release for artifact linking
 type releaseInfo struct {
 	type_          string // "component" or "product"
+	belongsTo      string // collection owner, COMPONENT_RELEASE or PRODUCT_RELEASE
 	name           string
 	releaseDir     string
 	releaseVersion string
@@ -1008,6 +1144,13 @@ func addArtifactToReleases(contentDir, artifactUUID string, components, componen
 		return fmt.Errorf("at least one component/component_release or product/product_release pair must be specified")
 	}
 
+	// The collection references the artifact's latest revision
+	refs, err := artifactRefs(contentDir, []string{artifactUUID})
+	if err != nil {
+		return err
+	}
+	ref := refs[0]
+
 	var releases []releaseInfo
 
 	// Validate and collect all component releases
@@ -1029,6 +1172,7 @@ func addArtifactToReleases(contentDir, artifactUUID string, components, componen
 
 		releases = append(releases, releaseInfo{
 			type_:          "component",
+			belongsTo:      belongsToComponentRelease,
 			name:           componentData.Name,
 			releaseDir:     releaseDir,
 			releaseVersion: releaseVersion,
@@ -1054,6 +1198,7 @@ func addArtifactToReleases(contentDir, artifactUUID string, components, componen
 
 		releases = append(releases, releaseInfo{
 			type_:          "product",
+			belongsTo:      belongsToProductRelease,
 			name:           productData.Name,
 			releaseDir:     releaseDir,
 			releaseVersion: releaseVersion,
@@ -1079,33 +1224,55 @@ func addArtifactToReleases(contentDir, artifactUUID string, components, componen
 
 		var collection Collection
 		if err := yaml.Unmarshal(data, &collection); err != nil {
-			return fmt.Errorf("parsing collection %s: %w", latestCollectionPath, err)
+			return fmt.Errorf("parsing collection %s (TEA 1.0.0 lists artifacts as {uuid, version}): %w", latestCollectionPath, err)
 		}
 
-		// Check if artifact already exists in collection
+		// Check if this artifact revision is already in the collection
 		artifactExists := false
-		for _, existingArtifactUuid := range collection.Artifacts {
-			if existingArtifactUuid == artifactUUID {
+		for _, existing := range collection.Artifacts {
+			if existing == ref {
 				artifactExists = true
 				break
 			}
 		}
 
 		if artifactExists {
-			fmt.Printf("Artifact %s already added to %s '%s' release '%s'\n", artifactUUID, rel.type_, rel.name, rel.releaseVersion)
+			fmt.Printf("Artifact %s version %d already added to %s '%s' release '%s'\n", ref.UUID, ref.Version, rel.type_, rel.name, rel.releaseVersion)
 			continue
 		}
 
-		// Create new collection with incremented version
+		// Create new collection with incremented version. An older revision of the same
+		// artifact is replaced (ARTIFACT_UPDATED); otherwise the artifact is appended.
 		newVersion := latestVersion + 1
+		reason := UpdateReason{
+			Type:    "ARTIFACT_ADDED",
+			Comment: fmt.Sprintf("Added artifact %s version %d", ref.UUID, ref.Version),
+		}
+		artifacts := []CollectionArtifact{}
+		replaced := false
+		for _, existing := range collection.Artifacts {
+			if existing.UUID == ref.UUID {
+				if !replaced {
+					artifacts = append(artifacts, ref)
+					replaced = true
+					reason = UpdateReason{
+						Type:    "ARTIFACT_UPDATED",
+						Comment: fmt.Sprintf("Updated artifact %s from version %d to %d", ref.UUID, existing.Version, ref.Version),
+					}
+				}
+				continue
+			}
+			artifacts = append(artifacts, existing)
+		}
+		if !replaced {
+			artifacts = append(artifacts, ref)
+		}
 		newCollection := Collection{
-			Version: newVersion,
-			Date:    time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			UpdateReason: UpdateReason{
-				Type:    "ARTIFACT_ADDED",
-				Comment: fmt.Sprintf("Added artifact %s", artifactUUID),
-			},
-			Artifacts: append(collection.Artifacts, artifactUUID),
+			Version:      newVersion,
+			CreatedDate:  time.Now().UTC().Format(teaTimeFormat),
+			BelongsTo:    rel.belongsTo,
+			UpdateReason: reason,
+			Artifacts:    artifacts,
 		}
 
 		// Write new collection
@@ -1114,7 +1281,11 @@ func addArtifactToReleases(contentDir, artifactUUID string, components, componen
 			return fmt.Errorf("writing new collection %s: %w", newCollectionPath, err)
 		}
 
-		fmt.Printf("Added artifact %s to %s '%s' release '%s' (collection version %d)\n", artifactUUID, rel.type_, rel.name, rel.releaseVersion, newVersion)
+		action := "Added"
+		if replaced {
+			action = "Updated"
+		}
+		fmt.Printf("%s artifact %s version %d in %s '%s' release '%s' (collection version %d)\n", action, ref.UUID, ref.Version, rel.type_, rel.name, rel.releaseVersion, newVersion)
 	}
 
 	fmt.Printf("\nSuccessfully processed %d release(s)\n", len(releases))
