@@ -1256,7 +1256,7 @@ rearm pullrequest upsert \
 
 Base Command: `addreleases`
 
-Creates several releases on ReARM in a single **all-or-nothing** call. If any release in the batch fails (validation, authorization, duplicate version, etc.), none are persisted. This is the batch counterpart to `addrelease` (Use Case 2).
+Creates several releases on ReARM in a single **all-or-nothing** call. If any release in the batch fails (validation, authorization, duplicate version, etc.), none are persisted. Actions that rules fire when a release is saved (integration triggers, external validations, emails, pull request comments, VDR snapshots) and the pull request check run are sent as each release is saved and are not recalled when a later release of the batch is refused. This is the batch counterpart to `addrelease` (Use Case 2).
 
 The key difference from calling `addrelease` once per component is **auto-integration behavior**. When several component releases in one batch are dependencies of the same product Feature Set (with auto-integrate enabled), the backend fires product auto-integration only **once per affected Feature Set for the whole batch** (deduplicated) — producing a single Product release that references every component release — instead of one Product release per component release. Use this when a CI run builds several component releases at once and you want a single product auto-integrate rather than one per component version.
 

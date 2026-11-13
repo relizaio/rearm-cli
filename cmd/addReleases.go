@@ -33,7 +33,11 @@ var batchInfile string
 var addReleasesCmd = &cobra.Command{
 	Use:   "addreleases",
 	Short: "Creates multiple releases on ReARM in a single batch",
-	Long: `Creates several releases on ReARM in one all-or-nothing call.
+	Long: `Creates several releases on ReARM in one all-or-nothing call. Actions
+that rules fire when a release is saved (integration triggers, external
+validations, emails, pull request comments, VDR snapshots) and the pull request
+check run are sent as each release is saved and are not recalled when a later
+release of the batch is refused.
 
 The releases are read from a JSON file (--infile) containing an array of
 release objects, each shaped exactly like the input accepted by the single
