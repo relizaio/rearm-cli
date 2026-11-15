@@ -33,6 +33,7 @@
         "date": "2026-02-03",
         "url": "https://www.fda.gov/media/119933/download"
       },
+      "ruleSetVersion": "1",
       "verdict": "READY",
       "score": 100,
       "summary": {

@@ -58,7 +58,10 @@ type Check struct {
 	Scope  Scope
 	Ref    string // where in the source document
 	Remedy string // one line, fixed per check; may be empty
-	Eval   func(d *Doc) Outcome
+	// What says in one sentence what the check reads. It is printed in the published rule list
+	// (docs/fda-checker-rules.md) and nowhere else: not in the report.
+	What string
+	Eval func(d *Doc) Outcome
 }
 
 // Outcome is what an evaluator returns. DOCUMENT scope: Total is 1.
@@ -190,7 +193,9 @@ type Profile struct {
 	Key    ProfileKey
 	Title  string
 	Source Source
-	Checks []Check
+	// RuleSetVersion names the published rule list of the profile; "" for a profile without one.
+	RuleSetVersion string
+	Checks         []Check
 }
 
 // ProfileKey names a profile; the keys are the values of --profile.
