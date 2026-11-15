@@ -58,13 +58,16 @@ type Options struct {
 }
 
 type ProfileReport struct {
-	Key     ProfileKey    `json:"key"`
-	Title   string        `json:"title"`
-	Source  Source        `json:"source"`
-	Verdict Verdict       `json:"verdict"`
-	Score   *int          `json:"score"`
-	Summary Summary       `json:"summary"`
-	Checks  []CheckResult `json:"checks"`
+	Key    ProfileKey `json:"key"`
+	Title  string     `json:"title"`
+	Source Source     `json:"source"`
+	// RuleSetVersion: the profile's published rule list; omitted for a profile without one, so
+	// those reports are unchanged (reportVersion stays 1: additive).
+	RuleSetVersion string        `json:"ruleSetVersion,omitempty"`
+	Verdict        Verdict       `json:"verdict"`
+	Score          *int          `json:"score"`
+	Summary        Summary       `json:"summary"`
+	Checks         []CheckResult `json:"checks"`
 }
 
 // Summary counts the checks of both levels by status.
@@ -158,7 +161,7 @@ func Score(input []byte, profileKeys []string, engineVersion string, opts Option
 }
 
 func scoreProfile(p Profile, d *Doc) (ProfileReport, []CheckError) {
-	pr := ProfileReport{Key: p.Key, Title: p.Title, Source: p.Source, Checks: []CheckResult{}}
+	pr := ProfileReport{Key: p.Key, Title: p.Title, Source: p.Source, RuleSetVersion: p.RuleSetVersion, Checks: []CheckResult{}}
 	var errs []CheckError
 	for _, c := range p.Checks {
 		res, cerr := evaluate(c, d)

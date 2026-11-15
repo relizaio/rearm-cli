@@ -210,6 +210,10 @@ To score the merged SBOM of a release or product release held in ReARM, use `rea
 | `ntia-2021` | NTIA, "The Minimum Elements For a Software Bill of Materials (SBOM)", https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf | 2021-07-12 | the seven fields of the Data Fields table |
 | `fda` | FDA, "Cybersecurity in Medical Devices: Quality Management System Considerations and Content of Premarket Submissions", section V.A.4(b), https://www.fda.gov/media/119933/download | 2026-02-03 | the eight baseline attributes of NTIA "Framing Software Component Transparency", 2nd edition (2021-10-21), section 2.2, which the guidance cites (the seven July 2021 fields plus Component Hash); the software level of support and the end-of-support date of each component; known vulnerabilities as an INFO check (delivered as VDR/VEX with the submission, not in the SBOM); a recorded justification counts for the hash and the end-of-support date |
 
+For the `fda` profile a JSON report names its rule set in `profiles[].ruleSetVersion`: the number of the rule list [docs/fda-checker-rules.md](fda-checker-rules.md) the engine ran; the other profiles carry no such key.
+
+For the `fda` profile the rule list [docs/fda-checker-rules.md](fda-checker-rules.md) is the authority: where this section and the list differ, the list is right and this section is corrected.
+
 What the checks read, in short:
 - **SBOM author**: CycloneDX `metadata.authors[].name` or `metadata.manufacturer.name` (the organization that created the BOM). The deprecated `metadata.manufacture` names the maker of the described component, not the BOM's author, and does not count, nor does `metadata.supplier`. SPDX: a `Person:` or `Organization:` creator.
 - **Tool name and version**: CycloneDX legacy `metadata.tools[]`, `metadata.tools.components[]` and `.services[]`; every tool needs a version. SPDX: `Tool:` creators of the form `name-version` (the text after the last `-`).
