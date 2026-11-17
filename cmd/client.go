@@ -189,7 +189,13 @@ func uploadMultipart(query string, variables map[string]interface{}, files []rea
 			}
 			os.Exit(1)
 		}
-		fmt.Println("Error:", describeError(err))
+		// a 413 names the batch hint only for addreleases (task PFA-10)
+		batch := query == rearm.AddReleasesProgrammatic_Operation
+		if msg, ok := uploadLimitMessage(err, batch); ok {
+			fmt.Println("Error:", msg)
+		} else {
+			fmt.Println("Error:", describeError(err))
+		}
 		os.Exit(1)
 	}
 	return raw
@@ -213,9 +219,34 @@ func sendGraphQLMultipart(query string, variables map[string]interface{}, locati
 	return string(out)
 }
 
+// uploadLimitMessage is the CLI's own message for an HTTP 413 (task PFA-10, PFA-3 design 3.3): the
+// size of the request this CLI sent and the server's upload limit, named as a default that may
+// differ, never as this server's value. It reports false for any other error. batch adds the hint
+// for a call that carries several releases (addreleases).
+func uploadLimitMessage(err error, batch bool) (string, bool) {
+	var se *rearm.StatusError
+	if !errors.As(err, &se) || se.StatusCode != http.StatusRequestEntityTooLarge {
+		return "", false
+	}
+	request := "the request"
+	if se.RequestBytes > 0 {
+		// the server's 50MB and nginx's 50M are both multiples of 1048576 bytes
+		request = fmt.Sprintf("the request of %.1f MB", float64(se.RequestBytes)/1048576)
+	}
+	msg := request + " exceeds the upload limit of this server (HTTP 413). The default limit is 50 MB, but it may be different on this server; it is set by the server's administrator (Helm value max_upload_size_in_MB)."
+	if batch {
+		msg += " For a batch, send fewer releases per call."
+	}
+	return msg, true
+}
+
 // describeError renders a client error for the terminal: GraphQL messages joined, a refused
-// session refresh as a hint to log in again, anything else verbatim.
+// session refresh as a hint to log in again, a 413 as the upload limit message, anything else
+// verbatim.
 func describeError(err error) string {
+	if msg, ok := uploadLimitMessage(err, false); ok {
+		return msg
+	}
 	var ae *rearm.AssertionError
 	if errors.As(err, &ae) {
 		return fmt.Sprintf("identity token refused (%s: %s); check the trust rule in ReARM and, if several organizations trust this repository, pass --org", ae.Code, ae.Description)
