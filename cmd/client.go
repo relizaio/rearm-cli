@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"regexp"
@@ -234,10 +235,62 @@ func uploadLimitMessage(err error, batch bool) (string, bool) {
 		request = fmt.Sprintf("the request of %.1f MB", float64(se.RequestBytes)/1048576)
 	}
 	msg := request + " exceeds the upload limit of this server (HTTP 413). The default limit is 50 MB, but it may be different on this server; it is set by the server's administrator (Helm value max_upload_size_in_MB)."
+	msg += limitAnsweredBy(se.Body)
 	if batch {
 		msg += " For a batch, send fewer releases per call."
 	}
 	return msg, true
+}
+
+var (
+	// a style or script block with its content, also one the 200-byte cut left unclosed
+	styleBlock  = regexp.MustCompile(`(?is)<style\b.*?(?:</style\s*>|$)`)
+	scriptBlock = regexp.MustCompile(`(?is)<script\b.*?(?:</script\s*>|$)`)
+	htmlTag     = regexp.MustCompile(`<[^>]*>`)
+	// a tag the 200-byte cut left without its closing >
+	openTagTail = regexp.MustCompile(`<[^>]*$`)
+	whitespace  = regexp.MustCompile(`\s+`)
+)
+
+// quotedAnswerRunes is how much of a proxy's page the message quotes, in characters.
+const quotedAnswerRunes = 120
+
+// limitAnsweredBy names who refused a 413 from the start of its page (StatusError.Body: the first 200
+// bytes of an answer that was not JSON), so an administrator knows which limit to raise.
+//   - ReARM's own nginx serves its error page, whose contact address names reliza.io once its HTML
+//     entities are decoded.
+//   - The ReARM backend answers its limit with JSON, but a request refused while a filter reads its
+//     parts gets the servlet container's page (HTTP Status 413, Apache Tomcat), which ReARM's nginx
+//     passes through. Both are the same Helm value.
+//   - Any other page came from something in front of ReARM (a Traefik buffering middleware, a cloud
+//     gateway, another ingress) with a limit of its own; its words are quoted without markup: style
+//     and script blocks go with their content, and a tag the cut left unclosed goes too.
+//
+// An empty Body says nothing: a JSON answer leaves it empty, and a proxy may send no page at all.
+func limitAnsweredBy(body string) string {
+	if body == "" {
+		return ""
+	}
+	text := styleBlock.ReplaceAllString(body, " ")
+	text = scriptBlock.ReplaceAllString(text, " ")
+	text = htmlTag.ReplaceAllString(text, " ")
+	text = openTagTail.ReplaceAllString(text, " ")
+	// the 200-byte cut can also split the last character
+	text = strings.ToValidUTF8(html.UnescapeString(text), "")
+	text = strings.TrimSpace(whitespace.ReplaceAllString(text, " "))
+	if strings.Contains(text, "reliza.io") {
+		return " It was answered by the ReARM web server (nginx), whose limit is that Helm value."
+	}
+	if strings.Contains(text, "HTTP Status 413") || strings.Contains(text, "Apache Tomcat") {
+		return " It was answered by the ReARM backend, whose limit is that Helm value."
+	}
+	if text == "" {
+		return ""
+	}
+	if runes := []rune(text); len(runes) > quotedAnswerRunes {
+		text = strings.TrimSpace(string(runes[:quotedAnswerRunes])) + "..."
+	}
+	return fmt.Sprintf(" It was answered by something in front of ReARM, which has a limit of its own; its answer begins: %q.", text)
 }
 
 // describeError renders a client error for the terminal: GraphQL messages joined, a refused

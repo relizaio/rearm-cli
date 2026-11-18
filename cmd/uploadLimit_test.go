@@ -8,10 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	rearm "github.com/relizaio/rearm-client-go"
 )
@@ -149,5 +151,104 @@ func TestA413AnswerReachesTheUploadLimitMessageWithTheSizeSent(t *testing.T) {
 		[]rearm.FilePart{{Filename: "f", Content: bytes.NewReader([]byte("abc")), VariablePath: "variables.f"}})
 	if msg, ok := uploadLimitMessage(err, true); !ok || !strings.HasSuffix(msg, batchHint) {
 		t.Fatalf("got (%q, %v)", msg, ok)
+	}
+}
+
+// Who answered a 413: the start of its page names the layer whose limit was hit.
+func TestUploadLimitMessageNamesWhoAnswered(t *testing.T) {
+	const rearmPage = "Your request has returned an error. You may contact us at i&#110;fo&#64;r&#101;&#108;iza&#46;&#105;o."
+	const nginxPage = "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>"
+	const gatewayPage = "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>Microsoft-Azure-Application-Gateway/v2</center>\r\n</body>\r\n</html>"
+	long := strings.Repeat("abcdefghij ", 20)
+	cases := []struct {
+		name, body, want string
+	}{
+		{"ReARM's own page, entities decoded", rearmPage,
+			" It was answered by the ReARM web server (nginx), whose limit is that Helm value."},
+		{"Traefik's plain text", "Request Entity Too Large",
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "Request Entity Too Large".`},
+		{"another nginx, tags removed", nginxPage,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "413 Request Entity Too Large 413 Request Entity Too Large nginx".`},
+		{"a cloud gateway names itself", gatewayPage,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "413 Request Entity Too Large 413 Request Entity Too Large Microsoft-Azure-Application-Gateway/v2".`},
+		{"a long answer is cut", long,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "` + strings.TrimSpace(strings.TrimSpace(long)[:120]) + `...".`},
+		{"no page", "", ""},
+		{"only markup", "<html><body></body></html>", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := &rearm.StatusError{StatusCode: 413, RequestBytes: 94371840, Body: c.body}
+			msg, ok := uploadLimitMessage(err, true)
+			if !ok {
+				t.Fatal("a 413 is rewritten")
+			}
+			if want := "the request of 90.0 MB" + uploadLimitTail + c.want + batchHint; msg != want {
+				t.Fatalf("got  %q\nwant %q", msg, want)
+			}
+			if strings.Contains(msg, "<") {
+				t.Fatalf("no markup is printed: %q", msg)
+			}
+		})
+	}
+}
+
+// clientBody is what rearm-client-go keeps of a page that is not JSON: its first 200 bytes, trimmed.
+func clientBody(page string) string {
+	return strings.TrimSpace(page[:min(len(page), 200)])
+}
+
+// The review cases: Tomcat's page is the ReARM backend, a page cut mid-tag leaks no markup, and the
+// quote is cut on a character boundary.
+func TestUploadLimitMessageNamesWhoAnsweredFromCutPages(t *testing.T) {
+	tomcatPage := `<!doctype html><html lang="en"><head><title>HTTP Status 413 – Content Too Large</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;}</style></head><body><h1>HTTP Status 413 – Content Too Large</h1><hr class="line" /><h3>Apache Tomcat/11.0.13</h3></body></html>`
+	gatewayPage := "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>Gateway-Name-Longer-Than-This-Line-Allows</center>\r\n<script>var x = '<b>';</script>\r\n</body>\r\n</html>"
+	// one ASCII byte first, so byte 120 falls inside an é and a byte cut would split it
+	accented := "a" + strings.Repeat("é", 150)
+	cases := []struct {
+		name, body, want string
+	}{
+		{"Tomcat's page cut inside its style block", clientBody(tomcatPage),
+			" It was answered by the ReARM backend, whose limit is that Helm value."},
+		{"a page cut mid-tag", clientBody(gatewayPage),
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "413 Request Entity Too Large 413 Request Entity Too Large Gateway-Name-Longer-Than-This-Line-Allows".`},
+		{"style and script blocks go with their content", "<style>p{color:red}</style><p>Blocked by policy</p><script>alert('<x>')</script>",
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "Blocked by policy".`},
+		{"a cut that splits the last character", clientBody("x" + strings.Repeat("é", 150)),
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "x` + strings.Repeat("é", 99) + `".`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// each fixture has the property its case is about, or the case tests nothing
+			switch c.name {
+			case "a page cut mid-tag":
+				if !regexp.MustCompile(`<[^>]*$`).MatchString(c.body) {
+					t.Fatalf("fixture does not end mid-tag: %q", c.body)
+				}
+			case "a cut that splits the last character":
+				if utf8.ValidString(c.body) {
+					t.Fatalf("fixture does not end in a split character: %q", c.body)
+				}
+			}
+			msg, ok := uploadLimitMessage(&rearm.StatusError{StatusCode: 413, RequestBytes: 94371840, Body: c.body}, false)
+			if !ok {
+				t.Fatal("a 413 is rewritten")
+			}
+			if want := "the request of 90.0 MB" + uploadLimitTail + c.want; msg != want {
+				t.Fatalf("got  %q\nwant %q", msg, want)
+			}
+			if strings.ContainsAny(msg, "<>{}") || strings.Contains(msg, `\x`) || !utf8.ValidString(msg) {
+				t.Fatalf("no markup, CSS or broken character is printed: %q", msg)
+			}
+		})
+	}
+	// a long accented answer is cut on a character boundary, not in the middle of one
+	if utf8.ValidString(accented[:quotedAnswerRunes]) {
+		t.Fatal("fixture: a byte cut at the quote length must split a character")
+	}
+	msg, _ := uploadLimitMessage(&rearm.StatusError{StatusCode: 413, Body: accented}, false)
+	quoted := msg[strings.Index(msg, `begins: "`)+len(`begins: "`) : strings.LastIndex(msg, `...".`)]
+	if n := utf8.RuneCountInString(quoted); n > quotedAnswerRunes || !utf8.ValidString(quoted) || strings.Contains(msg, `\x`) {
+		t.Fatalf("quote of %d characters, valid %v: %q", n, utf8.ValidString(quoted), msg)
 	}
 }
