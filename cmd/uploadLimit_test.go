@@ -176,12 +176,12 @@ func TestUploadLimitMessageNamesWhoAnswered(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := &rearm.StatusError{StatusCode: 413, RequestBytes: 34288435, Body: c.body}
+			err := &rearm.StatusError{StatusCode: 413, RequestBytes: 94371840, Body: c.body}
 			msg, ok := uploadLimitMessage(err, true)
 			if !ok {
 				t.Fatal("a 413 is rewritten")
 			}
-			if want := "the request of 32.7 MB" + uploadLimitTail + c.want + batchHint; msg != want {
+			if want := "the request of 90.0 MB" + uploadLimitTail + c.want + batchHint; msg != want {
 				t.Fatalf("got  %q\nwant %q", msg, want)
 			}
 			if strings.Contains(msg, "<") {
