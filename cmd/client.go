@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"regexp"
@@ -234,10 +235,40 @@ func uploadLimitMessage(err error, batch bool) (string, bool) {
 		request = fmt.Sprintf("the request of %.1f MB", float64(se.RequestBytes)/1048576)
 	}
 	msg := request + " exceeds the upload limit of this server (HTTP 413). The default limit is 50 MB, but it may be different on this server; it is set by the server's administrator (Helm value max_upload_size_in_MB)."
+	msg += limitAnsweredBy(se.Body)
 	if batch {
 		msg += " For a batch, send fewer releases per call."
 	}
 	return msg, true
+}
+
+var (
+	htmlTag    = regexp.MustCompile(`<[^>]*>`)
+	whitespace = regexp.MustCompile(`\s+`)
+)
+
+// limitAnsweredBy names who refused a 413 from the start of its page (StatusError.Body: the first 200
+// bytes of an answer that was not JSON), so an administrator knows which limit to raise. ReARM's
+// own nginx serves its error page, whose contact address names reliza.io once its HTML entities are
+// decoded; any other page came from something in front of ReARM (a Traefik buffering middleware, a
+// cloud gateway, another ingress) with a limit of its own, and its words are quoted, tags removed.
+// An empty Body says nothing: the ReARM backend answers its own limit with JSON, and a proxy may send
+// no page at all.
+func limitAnsweredBy(body string) string {
+	if body == "" {
+		return ""
+	}
+	text := strings.TrimSpace(whitespace.ReplaceAllString(html.UnescapeString(htmlTag.ReplaceAllString(body, " ")), " "))
+	if strings.Contains(text, "reliza.io") {
+		return " It was answered by the ReARM web server (nginx), whose limit is that Helm value."
+	}
+	if text == "" {
+		return ""
+	}
+	if len(text) > 120 {
+		text = strings.TrimSpace(text[:120]) + "..."
+	}
+	return fmt.Sprintf(" It was answered by something in front of ReARM, which has a limit of its own; its answer begins: %q.", text)
 }
 
 // describeError renders a client error for the terminal: GraphQL messages joined, a refused

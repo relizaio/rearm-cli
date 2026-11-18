@@ -151,3 +151,42 @@ func TestA413AnswerReachesTheUploadLimitMessageWithTheSizeSent(t *testing.T) {
 		t.Fatalf("got (%q, %v)", msg, ok)
 	}
 }
+
+// Who answered a 413: the start of its page names the layer whose limit was hit.
+func TestUploadLimitMessageNamesWhoAnswered(t *testing.T) {
+	const rearmPage = "Your request has returned an error. You may contact us at i&#110;fo&#64;r&#101;&#108;iza&#46;&#105;o."
+	const nginxPage = "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>"
+	const gatewayPage = "<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>Microsoft-Azure-Application-Gateway/v2</center>\r\n</body>\r\n</html>"
+	long := strings.Repeat("abcdefghij ", 20)
+	cases := []struct {
+		name, body, want string
+	}{
+		{"ReARM's own page, entities decoded", rearmPage,
+			" It was answered by the ReARM web server (nginx), whose limit is that Helm value."},
+		{"Traefik's plain text", "Request Entity Too Large",
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "Request Entity Too Large".`},
+		{"another nginx, tags removed", nginxPage,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "413 Request Entity Too Large 413 Request Entity Too Large nginx".`},
+		{"a cloud gateway names itself", gatewayPage,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "413 Request Entity Too Large 413 Request Entity Too Large Microsoft-Azure-Application-Gateway/v2".`},
+		{"a long answer is cut", long,
+			` It was answered by something in front of ReARM, which has a limit of its own; its answer begins: "` + strings.TrimSpace(strings.TrimSpace(long)[:120]) + `...".`},
+		{"no page", "", ""},
+		{"only markup", "<html><body></body></html>", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := &rearm.StatusError{StatusCode: 413, RequestBytes: 34288435, Body: c.body}
+			msg, ok := uploadLimitMessage(err, true)
+			if !ok {
+				t.Fatal("a 413 is rewritten")
+			}
+			if want := "the request of 32.7 MB" + uploadLimitTail + c.want + batchHint; msg != want {
+				t.Fatalf("got  %q\nwant %q", msg, want)
+			}
+			if strings.Contains(msg, "<") {
+				t.Fatalf("no markup is printed: %q", msg)
+			}
+		})
+	}
+}
