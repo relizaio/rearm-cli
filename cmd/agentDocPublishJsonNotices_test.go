@@ -66,8 +66,8 @@ func TestADryRunWithJsonPrintsOneObject(t *testing.T) {
 	if n := pjLines(obj["notices"]); len(n) != 1 || !strings.HasPrefix(n[0], "elements: 2 element(s)") {
 		t.Errorf("the element count is the one notice, got %q", n)
 	}
-	if b.publishes != 0 || b.reads != 0 {
-		t.Errorf("a dry run sends nothing, got %d publishes, %d reads", b.publishes, b.reads)
+	if n := b.counts(); n.publishes != 0 || n.reads != 0 {
+		t.Errorf("a dry run sends nothing, got %d publishes, %d reads", n.publishes, n.reads)
 	}
 }
 
@@ -85,8 +85,8 @@ func TestADryRunWithoutJsonKeepsTheInputAndItsLinesApart(t *testing.T) {
 	if r.stderr != "elements: 2 element(s), 0 warning(s)\n" {
 		t.Errorf("the element count on stderr, got %q", r.stderr)
 	}
-	if b.publishes != 0 {
-		t.Errorf("a dry run sends nothing, got %d publishes", b.publishes)
+	if n := b.counts(); n.publishes != 0 {
+		t.Errorf("a dry run sends nothing, got %d publishes", n.publishes)
 	}
 }
 
@@ -131,8 +131,8 @@ func TestAnIndexOnlyDryRunWithJsonPrintsOneObject(t *testing.T) {
 	if _, ok := obj["notices"]; ok {
 		t.Errorf("no notices when the dry run said nothing, got %v", obj["notices"])
 	}
-	if b.publishes != 0 {
-		t.Errorf("a dry run sends nothing, got %d", b.publishes)
+	if n := b.counts(); n.publishes != 0 {
+		t.Errorf("a dry run sends nothing, got %d", n.publishes)
 	}
 }
 
@@ -198,7 +198,7 @@ func TestThePublishRemembersTheDocumentsRepository(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			b, dir, url := pjWorld(t, pjReport(false))
-			b.refuse = c.refuse
+			b.refuseOp(c.refuse)
 			pjState(t, false)
 			if r := pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign, c.extra...)...); (r.code == 0) != c.remembered {
 				t.Fatalf("exit %d\nstderr %q", r.code, r.stderr)
