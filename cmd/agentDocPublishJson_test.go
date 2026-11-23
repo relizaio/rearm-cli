@@ -40,6 +40,45 @@ type pjBoard struct {
 	targets                          []any
 }
 
+// Once serve() has returned, the handler reads and writes the fields on its own goroutine, so a test touches them
+// only through the methods below, each holding mu for the whole access. The requests come from a child process,
+// which the race detector cannot see, so the lock is what orders a test's setting before the handler's read and the
+// handler's counting before the test's check.
+
+// refuseOp makes the board refuse op: "publish", "report", "preview" or "run".
+func (b *pjBoard) refuseOp(op string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refuse = op
+}
+
+// answerNullRun makes the element-check run answer a null release with no error.
+func (b *pjBoard) answerNullRun() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.nullRun = true
+}
+
+// setTargets sets the documents the task's element-check targets query answers. The caller hands targets over and
+// does not touch them afterwards.
+func (b *pjBoard) setTargets(targets []any) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.targets = targets
+}
+
+// pjCounts is a copy of the board's counters.
+type pjCounts struct {
+	publishes, reads, previews, runs int
+}
+
+// counts copies the counters under the lock.
+func (b *pjBoard) counts() pjCounts {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return pjCounts{publishes: b.publishes, reads: b.reads, previews: b.previews, runs: b.runs}
+}
+
 func (b *pjBoard) serve() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -273,8 +312,8 @@ func TestAPublishWithElementsAndJsonPrintsOneObjectCarryingTheChecks(t *testing.
 	if got := pjLines(checks["lines"]); !reflect.DeepEqual(got, wantLines) {
 		t.Errorf("lines are the report as the terminal prints it\ngot  %q\nwant %q", got, wantLines)
 	}
-	if b.publishes != 1 || b.reads != 1 {
-		t.Errorf("one publish and one report read, got %d and %d", b.publishes, b.reads)
+	if n := b.counts(); n.publishes != 1 || n.reads != 1 {
+		t.Errorf("one publish and one report read, got %d and %d", n.publishes, n.reads)
 	}
 }
 
@@ -298,8 +337,8 @@ func TestAPublishWithoutElementsCarriesNullChecks(t *testing.T) {
 	if _, ok := obj["notices"]; ok {
 		t.Errorf("no notices when the publish said nothing, got %v", obj["notices"])
 	}
-	if b.reads != 0 {
-		t.Errorf("no report is read for a document without elements, got %d reads", b.reads)
+	if n := b.counts(); n.reads != 0 {
+		t.Errorf("no report is read for a document without elements, got %d reads", n.reads)
 	}
 }
 
@@ -309,15 +348,16 @@ func TestAPublishWithoutATaskReadsNoReport(t *testing.T) {
 	args := []string{"--session", "s-1", "--type", "ARCHITECTURE", "--board", "0e23b4cb-0000-4000-8000-0000000000b1", "--component", "c-1",
 		"--file", pjDesign, "--repo", dir, "--json"}
 	obj := pjOneObject(t, pjExec(t, url, "publish", args...), 0)
-	if v, ok := obj["checks"]; !ok || v != nil || b.reads != 0 {
-		t.Errorf("checks: null and no report read, got %v (present %v), %d reads", v, ok, b.reads)
+	n := b.counts()
+	if v, ok := obj["checks"]; !ok || v != nil || n.reads != 0 {
+		t.Errorf("checks: null and no report read, got %v (present %v), %d reads", v, ok, n.reads)
 	}
 }
 
 // A report that cannot be read after the publish succeeded: said in checks, exit 0, nothing on stderr.
 func TestAnUnreadableReportIsSaidInTheObject(t *testing.T) {
 	b, dir, url := pjWorld(t, pjReport(true))
-	b.refuse = "report"
+	b.refuseOp("report")
 	obj := pjOneObject(t, pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign, "--json")...), 0)
 	checks, _ := obj["checks"].(map[string]any)
 	if v, ok := checks["verdict"]; !ok || v != nil || !strings.HasPrefix(str(checks["error"]), "could not read the report: ") ||
@@ -342,7 +382,7 @@ func TestWithoutJsonTheReportStillGoesToStderr(t *testing.T) {
 // Without --json, a report that cannot be read is said on stderr, and the publish still exits 0.
 func TestWithoutJsonAnUnreadableReportIsSaidOnStderr(t *testing.T) {
 	b, dir, url := pjWorld(t, pjReport(true))
-	b.refuse = "report"
+	b.refuseOp("report")
 	r := pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign)...)
 	if r.code != 0 || !strings.Contains(r.stderr, "element checks: could not read the report: ") ||
 		strings.Contains(r.stdout, "could not read") {
@@ -354,10 +394,10 @@ func TestWithoutJsonAnUnreadableReportIsSaidOnStderr(t *testing.T) {
 func TestARefusedPublishPrintsNothingOnStdout(t *testing.T) {
 	for _, extra := range [][]string{{"--json"}, nil} {
 		b, dir, url := pjWorld(t, pjReport(true))
-		b.refuse = "publish"
+		b.refuseOp("publish")
 		pjRefused(t, pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign, extra...)...), "Error: refused by the board: publish")
-		if b.reads != 0 {
-			t.Errorf("%v: no report is read after a refusal, got %d", extra, b.reads)
+		if n := b.counts(); n.reads != 0 {
+			t.Errorf("%v: no report is read after a refusal, got %d", extra, n.reads)
 		}
 	}
 }
@@ -366,8 +406,8 @@ func TestARefusedPublishPrintsNothingOnStdout(t *testing.T) {
 func TestALocalErrorWithJsonPrintsNothingOnStdout(t *testing.T) {
 	b, dir, url := pjWorld(t, pjReport(true))
 	pjRefused(t, pjExec(t, url, "publish", pjPublishArgs(dir, "design/missing.md", "--json")...), "rearm: ")
-	if b.publishes != 0 {
-		t.Errorf("nothing is published, got %d", b.publishes)
+	if n := b.counts(); n.publishes != 0 {
+		t.Errorf("nothing is published, got %d", n.publishes)
 	}
 }
 
@@ -388,8 +428,8 @@ func TestACheckWithJsonPrintsOneObject(t *testing.T) {
 	if len(notices) < 2 || !strings.HasPrefix(notices[0], "elements: ") || !strings.HasPrefix(notices[1], "  defines: ") {
 		t.Errorf("the element count and listing are notices, got %q", notices)
 	}
-	if b.publishes != 0 || b.previews != 1 {
-		t.Errorf("a check publishes nothing and previews once, got %d and %d", b.publishes, b.previews)
+	if n := b.counts(); n.publishes != 0 || n.previews != 1 {
+		t.Errorf("a check publishes nothing and previews once, got %d and %d", n.publishes, n.previews)
 	}
 }
 
@@ -412,8 +452,8 @@ func TestACheckWithoutIdsWithJsonCarriesNullChecks(t *testing.T) {
 	if n := pjLines(obj["notices"]); len(n) != 1 || !strings.Contains(n[0], "has no element ids to check") {
 		t.Errorf("the line is a notice, got %q", n)
 	}
-	if b.previews != 0 {
-		t.Errorf("nothing to preview, got %d", b.previews)
+	if n := b.counts(); n.previews != 0 {
+		t.Errorf("nothing to preview, got %d", n.previews)
 	}
 }
 
@@ -438,7 +478,7 @@ func TestACheckWithoutJsonStaysOnStderr(t *testing.T) {
 // publish --check --json refused by the board: exit 1, nothing on stdout, the reason on stderr.
 func TestARefusedCheckWithJsonPrintsNothingOnStdout(t *testing.T) {
 	b, dir, url := pjWorld(t, pjReport(true))
-	b.refuse = "preview"
+	b.refuseOp("preview")
 	pjRefused(t, pjExec(t, url, "publish", pjPublishArgs(dir, pjDesign, "--check", "--json")...), "Error: refused by the board: preview")
 }
 
@@ -448,8 +488,9 @@ func TestElementCheckOfAReleaseWithJsonPrintsOneObject(t *testing.T) {
 	obj := pjOneObject(t, pjExec(t, url, "element-check", "--session", "s-1", "--release", "r-1", "--json"), 0)
 	doc, _ := obj["document"].(map[string]any)
 	checks, _ := obj["checks"].(map[string]any)
-	if obj["uuid"] != "r-1" || doc["elementChecks"] == nil || checks["verdict"] != "FAIL" || b.runs != 1 {
-		t.Errorf("the release plus checks, got %v (%d runs)", obj, b.runs)
+	n := b.counts()
+	if obj["uuid"] != "r-1" || doc["elementChecks"] == nil || checks["verdict"] != "FAIL" || n.runs != 1 {
+		t.Errorf("the release plus checks, got %v (%d runs)", obj, n.runs)
 	}
 	wantLines := elementCheckSummary(map[string]any{"document": map[string]any{"round": 1.0, "elementChecks": pjReport(true)}})
 	if got := pjLines(checks["lines"]); !reflect.DeepEqual(got, wantLines) {
@@ -464,7 +505,7 @@ func TestElementCheckOfATaskWithJsonPrintsOneArray(t *testing.T) {
 	target := func(uuid, spec string) map[string]any {
 		return map[string]any{"uuid": uuid, "document": map[string]any{"specification": spec, "round": 1, "task": "t-1", "elements": "{}"}}
 	}
-	b.targets = []any{target("r-a", "ARCHITECTURE"), target("r-d", "DETAILED_DESIGN")}
+	b.setTargets([]any{target("r-a", "ARCHITECTURE"), target("r-d", "DETAILED_DESIGN")})
 	r := pjExec(t, url, "element-check", "--session", "s-1", "--task", "t-1", "--json")
 	if r.code != 0 || r.stderr != "" || strings.Count(r.stdout, "\n") != 1 {
 		t.Fatalf("exit %d\nstdout %q\nstderr %q", r.code, r.stdout, r.stderr)
@@ -494,7 +535,7 @@ func TestElementCheckWithoutJsonPrintsTheReportOnStdout(t *testing.T) {
 func TestARefusedElementCheckPrintsNothingOnStdout(t *testing.T) {
 	for _, extra := range [][]string{{"--json"}, nil} {
 		b, _, url := pjWorld(t, pjReport(true))
-		b.refuse = "run"
+		b.refuseOp("run")
 		args := append([]string{"--session", "s-1", "--release", "r-1"}, extra...)
 		pjRefused(t, pjExec(t, url, "element-check", args...), "rearm: checking r-1: refused by the board: run")
 	}
@@ -524,7 +565,7 @@ func TestTheVerdictIsTheTaskPagesRule(t *testing.T) {
 // element-check --release --json when the board answers a null release: null on stdout, as before, and no crash.
 func TestElementCheckOfANullReleaseStaysNull(t *testing.T) {
 	b, _, url := pjWorld(t, pjReport(true))
-	b.nullRun = true
+	b.answerNullRun()
 	r := pjExec(t, url, "element-check", "--session", "s-1", "--release", "r-1", "--json")
 	if r.code != 0 || r.stdout != "null\n" || r.stderr != "" {
 		t.Errorf("exit %d\nstdout %q\nstderr %q", r.code, r.stdout, r.stderr)
