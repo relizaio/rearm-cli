@@ -52,11 +52,12 @@ var digestAlgoAliases = map[string]string{
 	"SHA512": "SHA_512",
 }
 
-// Scopes a client may declare. AS_UPLOADED and RAW_OCI_STORAGE are computed by ReARM and the
-// server refuses them on upload; ORIGINAL_FILE ("the file as the publisher had it") is the default.
-var declarableDigestScopes = map[string]bool{"ORIGINAL_FILE": true, "OCI_STORAGE": true, "REARM": true}
+// Scopes a client may declare; ORIGINAL_FILE ("the file as the publisher had it") is the default.
+var declarableDigestScopes = map[string]bool{"ORIGINAL_FILE": true, "OCI_STORAGE": true}
 
-var serverDerivedDigestScopes = map[string]bool{"AS_UPLOADED": true, "RAW_OCI_STORAGE": true}
+// Scopes computed by ReARM: AS_UPLOADED, RAW_OCI_STORAGE and REARM. The CLI refuses them before
+// any request, on --digest and in an artifact's digestRecords.
+var serverDerivedDigestScopes = map[string]bool{"AS_UPLOADED": true, "RAW_OCI_STORAGE": true, "REARM": true}
 
 var hexDigest = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 
@@ -88,7 +89,7 @@ func parseDigestFlag(v string) (map[string]interface{}, error) {
 			return nil, fmt.Errorf("--digest %q: scope %s is computed by ReARM and cannot be supplied", v, scope)
 		}
 		if !declarableDigestScopes[scope] {
-			return nil, fmt.Errorf("--digest %q: unknown scope %q (ORIGINAL_FILE, OCI_STORAGE or REARM)", v, parts[2])
+			return nil, fmt.Errorf("--digest %q: unknown scope %q (ORIGINAL_FILE or OCI_STORAGE)", v, parts[2])
 		}
 	}
 	return map[string]interface{}{"algo": algo, "digest": strings.ToLower(hex), "scope": scope}, nil

@@ -179,37 +179,53 @@ func fileParts(locationMap map[string][]string, filesMap map[string]interface{})
 func uploadMultipart(query string, variables map[string]interface{}, files []rearm.FilePart) json.RawMessage {
 	raw, err := rearm.UploadMultipart(context.Background(), rearmClient(), opNameOf(query), query, variables, files)
 	if err != nil {
-		var gqlErrs rearm.GraphQLErrors
-		if errors.As(err, &gqlErrs) {
-			if len(raw) > 0 {
-				fmt.Println(`{"data":` + string(raw) + `}`)
-			}
-			fmt.Println("GraphQL returned errors:")
-			for _, e := range gqlErrs {
-				fmt.Printf("- %s\n", e.Message)
-			}
-			os.Exit(1)
-		}
-		// a 413 names the batch hint only for addreleases (task PFA-10)
-		batch := query == rearm.AddReleasesProgrammatic_Operation
-		if msg, ok := uploadLimitMessage(err, batch); ok {
-			fmt.Println("Error:", msg)
-		} else {
-			fmt.Println("Error:", describeError(err))
-		}
+		printUploadFailure(query, raw, err)
 		os.Exit(1)
 	}
 	return raw
 }
 
-// printGraphQLMultipart uploads and prints the response envelope, as addrelease, addreleases,
-// addartifact, addodeliverable and `agent session add-artifact` always have.
-func printGraphQLMultipart(query string, variables map[string]interface{}, locationMap map[string][]string, filesMap map[string]interface{}) {
-	raw := uploadMultipart(query, variables, fileParts(locationMap, filesMap))
+// printUploadFailure prints a failed upload's lines on stdout, as the multipart commands always have.
+func printUploadFailure(query string, raw json.RawMessage, err error) {
+	var gqlErrs rearm.GraphQLErrors
+	if errors.As(err, &gqlErrs) {
+		if len(raw) > 0 {
+			fmt.Println(`{"data":` + string(raw) + `}`)
+		}
+		fmt.Println("GraphQL returned errors:")
+		for _, e := range gqlErrs {
+			fmt.Printf("- %s\n", e.Message)
+		}
+		return
+	}
+	// a 413 names the batch hint only for addreleases (task PFA-10)
+	batch := query == rearm.AddReleasesProgrammatic_Operation
+	if msg, ok := uploadLimitMessage(err, batch); ok {
+		fmt.Println("Error:", msg)
+	} else {
+		fmt.Println("Error:", describeError(err))
+	}
+}
+
+// uploadMultipartResult sends an operation whose variables carry files and returns the data and the
+// error unprinted (a rearm.GraphQLErrors error comes with its data). The file parts are built afresh
+// on every call, so a retry sends the same bytes again (task SAFE-16, design SAFE-9 3.5 item 6).
+func uploadMultipartResult(query string, variables map[string]interface{}, locationMap map[string][]string, filesMap map[string]interface{}) (json.RawMessage, error) {
+	return rearm.UploadMultipart(context.Background(), rearmClient(), opNameOf(query), query, variables, fileParts(locationMap, filesMap))
+}
+
+// printUploadEnvelope prints an upload's answer on stdout as printGraphQLMultipart does.
+func printUploadEnvelope(raw json.RawMessage) {
 	if debug == "true" {
 		fmt.Println("Response Body:")
 	}
 	fmt.Println(`{"data":` + string(raw) + `}`)
+}
+
+// printGraphQLMultipart uploads and prints the response envelope, as addrelease, addreleases,
+// addartifact, addodeliverable and `agent session add-artifact` always have.
+func printGraphQLMultipart(query string, variables map[string]interface{}, locationMap map[string][]string, filesMap map[string]interface{}) {
+	printUploadEnvelope(uploadMultipart(query, variables, fileParts(locationMap, filesMap)))
 }
 
 // sendGraphQLMultipart uploads and returns the marshalled result of the root field, the same

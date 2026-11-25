@@ -381,7 +381,9 @@ var addreleaseCmd = &cobra.Command{
 	Use:   "addrelease",
 	Short: "Creates release on ReARM",
 	Long: `This CLI command would create new releases on ReARM
-			for authenticated component.`,
+			for authenticated component.
+
+` + nonImportingCommandLongHelp,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
@@ -433,12 +435,22 @@ var addreleaseCmd = &cobra.Command{
 		if len(perspective) > 0 {
 			body["perspective"] = perspective
 		}
+		// every decoded artifact, in decode order, for the VEX and SAFETY_CONTEXT refusal (task SAFE-16)
+		var decodedArtifacts []refEntry
 		if len(odelId) > 0 {
-			body["outboundDeliverables"] = *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
+			odels := *buildOutboundDeliverables(&filesCounter, &locationMap, &filesMap)
+			for i, od := range odels {
+				if arts, ok := od["artifacts"].([]Artifact); ok {
+					decodedArtifacts = append(decodedArtifacts, collectRefEntries(fmt.Sprintf("--odelartsjson[%d]", i), arts)...)
+				}
+			}
+			body["outboundDeliverables"] = odels
 		}
 
 		if commit != "" {
-			body["sourceCodeEntry"] = *buildCommitMap(&filesCounter, &locationMap, &filesMap)
+			sce := *buildCommitMap(&filesCounter, &locationMap, &filesMap)
+			decodedArtifacts = append(decodedArtifacts, collectRefEntries("--scearts", sce.Artifacts)...)
+			body["sourceCodeEntry"] = sce
 		}
 
 		if len(commits) > 0 {
@@ -462,7 +474,9 @@ var addreleaseCmd = &cobra.Command{
 			}
 		}
 		if releaseArts != "" {
-			body["artifacts"] = *buildReleaseArts(&filesCounter, &locationMap, &filesMap)
+			arts := *buildReleaseArts(&filesCounter, &locationMap, &filesMap)
+			decodedArtifacts = append(decodedArtifacts, collectRefEntries("--releasearts", arts)...)
+			body["artifacts"] = arts
 		}
 
 		if fsBomPath != "" {
@@ -522,6 +536,7 @@ var addreleaseCmd = &cobra.Command{
 			fmt.Println(string(jsonBody))
 		}
 
+		refuseNonImportingEntries("addrelease", decodedArtifacts)
 		printGraphQLMultipart(rearm.AddReleaseProgrammatic_Operation, map[string]interface{}{"releaseInputProg": body}, locationMap, filesMap)
 	},
 }
@@ -563,6 +578,7 @@ func init() {
 	addreleaseCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addreleaseCmd.PersistentFlags().StringVar(&releaseArts, "releasearts", "", "Release Artifacts json array")
 	addreleaseCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "Source Code Entry Artifacts json array")
+	addreleaseCmd.PersistentFlags().BoolVar(&allowImportFailure, allowImportFailureFlag, false, allowImportFailureStoreOnlyHelp)
 	addreleaseCmd.PersistentFlags().StringVar(&lifecycle, "lifecycle", "DRAFT", "Lifecycle of release - set to 'REJECTED' for failed releases, otherwise 'DRAFT' or 'ASSEMBLED' are possible options (optional, default value is 'DRAFT').")
 	addreleaseCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
 	addreleaseCmd.PersistentFlags().BoolVar(&createComponentIfMissing, "createcomponent", false, "(Optional) Create component if it doesn't exist. Requires organization-wide read-write API key.")

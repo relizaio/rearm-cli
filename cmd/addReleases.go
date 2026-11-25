@@ -76,7 +76,9 @@ Example batch.json (one element shown):
       { "displayIdentifier": "trivy-scan", "type": "SARIF", "filePath": "./scans/widget.sarif" }
     ]
   }
-]`,
+]
+
+` + nonImportingCommandLongHelp,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
@@ -92,11 +94,14 @@ Example batch.json (one element shown):
 		filesMap := make(map[string]interface{})
 		filesCounter := 0
 
+		var decodedArtifacts []refEntry
 		for i := range releases {
 			prefix := "variables.releaseInputsProg." + strconv.Itoa(i) + "."
 			normalizeBatchReleaseLifecycle(releases[i])
 			processBatchReleaseArtifacts(releases[i], prefix, &filesCounter, &locationMap, &filesMap)
+			decodedArtifacts = append(decodedArtifacts, batchReleaseRefEntries(releases[i], fmt.Sprintf("--infile[%d]", i))...)
 		}
+		refuseNonImportingEntries("addreleases", decodedArtifacts)
 
 		if debug == "true" {
 			jsonReleases, _ := json.Marshal(releases)
@@ -168,6 +173,36 @@ func processBatchReleaseArtifacts(release map[string]interface{}, prefix string,
 	}
 }
 
+// batchReleaseRefEntries lists the artifacts processBatchReleaseArtifacts decoded for one release,
+// in the same order, with their --infile paths (task SAFE-16).
+func batchReleaseRefEntries(release map[string]interface{}, base string) []refEntry {
+	at := func(container map[string]interface{}, ref string) []refEntry {
+		if arts, ok := container["artifacts"].([]Artifact); ok {
+			return collectRefEntries(ref, arts)
+		}
+		return nil
+	}
+	entries := at(release, base+".artifacts")
+	if sce, ok := release["sourceCodeEntry"].(map[string]interface{}); ok {
+		entries = append(entries, at(sce, base+".sourceCodeEntry.artifacts")...)
+	}
+	if commits, ok := release["commits"].([]interface{}); ok {
+		for k := range commits {
+			if commit, ok := commits[k].(map[string]interface{}); ok {
+				entries = append(entries, at(commit, fmt.Sprintf("%s.commits[%d].artifacts", base, k))...)
+			}
+		}
+	}
+	if odels, ok := release["outboundDeliverables"].([]interface{}); ok {
+		for k := range odels {
+			if odel, ok := odels[k].(map[string]interface{}); ok {
+				entries = append(entries, at(odel, fmt.Sprintf("%s.outboundDeliverables[%d].artifacts", base, k))...)
+			}
+		}
+	}
+	return entries
+}
+
 // processArtifactsAtKey converts container[key] (a JSON artifact array) into a
 // typed []Artifact, runs it through the shared processArtifactsInput (which
 // reads each filePath, uploads it, and clears the path), then writes the
@@ -199,5 +234,6 @@ func init() {
 	addReleasesCmd.PersistentFlags().StringVar(&batchInfile, "infile", "", "Path to a JSON file with an array of release objects (ReleaseInputProg shape). Artifacts reference local files via their filePath field.")
 	addReleasesCmd.MarkPersistentFlagRequired("infile")
 	addReleasesCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching. Applied to every artifact in the batch.")
+	addReleasesCmd.PersistentFlags().BoolVar(&allowImportFailure, allowImportFailureFlag, false, allowImportFailureStoreOnlyHelp)
 	rootCmd.AddCommand(addReleasesCmd)
 }
