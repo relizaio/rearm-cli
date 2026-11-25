@@ -204,12 +204,15 @@ The configuration file is $HOME/.rearm.env, mode 0600.`,
 var addODeliverableCmd = &cobra.Command{
 	Use:   "addodeliverable",
 	Short: "Add outbound deliverables to a release",
-	Long:  `This CLI command would connect to ReARM and add outbound deliverables to a release using a valid API key.`,
+	Long: `This CLI command would connect to ReARM and add outbound deliverables to a release using a valid API key.
+
+` + nonImportingCommandLongHelp,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
 		}
 
+		var decodedArtifacts []refEntry // for the VEX and SAFETY_CONTEXT refusal (task SAFE-16)
 		locationMap := make(map[string][]string)
 		filesMap := make(map[string]interface{})
 		filesCounter := 0
@@ -413,6 +416,7 @@ var addODeliverableCmd = &cobra.Command{
 						indexPrefix := "variables.addODeliverableInput.deliverables." + strconv.Itoa(i) + ".artifacts."
 						artifactsObject := processODelArtifactsInput(&artifactsInput, indexPrefix, &filesCounter, &locationMap, &filesMap)
 						outboundDeliverables[i]["artifacts"] = *artifactsObject
+						decodedArtifacts = append(decodedArtifacts, collectRefEntries(fmt.Sprintf("--odelartsjson[%d]", i), *artifactsObject)...)
 					}
 				}
 			}
@@ -424,6 +428,7 @@ var addODeliverableCmd = &cobra.Command{
 			fmt.Println(string(jsonBody))
 		}
 
+		refuseNonImportingEntries("addodeliverable", decodedArtifacts)
 		printGraphQLMultipart(rearm.AddOutboundDeliverablesProgrammatic_Operation, map[string]interface{}{"addODeliverableInput": body}, locationMap, filesMap)
 	},
 }
@@ -493,7 +498,9 @@ var getVersionCmd = &cobra.Command{
 	Use:   "getversion",
 	Short: "Get next version for branch for a particular component",
 	Long: `This CLI command would connect to ReARM which would generate next Atomic version for particular component.
-			Component would be identified by the API key that is used`,
+			Component would be identified by the API key that is used
+
+` + nonImportingCommandLongHelp,
 	Run: func(cmd *cobra.Command, args []string) {
 		if debug == "true" {
 			fmt.Println("Using ReARM at", rearmUri)
@@ -675,6 +682,7 @@ var getVersionCmd = &cobra.Command{
 		processed := *processArtifactsInput(&artInputs,
 			"variables.GetNewVersionInput.sourceCodeEntry.artifacts.",
 			&filesCounter, &locationMap, &filesMap)
+		refuseNonImportingEntries("getversion", collectRefEntries("--scearts", processed))
 
 		// Attach the artifact array to whatever shape we built for the
 		// sourceCodeEntry slot above. Handle both the map[string]string
@@ -870,6 +878,7 @@ func init() {
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&supportedCpuArchArr, "cpuarr", []string{}, "Deliverable supported CPU array (multiple allowed, use comma seprated values for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringArrayVar(&odelArtsJson, "odelartsjson", []string{}, "Deliverable Artifacts json array (multiple allowed, use a json array for each deliverable)")
 	addODeliverableCmd.PersistentFlags().StringVar(&stripBom, "stripbom", "true", "(Optional) Set --stripbom false to disable striping bom for digest matching.")
+	addODeliverableCmd.PersistentFlags().BoolVar(&allowImportFailure, allowImportFailureFlag, false, allowImportFailureStoreOnlyHelp)
 
 	releasecompletionfinalizerCmd.Flags().StringVar(&releaseId, "releaseid", "", "UUID of release to finalize (required)")
 	releasecompletionfinalizerCmd.MarkFlagRequired("releaseid")
@@ -935,6 +944,7 @@ func init() {
 	// the gate runs and any "all commits VERIFIED" rule rejects the
 	// release at create time). JSON array of ArtifactInput records —
 	// same shape addrelease accepts.
+	getVersionCmd.PersistentFlags().BoolVar(&allowImportFailure, allowImportFailureFlag, false, allowImportFailureStoreOnlyHelp)
 	getVersionCmd.PersistentFlags().StringVar(&sceArts, "scearts", "", "(Optional) JSON array of Source-Code-Entry Artifacts to attach to the SCE at version-resolution time. Same shape as `rearm addrelease --scearts`. Use this to deliver SIGNATURE + SIGNED_PAYLOAD pairs early so component CEL gates that key on signature.state see a verdict in processRelease.")
 
 	// flags for check release by hash command
@@ -1056,6 +1066,12 @@ func initConfig(cmd *cobra.Command) {
 // Bind each cobra flag to its associated viper configuration (config file and environment variable)
 func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		// --allow-import-failure is read only from the command line: neither the environment nor the
+		// config file may turn off the import check of every pipeline at once (task SAFE-16, design
+		// SAFE-9 d14)
+		if f.Name == allowImportFailureFlag {
+			return
+		}
 		// Environment variables can't have dashes in them, so bind them to their equivalent
 		// keys with underscores, e.g. --favorite-color to STING_FAVORITE_COLOR
 		if strings.Contains(f.Name, "-") {

@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -49,19 +50,58 @@ var addArtifactCmd = &cobra.Command{
 	Use:   "addartifact",
 	Short: "Add artifacts to an existing release, deliverable, or source code entry",
 	Long: `Add artifacts to an existing release, deliverable, or source code entry.
-	
+
 Examples:
   # Add artifacts to release (simple mode)
   rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
     --component "my-component" --version "1.0.0" \
     --artifacts '[{"filePath": "/path/to/sbom.json", "type": "BOM", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "inventoryTypes": ["SOFTWARE"], "displayIdentifier": "my-sbom"}]'
 
-  # Add a VEX document (the release must already have an SBOM). The optional
-  # vexScope / vexImportMode / userIssuerClassOverride fields control the
-  # import; omit them to use the backend defaults (COMPONENT scope, AUTO_ACCEPT).
+  # Add a VEX document
   rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
     --component "my-component" --version "1.0.0" \
-    --artifacts '[{"filePath": "/path/to/vex.cdx.json", "type": "VEX", "bomFormat": "CYCLONEDX", "storedIn": "REARM", "displayIdentifier": "vendor-vex", "vexImportMode": "STAGE"}]'
+    --artifacts '[{"filePath": "vex.cdx.json", "type": "VEX", "displayIdentifier": "vendor-vex", "importScope": "COMPONENT", "importMode": "STAGE"}]'
+
+  # Add a SAFETY_CONTEXT document: a CycloneDX 2.x JSON snapshot of declared safety levels
+  rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
+    --component "my-component" --version "1.0.0" \
+    --artifacts '[{"filePath": "safety-context.cdx.json", "type": "SAFETY_CONTEXT", "displayIdentifier": "iec62304-classes", "importScope": "COMPONENT"}]'
+
+Import fields (VEX and SAFETY_CONTEXT):
+  importScope              ORG, RESOURCE_GROUP, COMPONENT, BRANCH or RELEASE (default COMPONENT)
+  importMode               AUTO_ACCEPT, STAGE or REJECT (default AUTO_ACCEPT)
+  userIssuerClassOverride  SELF, VENDOR or THIRD_PARTY
+  vexScope and vexImportMode are deprecated aliases of importScope and importMode (the generic field wins).
+  An artifact field this CLI does not know is refused.
+
+Who can make an import take effect:
+  Any key that may add artifacts to the release can upload the document.
+  A statement or level takes effect automatically only when the uploading key itself holds Finding Analysis write at the import scope:
+  on the release for RELEASE, on the component for COMPONENT, at the organization for BRANCH and ORG; RESOURCE_GROUP never takes effect automatically.
+  Otherwise it is staged for review (reason NO_FINDING_ANALYSIS_WRITE in the summary); other reasons can stage it too, and the summary names them.
+  Component keys and organization-wide read-write keys never hold Finding Analysis write: use a FREEFORM key granted it at the scope you import to.
+  A personal (USER) key holds only what both the key and its owner hold now.
+  A userIssuerClassOverride that raises trust (THIRD_PARTY, then VENDOR, then SELF) also needs that permission; without it the override is ignored and the summary says so.
+  After rearm login, the key the session is bound to is judged.
+
+Ordering:
+  The release's SBOM must be indexed first.
+  Upload the SBOM in its own addartifact (or addrelease) call, then the VEX or SAFETY_CONTEXT; an SBOM in the same call does not count.
+  --wait-for-sbom 10m retries the upload until the SBOM is indexed (nothing is stored while the server refuses).
+
+  rearm-cli addartifact --component "my-component" --version "1.0.0" \
+    --artifacts '[{"filePath": "sbom.cdx.json", "type": "BOM", "bomFormat": "CYCLONEDX", "displayIdentifier": "my-sbom"}]'
+  rearm-cli addartifact --component "my-component" --version "1.0.0" --wait-for-sbom 10m \
+    --artifacts '[{"filePath": "vex.cdx.json", "type": "VEX", "displayIdentifier": "vendor-vex"}]'
+
+Result and exit:
+  The import summary of each VEX or SAFETY_CONTEXT artifact is printed on stderr; stdout keeps the JSON answer.
+  The exit is 3 when an artifact imported nothing or its result is unknown (the artifacts are stored, so a re-run uploads them again).
+  --allow-import-failure exits 0 and still prints the summary.
+  --artifacts cannot be combined with the advanced flags.
+  A VEX or SAFETY_CONTEXT artifact on a source code entry (` + "`--scearts`" + `) or nested under another artifact is refused unless --allow-import-failure is given, because its result cannot be checked (use --releasearts; the import runs against the release either way).
+  addrelease, addreleases, addodeliverable and getversion never import such an artifact and refuse it unless --allow-import-failure is given.
+  --allow-import-failure is read only from the command line: REARM_ALLOW_IMPORT_FAILURE and the config file do not set it.
 
   # Add artifacts to multiple targets (advanced mode)
   rearm-cli addartifact -i <api-key-id> -k <api-key-secret> -u http://localhost:8086 \
@@ -93,6 +133,40 @@ Examples:
 			os.Exit(1)
 		}
 
+		// --artifacts is the release part of simple mode; beside an advanced flag it is an input
+		// error, never dropped
+		if addArtifactArtifacts != "" && (addArtifactReleaseArts != "" || addArtifactDeliverableArts != "" || addArtifactSceArts != "") {
+			fmt.Fprintln(os.Stderr, "Error: --artifacts cannot be combined with --releasearts, --deliverablearts or --scearts; put release artifacts in --releasearts")
+			os.Exit(1)
+		}
+		releaseFlag, releaseJSON := "--releasearts", addArtifactReleaseArts
+		if addArtifactArtifacts != "" {
+			releaseFlag, releaseJSON = "--artifacts", addArtifactArtifacts
+		}
+
+		// every input check runs before any request (design SAFE-9 3.4 item 9)
+		in, err := decodeAddArtifactInput(releaseFlag, releaseJSON, addArtifactDeliverableArts, addArtifactSceArts, allowImportFailure)
+		if err != nil {
+			var legacy *legacyInputError
+			if errors.As(err, &legacy) {
+				fmt.Println(legacy.line)
+			} else {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+			}
+			os.Exit(1)
+		}
+		if waitForSbom < 0 {
+			fmt.Fprintf(os.Stderr, "Error: --%s must not be negative, got %s\n", waitForSbomFlag, waitForSbom)
+			os.Exit(1)
+		}
+		for _, n := range in.notices {
+			fmt.Fprintln(os.Stderr, n)
+		}
+		if err := in.tagCheckedEntries(); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+
 		// Build GraphQL mutation variables
 		variables := make(map[string]interface{})
 		artifactInput := make(map[string]interface{})
@@ -113,61 +187,44 @@ Examples:
 		locationMap := make(map[string][]string)
 		filesMap := make(map[string]interface{})
 
-		// Handle simple mode: --artifacts defaults to releaseArtifacts
-		if addArtifactArtifacts != "" && addArtifactReleaseArts == "" && addArtifactDeliverableArts == "" && addArtifactSceArts == "" {
-			addArtifactReleaseArts = addArtifactArtifacts
-		}
-
 		// Process release artifacts
-		if addArtifactReleaseArts != "" {
-			var releaseArtsList []Artifact
-			if err := json.Unmarshal([]byte(addArtifactReleaseArts), &releaseArtsList); err != nil {
-				fmt.Printf("Error parsing releasearts JSON: %v\n", err)
-				os.Exit(1)
-			}
-
+		if in.hasRelease {
 			indexPrefix := "variables.artifactInput.releaseArtifacts."
-			processedArts := processArtifactsInput(&releaseArtsList, indexPrefix, &filesCounter, &locationMap, &filesMap)
+			processedArts := processArtifactsInput(&in.releaseArts, indexPrefix, &filesCounter, &locationMap, &filesMap)
 			artifactInput["releaseArtifacts"] = processedArts
 		}
 
 		// Process deliverable artifacts
-		if addArtifactDeliverableArts != "" {
-			var deliverableArtsList []DeliverableArtifactGroup
-			if err := json.Unmarshal([]byte(addArtifactDeliverableArts), &deliverableArtsList); err != nil {
-				fmt.Printf("Error parsing deliverablearts JSON: %v\n", err)
-				os.Exit(1)
-			}
-
-			// Process each deliverable artifact group
+		if in.hasDeliverable {
+			deliverableArtsList := in.deliverableGroups
 			for i := range deliverableArtsList {
 				indexPrefix := fmt.Sprintf("variables.artifactInput.deliverableArtifacts.%d.artifacts.", i)
 				processedArts := processArtifactsInput(&deliverableArtsList[i].Artifacts, indexPrefix, &filesCounter, &locationMap, &filesMap)
 				deliverableArtsList[i].Artifacts = *processedArts
 			}
-
 			artifactInput["deliverableArtifacts"] = deliverableArtsList
 		}
 
 		// Process SCE artifacts
-		if addArtifactSceArts != "" {
-			var sceArtsList []SceArtifactGroup
-			if err := json.Unmarshal([]byte(addArtifactSceArts), &sceArtsList); err != nil {
-				fmt.Printf("Error parsing scearts JSON: %v\n", err)
-				os.Exit(1)
-			}
-
-			// Process each SCE artifact group
+		if in.hasSce {
+			sceArtsList := in.sceGroups
 			for i := range sceArtsList {
 				indexPrefix := fmt.Sprintf("variables.artifactInput.sceArtifacts.%d.artifacts.", i)
 				processedArts := processArtifactsInput(&sceArtsList[i].Artifacts, indexPrefix, &filesCounter, &locationMap, &filesMap)
 				sceArtsList[i].Artifacts = *processedArts
 			}
-
 			artifactInput["sceArtifacts"] = sceArtsList
 		}
 
 		variables["artifactInput"] = artifactInput
+
+		if len(in.importable) > 0 {
+			// a VEX or SAFETY_CONTEXT artifact: read its import result and gate the exit
+			if code := runAddArtifactImport(in, variables, locationMap, filesMap); code != 0 {
+				os.Exit(code)
+			}
+			return
+		}
 
 		// Build GraphQL mutation
 		mutation := rearm.AddArtifactProgrammatic_Operation
@@ -236,4 +293,6 @@ func init() {
 	addArtifactCmd.Flags().StringVar(&addArtifactReleaseArts, "releasearts", "", "Release artifacts JSON array")
 	addArtifactCmd.Flags().StringVar(&addArtifactDeliverableArts, "deliverablearts", "", "Deliverable artifacts JSON array")
 	addArtifactCmd.Flags().StringVar(&addArtifactSceArts, "scearts", "", "SCE artifacts JSON array")
+	addArtifactCmd.Flags().BoolVar(&allowImportFailure, allowImportFailureFlag, false, allowImportFailureAddArtifactHelp)
+	addArtifactCmd.Flags().DurationVar(&waitForSbom, waitForSbomFlag, 0, waitForSbomHelp)
 }

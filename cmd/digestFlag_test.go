@@ -57,3 +57,14 @@ func TestDigestFlagsStopAtTheFirstBadOne(t *testing.T) {
 		t.Error("no --digest sends no records")
 	}
 }
+
+// REARM is computed by ReARM, like AS_UPLOADED and RAW_OCI_STORAGE (task SAFE-16, design SAFE-9 d9,
+// test c7).
+func TestDigestFlagRefusesTheREARMScope(t *testing.T) {
+	if _, err := parseDigestFlag("sha256:" + sha256Hex + ":REARM"); err == nil || !strings.Contains(err.Error(), "scope REARM is computed by ReARM and cannot be supplied") {
+		t.Errorf("REARM: %v", err)
+	}
+	if _, err := parseDigestFlag("sha256:" + sha256Hex + ":SOMEWHERE"); err == nil || !strings.Contains(err.Error(), `unknown scope "SOMEWHERE" (ORIGINAL_FILE or OCI_STORAGE)`) {
+		t.Errorf("unknown scope: %v", err)
+	}
+}

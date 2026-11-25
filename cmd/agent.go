@@ -428,9 +428,10 @@ CEL session.* policy surface.
 
 --digest is optional and repeatable: <algo>:<hex>[:<scope>], e.g.
 --digest sha256:<64 hex chars>. The scope defaults to ORIGINAL_FILE (the file as
-you had it); OCI_STORAGE and REARM may also be declared. ReARM computes the
-digest of what it stores itself, so leave --digest out unless you have one to
-declare.`,
+you had it); OCI_STORAGE may also be declared.
+AS_UPLOADED, RAW_OCI_STORAGE and REARM are computed by ReARM and refused.
+ReARM computes the digest of what it stores itself, so leave --digest out unless
+you have one to declare.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if addArtifactFile == "" {

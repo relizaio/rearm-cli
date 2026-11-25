@@ -254,9 +254,11 @@ The addrelease command supports three types of artifacts, each serving a differe
    - Use when: The artifact describes or documents the release as a whole
 
 3. **Deliverable Artifacts (`--odelartsjson`)**: Artifacts attached to specific deliverables
-   - Examples: SBOMs, attestations, signatures, VEX documents
+   - Examples: SBOMs, attestations, signatures
    - Use when: The artifact is specific to a deliverable (container, binary, package)
    - Note: Must have one `--odelartsjson` entry per `--odelid` deliverable
+
+A VEX or SAFETY_CONTEXT artifact is refused in any of these lists: `addrelease` stores it but never imports it. Upload it with `addartifact` once the release's SBOM is indexed (see "Add a VEX or SAFETY_CONTEXT Document"). `--allow-import-failure`, given on the command line, sends it anyway, stored without an import.
 
 **Using Tags on Artifacts:**
 
@@ -969,28 +971,66 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
     }]'
 ```
 
-### Add a VEX Document
+### Add a VEX or SAFETY_CONTEXT Document
 
-A VEX (Vulnerability Exploitability eXchange) document is uploaded as a regular artifact with `type` set to `VEX`. The target release must already have at least one SBOM artifact, otherwise the upload fails. The optional `vexScope`, `vexImportMode`, and `userIssuerClassOverride` fields control how the VEX is imported; omit them to use the backend defaults (`COMPONENT` scope, `AUTO_ACCEPT` mode).
+A VEX (Vulnerability Exploitability eXchange) document or a SAFETY_CONTEXT document (a CycloneDX 2.x JSON snapshot of declared safety levels) is uploaded as a regular artifact with `type` set to `VEX` or `SAFETY_CONTEXT`; the server imports it into the release. The optional `importScope`, `importMode` and `userIssuerClassOverride` fields control the import (see "Import fields" below); omit them to use the defaults (`COMPONENT` scope, `AUTO_ACCEPT` mode).
+
+**Order: SBOM first.** The release's SBOM must be indexed before the import runs. Upload the SBOM in its own `addartifact` (or `addrelease`) call, then the VEX or SAFETY_CONTEXT; an SBOM in the same call does not count. `--wait-for-sbom 10m` retries the upload until the SBOM is indexed (nothing is stored while the server refuses):
 
 ```bash
-docker run --rm registry.relizahub.com/library/rearm-cli    \
-    addartifact    \
-    -i component_or_organization_wide_rw_api_id    \
-    -k component_or_organization_wide_rw_api_key    \
-    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca    \
-    --version 1.0.5    \
-    --artifacts '[{
-      "filePath": "./vendor-vex.cdx.json",
-      "type": "VEX",
-      "bomFormat": "CYCLONEDX",
-      "storedIn": "REARM",
-      "displayIdentifier": "vendor-vex",
-      "vexScope": "RELEASE",
-      "vexImportMode": "STAGE",
-      "userIssuerClassOverride": "VENDOR"
-    }]'
+rearm addartifact -i "$REARM_API_ID" -k "$REARM_API_KEY" -u "$REARM_URL" \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca --version 1.0.5 \
+    --artifacts '[{"filePath": "./sbom.cdx.json", "type": "BOM", "bomFormat": "CYCLONEDX", "displayIdentifier": "sbom"}]'
+
+rearm addartifact -i "$REARM_API_ID" -k "$REARM_API_KEY" -u "$REARM_URL" \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca --version 1.0.5 \
+    --wait-for-sbom 10m \
+    --artifacts '[{"filePath": "./vendor-vex.cdx.json", "type": "VEX", "displayIdentifier": "vendor-vex", "importScope": "COMPONENT", "importMode": "STAGE"}]'
 ```
+
+A SAFETY_CONTEXT document is uploaded the same way:
+
+```bash
+rearm addartifact -i "$REARM_API_ID" -k "$REARM_API_KEY" -u "$REARM_URL" \
+    --component c6c3223f-7ad0-4d99-a69e-5afa151c71ca --version 1.0.5 \
+    --artifacts '[{"filePath": "./safety-context.cdx.json", "type": "SAFETY_CONTEXT", "displayIdentifier": "iec62304-classes", "importScope": "COMPONENT"}]'
+```
+
+**Who can make an import take effect.** Any key that may add artifacts to the release can upload the document. A statement or level takes effect automatically only when the uploading key itself holds Finding Analysis write at the import scope: on the release for `RELEASE`, on the component for `COMPONENT`, at the organization for `BRANCH` and `ORG`; `RESOURCE_GROUP` never takes effect automatically. Otherwise it is staged for review (reason `NO_FINDING_ANALYSIS_WRITE` in the summary); other reasons can stage it too, and the summary names them. Component keys and organization-wide read-write keys never hold Finding Analysis write: use a FREEFORM key granted it at the scope you import to. A personal (USER) key holds only what both the key and its owner hold now. A `userIssuerClassOverride` that raises trust (`THIRD_PARTY`, then `VENDOR`, then `SELF`) also needs that permission; without it the override is ignored and the summary says so. After `rearm login`, the key the session is bound to is judged.
+
+**The import summary.** stdout keeps the JSON answer; for each VEX or SAFETY_CONTEXT artifact the CLI prints the server's import summary on stderr, then a final check line, for example:
+
+```
+import VEX --artifacts[0] "vendor-vex" artifact 0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b: IMPORTED
+  total=12 auto-accepted=0 staged=9 unchanged=- unmatched=3 errored=0 auto-rejected=0 attestations-deferred=0 awaiting-sbom=-
+  staged-by-reason: NO_FINDING_ANALYSIS_WRITE=9
+  note: the uploading key does not hold Finding Analysis write at the import scope; these statements wait for review
+import check passed: 1 of 1 VEX/SAFETY_CONTEXT artifacts imported
+```
+
+An artifact counts as imported when the server stored at least one of its statements (auto-accepted, staged, auto-rejected or unchanged). Statements that matched no component of the release's SBOM, errored statements and an unreadable document import nothing.
+
+**Exit codes:**
+
+| Exit | Meaning |
+|---|---|
+| 0 | every VEX or SAFETY_CONTEXT artifact imported something (or `--allow-import-failure` was given) |
+| 1 | the call did not complete or nothing was sent: an input error, the server refused the call, a transport error, or `--wait-for-sbom` ran out |
+| 3 | the upload completed, but an artifact imported nothing or its result is unknown; the artifacts are stored, so a re-run uploads them again |
+
+**Flags for the import:**
+
+- **--allow-import-failure** - exit 0 even when a VEX or SAFETY_CONTEXT artifact imported nothing or its result is unknown (the summary is still printed); also uploads such an artifact on a source code entry or nested under another artifact, unchecked. It is read only from the command line: `REARM_ALLOW_IMPORT_FAILURE` and the config file do not set it, so put it on the step's own command.
+- **--wait-for-sbom** - retry the upload while the release has no indexed SBOM, for at most this long (e.g. `10m`); `0` (the default) does not wait.
+
+**What is refused before any request:**
+
+- an artifact field this CLI does not know (upgrade the CLI for a field the server added later);
+- `--artifacts` together with `--releasearts`, `--deliverablearts` or `--scearts` (put release artifacts in `--releasearts`);
+- a VEX or SAFETY_CONTEXT artifact on a source code entry (`--scearts`) or nested under another artifact, unless `--allow-import-failure` is given, because its result cannot be checked; use `--releasearts` (the import runs against the release either way);
+- a `digestRecords` scope `AS_UPLOADED`, `RAW_OCI_STORAGE` or `REARM`: ReARM computes those.
+
+`addrelease`, `addreleases`, `addodeliverable` and `getversion` store a VEX or SAFETY_CONTEXT artifact but never import it, so they refuse one unless `--allow-import-failure` is given (then each such artifact gets a notice and the call runs as before). Upload it with `addartifact` once the release's SBOM is indexed.
 
 **Flags:**
 
@@ -1000,7 +1040,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 - **--component** - flag to denote component uuid (optional). Required if organization-wide read-write key is used, ignored if component specific api key is used
 - **--version** - release version to add artifacts to (either version+component or release uuid must be provided)
 - **--release** - release UUID to add artifacts to (alternative to version+component)
-- **--artifacts** - artifacts JSON array for simple mode (optional). Defaults to release artifacts. Mutually exclusive with specific artifact type flags
+- **--artifacts** - artifacts JSON array for simple mode (optional). Defaults to release artifacts. Cannot be combined with `--releasearts`, `--deliverablearts` or `--scearts` (refused before any request)
 - **--releasearts** - release artifacts JSON array (optional). Artifacts attached directly to the release
 - **--deliverablearts** - deliverable artifacts JSON array (optional). Each entry must specify deliverable UUID and artifacts. Format:
 ```json
@@ -1033,15 +1073,19 @@ All artifact objects follow the same format as in `addrelease`:
 }
 ```
 
-**VEX Artifact Fields:**
+`status` and `digestRecords` (`[{"algo": "SHA_256", "digest": "<hex>", "scope": "ORIGINAL_FILE"}]`, scope `ORIGINAL_FILE` or `OCI_STORAGE`) are also accepted.
 
-When `type` is `VEX`, three optional fields control the inbound VEX import. All may be omitted to accept the backend defaults:
+**Import fields (VEX and SAFETY_CONTEXT):**
+
+When `type` is `VEX` or `SAFETY_CONTEXT`, three optional fields control the import. All may be omitted to accept the defaults:
 
 | Field | Values | Default | Meaning |
 |---|---|---|---|
-| `vexScope` | `ORG`, `RESOURCE_GROUP`, `COMPONENT`, `BRANCH`, `RELEASE` | `COMPONENT` | How broadly the imported VEX claim applies |
-| `vexImportMode` | `AUTO_ACCEPT`, `STAGE`, `REJECT` | `AUTO_ACCEPT` | Whether matched statements are applied directly, staged for review, or rejected |
-| `userIssuerClassOverride` | `SELF`, `VENDOR`, `THIRD_PARTY` | derived from upload context | Overrides the heuristically-derived issuer class |
+| `importScope` | `ORG`, `RESOURCE_GROUP`, `COMPONENT`, `BRANCH`, `RELEASE` | `COMPONENT` | How broadly the imported statements apply |
+| `importMode` | `AUTO_ACCEPT`, `STAGE`, `REJECT` | `AUTO_ACCEPT` | Whether matched statements are applied directly, staged for review, or rejected |
+| `userIssuerClassOverride` | `SELF`, `VENDOR`, `THIRD_PARTY` | derived from upload context | Overrides the derived issuer class; raising trust needs Finding Analysis write at the import scope |
+
+`vexScope` and `vexImportMode` are deprecated aliases of `importScope` and `importMode`; they are still sent, with a notice, and the generic field wins when both are set.
 
 **Common Use Cases:**
 

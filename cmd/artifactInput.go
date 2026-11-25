@@ -23,27 +23,40 @@ type TagInput struct {
 }
 
 type Artifact struct {
-	DisplayIdentifier string     `json:"displayIdentifier"`
-	Version           string     `json:"version"`
-	DownloadLinks     []Link     `json:"downloadLinks"`
-	InventoryTypes    []string   `json:"inventoryTypes"`
-	BomFormat         string     `json:"bomFormat,omitempty"`
-	Type              string     `json:"type"`
-	StoredIn          string     `json:"storedIn"`
-	Tags              []TagInput `json:"tags"`
-	File              []byte     `json:"file"`
-	FilePath          string     `json:"filePath,omitempty"`
-	StripBom          string     `json:"stripBom,omitempty"`
-	// VEX-only fields, applied when type is "VEX" — they control how an
-	// inbound VEX document is imported. All optional; the backend applies
-	// defaults (scope COMPONENT, mode AUTO_ACCEPT) when omitted.
-	//   VexScope                - AnalysisScope: ORG/RESOURCE_GROUP/COMPONENT/BRANCH/RELEASE
-	//   VexImportMode           - AUTO_ACCEPT/STAGE/REJECT
+	DisplayIdentifier string              `json:"displayIdentifier"`
+	Version           string              `json:"version"`
+	DownloadLinks     []Link              `json:"downloadLinks"`
+	InventoryTypes    []string            `json:"inventoryTypes"`
+	BomFormat         string              `json:"bomFormat,omitempty"`
+	Type              string              `json:"type"`
+	StoredIn          string              `json:"storedIn"`
+	Tags              []TagInput          `json:"tags"`
+	File              []byte              `json:"file"`
+	FilePath          string              `json:"filePath,omitempty"`
+	StripBom          string              `json:"stripBom,omitempty"`
+	Status            string              `json:"status,omitempty"`
+	DigestRecords     []DigestRecordInput `json:"digestRecords,omitempty"`
+	// Import fields, applied when type is VEX or SAFETY_CONTEXT: they control how the uploaded
+	// document is imported. All optional; the server applies defaults (scope COMPONENT, mode
+	// AUTO_ACCEPT) when omitted.
+	//   ImportScope             - AnalysisScope: ORG/RESOURCE_GROUP/COMPONENT/BRANCH/RELEASE
+	//   ImportMode              - AUTO_ACCEPT/STAGE/REJECT
 	//   UserIssuerClassOverride - SELF/VENDOR/THIRD_PARTY
+	// VexScope and VexImportMode are deprecated aliases of ImportScope and ImportMode; the server
+	// uses the generic field when both are set.
+	ImportScope             string     `json:"importScope,omitempty"`
+	ImportMode              string     `json:"importMode,omitempty"`
 	VexScope                string     `json:"vexScope,omitempty"`
 	VexImportMode           string     `json:"vexImportMode,omitempty"`
 	UserIssuerClassOverride string     `json:"userIssuerClassOverride,omitempty"`
 	Artifacts               []Artifact `json:"artifacts,omitempty"`
+}
+
+// DigestRecordInput is one declared digest of an artifact (DigestRecordInput in the API).
+type DigestRecordInput struct {
+	Algo   string `json:"algo,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Scope  string `json:"scope,omitempty"`
 }
 
 type Link struct {
