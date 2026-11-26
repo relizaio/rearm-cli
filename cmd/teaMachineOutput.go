@@ -50,13 +50,15 @@ const teaFormatVersion = 1
 type teaDocKind string
 
 const (
-	teaDocResolution teaDocKind = "TEA_RESOLUTION"
-	teaDocProduct    teaDocKind = "TEA_PRODUCT"
-	teaDocComponent  teaDocKind = "TEA_COMPONENT"
-	teaDocReleases   teaDocKind = "TEA_RELEASE_LIST"
-	teaDocRelease    teaDocKind = "TEA_RELEASE"
-	teaDocManifest   teaDocKind = "TEA_DOWNLOAD_MANIFEST"
-	teaDocError      teaDocKind = "TEA_ERROR"
+	teaDocResolution    teaDocKind = "TEA_RESOLUTION"
+	teaDocProduct       teaDocKind = "TEA_PRODUCT"
+	teaDocComponent     teaDocKind = "TEA_COMPONENT"
+	teaDocProductList   teaDocKind = "TEA_PRODUCT_LIST"
+	teaDocComponentList teaDocKind = "TEA_COMPONENT_LIST"
+	teaDocReleases      teaDocKind = "TEA_RELEASE_LIST"
+	teaDocRelease       teaDocKind = "TEA_RELEASE"
+	teaDocManifest      teaDocKind = "TEA_DOWNLOAD_MANIFEST"
+	teaDocError         teaDocKind = "TEA_ERROR"
 )
 
 // teaPreRelease is the pre-release mark of a release; UNSTATED when the server omitted it.
@@ -102,6 +104,15 @@ const (
 	teaListEnd         teaListStop = "END"
 	teaListMaxPages    teaListStop = "MAX_PAGES"
 	teaListOutputBytes teaListStop = "OUTPUT_BYTES"
+)
+
+// teaListCut says whether rows of a product or component list answer were left out of the
+// document (open: a consumer reads any value but NONE as "rows are missing").
+type teaListCut string
+
+const (
+	teaListCutNone    teaListCut = "NONE"
+	teaListCutMaxRows teaListCut = "MAX_ROWS"
 )
 
 // teaCLEStatus says whether the lifecycle was read (closed).
@@ -520,6 +531,33 @@ type teaComponentDoc struct {
 	Kind          teaDocKind    `json:"kind"`
 	Server        teaServerJSON `json:"server"`
 	Component     teaNamedJSON  `json:"component"`
+}
+
+// TEA_PRODUCT_LIST and TEA_COMPONENT_LIST: one page of a list, the rows in the server's
+// order. Rows is never nil, so an empty page encodes as [].
+
+type teaProductListDoc struct {
+	FormatVersion int             `json:"formatVersion"`
+	Kind          teaDocKind      `json:"kind"`
+	Server        teaServerJSON   `json:"server"`
+	Products      []teaNamedJSON  `json:"products"`
+	Page          teaItemListPage `json:"page"`
+}
+
+type teaComponentListDoc struct {
+	FormatVersion int             `json:"formatVersion"`
+	Kind          teaDocKind      `json:"kind"`
+	Server        teaServerJSON   `json:"server"`
+	Components    []teaNamedJSON  `json:"components"`
+	Page          teaItemListPage `json:"page"`
+}
+
+// teaItemListPage: the server's token when it said another page exists (else null), how many
+// rows its answer held, and whether rows were left out.
+type teaItemListPage struct {
+	NextPageToken *string    `json:"nextPageToken"`
+	RowsReceived  int        `json:"rowsReceived"`
+	CutBy         teaListCut `json:"cutBy"`
 }
 
 // TEA_RELEASE_LIST

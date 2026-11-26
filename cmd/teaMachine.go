@@ -50,12 +50,14 @@ import (
 type teaMachineVerb string
 
 const (
-	teaVerbResolve   teaMachineVerb = "resolve"
-	teaVerbProduct   teaMachineVerb = "product"
-	teaVerbComponent teaMachineVerb = "component"
-	teaVerbReleases  teaMachineVerb = "releases"
-	teaVerbRelease   teaMachineVerb = "release"
-	teaVerbDownload  teaMachineVerb = "download"
+	teaVerbResolve    teaMachineVerb = "resolve"
+	teaVerbProduct    teaMachineVerb = "product"
+	teaVerbComponent  teaMachineVerb = "component"
+	teaVerbProducts   teaMachineVerb = "products"
+	teaVerbComponents teaMachineVerb = "components"
+	teaVerbReleases   teaMachineVerb = "releases"
+	teaVerbRelease    teaMachineVerb = "release"
+	teaVerbDownload   teaMachineVerb = "download"
 )
 
 // Defaults and ranges of the limit flags (D4). No range includes zero: to the library zero
@@ -92,6 +94,9 @@ const (
 	teaDefMaxPages         = 50
 	teaMinMaxPages         = 1
 	teaMaxMaxPages         = 1000
+	teaDefMaxRows          = 1000
+	teaMinMaxRows          = 1
+	teaMaxMaxRows          = 10000
 	teaDefConnectTimeout   = 5 * time.Second
 	teaMinConnectTimeout   = time.Second
 	teaMaxConnectTimeout   = 60 * time.Second
@@ -135,6 +140,12 @@ type teaMachineInputs struct {
 	pageSize     int
 	maxPages     int
 
+	// products and components: the identifier filter, the sort order and the row bound
+	idType    string
+	idValue   string
+	sortOrder string
+	maxRows   int
+
 	credentialStdin bool
 	allowThisHost   bool
 	debug           bool
@@ -155,7 +166,7 @@ type teaMachineInputs struct {
 // teaMachineInputsDefault are the inputs with every flag at its default.
 func teaMachineInputsDefault(verb teaMachineVerb) teaMachineInputs {
 	return teaMachineInputs{
-		verb: verb, usePort: 443, pageSize: teaDefPageSize, maxPages: teaDefMaxPages,
+		verb: verb, usePort: 443, pageSize: teaDefPageSize, maxPages: teaDefMaxPages, maxRows: teaDefMaxRows,
 		connectTimeout: teaDefConnectTimeout, deadline: teaDefDeadline,
 		maxDocumentBytes: teaDefMaxDocumentBytes, maxRedirects: teaDefMaxRedirects,
 		maxStringBytes: teaDefMaxStringBytes, maxOutputBytes: teaDefMaxOutputBytes,
@@ -186,9 +197,9 @@ was hit, 10 could not connect.`,
 	SilenceUsage:     true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {},
 	Run: func(cmd *cobra.Command, args []string) {
-		msg := "a verb is required: resolve, product, component, releases, release or download"
+		msg := "a verb is required: resolve, product, component, products, components, releases, release or download"
 		if len(args) > 0 {
-			msg = "unknown verb; the verbs are resolve, product, component, releases, release and download"
+			msg = "unknown verb; the verbs are resolve, product, component, products, components, releases, release and download"
 		}
 		os.Exit(int(teaMachineFail(systemTeaIO(), context.Background(), teaUsage("%s", msg), "", nil)))
 	},
@@ -222,6 +233,8 @@ func init() {
 		newTeaMachineVerbCmd(teaVerbResolve, "Resolve a TEI to its product release(s): TEA_RESOLUTION"),
 		newTeaMachineVerbCmd(teaVerbProduct, "Read one product by uuid: TEA_PRODUCT"),
 		newTeaMachineVerbCmd(teaVerbComponent, "Read one component by uuid: TEA_COMPONENT"),
+		newTeaMachineVerbCmd(teaVerbProducts, "List one page of the products of a server: TEA_PRODUCT_LIST"),
+		newTeaMachineVerbCmd(teaVerbComponents, "List one page of the components of a server: TEA_COMPONENT_LIST"),
 		newTeaMachineVerbCmd(teaVerbReleases, "List the releases of a product or component, paged: TEA_RELEASE_LIST"),
 		newTeaMachineVerbCmd(teaVerbRelease, "Read one release with its latest collection and lifecycle: TEA_RELEASE"),
 		newTeaMachineVerbCmd(teaVerbDownload, "Download and verify the artifacts of one collection version: TEA_DOWNLOAD_MANIFEST"),
@@ -262,6 +275,14 @@ func addTeaMachineFlags(c *cobra.Command, verb teaMachineVerb) {
 		f.String("page-token", "", "Continue a list: the nextPageToken of the previous run, given as --page-token=<token>")
 		f.Int("page-size", d.pageSize, "Releases per page (1 to 100)")
 		f.Int("max-pages", d.maxPages, "Pages read in one run (1 to 1000)")
+	case teaVerbProducts, teaVerbComponents:
+		f.String("api-root", "", "TEA API root of the server (the url of a well-known endpoint)")
+		f.String("id-type", "", "List only the "+string(verb)+" with this identifier: its TEA type (CPE, TEI, PURL, COMPLIANCE_DOCUMENT), with --id-value")
+		f.String("id-value", "", "The identifier value, with --id-type, given as --id-value=<value>")
+		f.String("sort-order", "", "Order by name: asc or desc (default: the server's, ascending)")
+		f.String("page-token", "", "Read the next page: the nextPageToken of the previous run, given as --page-token=<token>")
+		f.Int("page-size", d.pageSize, "Rows asked of the server (1 to 100); a server may send more")
+		f.Int("max-rows", d.maxRows, "Rows kept in the document (1 to 10000); further rows of the answer are left out and marked")
 	case teaVerbRelease, teaVerbDownload:
 		f.String("api-root", "", "TEA API root of the server (the url of a well-known endpoint)")
 		f.String("product-release", "", "uuid of the product release")
@@ -313,6 +334,12 @@ func teaMachineInputsFromFlags(cmd *cobra.Command, verb teaMachineVerb, args []s
 	}
 	if v, err := f.GetInt("max-pages"); err == nil {
 		in.maxPages = v
+	}
+	in.idType, _ = f.GetString("id-type")
+	in.idValue, _ = f.GetString("id-value")
+	in.sortOrder, _ = f.GetString("sort-order")
+	if v, err := f.GetInt("max-rows"); err == nil {
+		in.maxRows = v
 	}
 	in.collectionVersion, _ = f.GetInt("collection-version")
 	in.dir, _ = f.GetString("dir")
@@ -394,6 +421,8 @@ func validateTeaMachine(in teaMachineInputs) (teaMachineTarget, error) {
 	case teaVerbProduct, teaVerbComponent:
 		t.id, err = teaUUIDFlag("uuid", in.uuid)
 		return t, err
+	case teaVerbProducts, teaVerbComponents:
+		return t, validateTeaListFlags(in)
 	case teaVerbReleases:
 		flag, value, err := teaOneOf(in, "product", "component")
 		if err != nil {
@@ -537,7 +566,8 @@ func checkTeaAPIRoot(root string, useHTTP bool) (tea.APIBase, error) {
 
 // checkTeaPageToken accepts a page token that can be passed back on a command line: not
 // empty (empty means the first page to the library), valid UTF-8, no control character, at
-// most max bytes.
+// most max bytes. --id-value follows the same rule. The error is the text after the flag
+// name.
 func checkTeaPageToken(tok string, max int) error {
 	switch {
 	case tok == "":
@@ -644,6 +674,8 @@ func runTeaMachine(ctx context.Context, tio teaIO, in teaMachineInputs) teaExit 
 		return m.resolve()
 	case teaVerbProduct, teaVerbComponent:
 		return m.product()
+	case teaVerbProducts, teaVerbComponents:
+		return m.list()
 	case teaVerbReleases:
 		return m.releases()
 	case teaVerbRelease:
