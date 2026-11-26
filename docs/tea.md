@@ -286,7 +286,7 @@ The interactive commands never return 8, 9 or 10: they keep 1 for a time bound o
 
 ## 11.6 Machine mode
 
-`rearm tea machine <verb>` is the TEA client for a service, such as ReARM's rebom fetching from supplier TEA servers. Its rules:
+`rearm tea machine <verb>` is the TEA client for a service, such as ReARM's rebom fetching from supplier TEA servers. How ReARM Pro uses it is described in [Supplier Intake over TEA](https://docs.rearmhq.com/workflows/supplier-intake.html). Its rules:
 
 1. **Every setting is on the command line.** The machine mode reads no configuration file (`~/.rearm.*`, `--config`) and no `REARM_<FLAG>` variable, so nothing in the environment can switch `--allow-this-host` or `--usehttp` on. The only variables read are the four TEA credential variables (11.3). The ReARM API key and login session are not read.
 2. **It never prompts.** Standard input is read only with `--credential-stdin`, and then only its first line (at most 16 KiB); with `--credential-stdin` and a terminal on standard input the run is a usage error.
@@ -454,7 +454,7 @@ The machine mode refuses, at connect time and on the resolved address of every c
 
 - A name is resolved once per connection, every address is classified, a refused address is never dialled, and the connection is made to the classified address itself; when every address is refused the run fails with `ADDRESS_REFUSED` (exit code 8). A socket-level check refuses a refused address once more just before connecting. When the interfaces of the host cannot be listed, no connection is made.
 - **`--allow-this-host`** (command line only) is for local testing: it allows loopback and this host's own addresses, nothing else. Production callers do not pass it.
-- Everything else is allowed: public addresses, and private addresses that are not this host's. Restricting private ranges is the job of the deployment's network policy (the Helm charts' egress rules), not of the CLI.
+- Everything else is allowed: public addresses, and private addresses that are not this host's. Restricting private ranges is the job of the deployment's network policy (the Helm charts' egress rules), not of the CLI. The operator guide is [Egress Policy of the rebom Pod](https://docs.rearmhq.com/installation/rebom-egress.html).
 - NAT64, 6to4, Teredo and IPv4-compatible forms that embed a refused IPv4 address are not decoded.
 - The interactive commands (11.1, 11.2) are not restricted.
 
