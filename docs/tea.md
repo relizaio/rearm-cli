@@ -302,11 +302,13 @@ The interactive commands never return 8, 9 or 10: they keep 1 for a time bound o
 | `resolve` | which product release(s) a TEI names, and on which servers (discovery only) | `--tei` | `TEA_RESOLUTION` |
 | `product` | name and identifiers of one product | `--api-root`, `--uuid` | `TEA_PRODUCT` |
 | `component` | name and identifiers of one component | `--api-root`, `--uuid` | `TEA_COMPONENT` |
+| `products` | one page of the products of a server, each with its name and identifiers | `--api-root` | `TEA_PRODUCT_LIST` |
+| `components` | one page of the components of a server, each with its name and identifiers | `--api-root` | `TEA_COMPONENT_LIST` |
 | `releases` | the releases of a product or a component, paged | `--api-root`, `--product` or `--component` | `TEA_RELEASE_LIST` |
 | `release` | one release with its components, its latest collection and its lifecycle (CLE) | `--api-root`, `--product-release` or `--component-release` | `TEA_RELEASE` |
 | `download` | the artifacts of one collection version, verified, into a new directory | `--api-root`, `--product-release` or `--component-release`, `--collection-version`, `--dir` | `TEA_DOWNLOAD_MANIFEST` |
 
-Flags of every verb: `--credential-stdin`, `--usehttp`, `--allow-this-host`, `--connect-timeout`, `--deadline`, `--max-document-bytes`, `--max-redirects`, `--max-string-bytes`, `--max-output-bytes`, and the global `-d true`. `resolve` adds `--useport`. `releases` adds `--page-token`, `--page-size`, `--max-pages`. `download` adds `--artifact-type`, `--exclude-artifact-type`, `--media-type`, `--max-artifact-bytes`, `--max-total-bytes`, `--max-files`.
+Flags of every verb: `--credential-stdin`, `--usehttp`, `--allow-this-host`, `--connect-timeout`, `--deadline`, `--max-document-bytes`, `--max-redirects`, `--max-string-bytes`, `--max-output-bytes`, and the global `-d true`. `resolve` adds `--useport`. `releases` adds `--page-token`, `--page-size`, `--max-pages`. `products` and `components` add `--id-type`, `--id-value`, `--sort-order`, `--page-token`, `--page-size`, `--max-rows`. `download` adds `--artifact-type`, `--exclude-artifact-type`, `--media-type`, `--max-artifact-bytes`, `--max-total-bytes`, `--max-files`.
 
 `--api-root` is the TEA API root of the server: the `url` of a well-known endpoint, or a `rootUrl` from a `resolve` result. It must not carry a user name, a password, a query, a fragment or a trailing slash (a refused value is never repeated in the error). The API version is 1.0.0. Plain http needs `--usehttp`, and then applies to exactly that root; for `resolve`, `--usehttp` keeps its meaning of 11.1. Uuid flags are sent in canonical form.
 
@@ -314,6 +316,8 @@ Flags of every verb: `--credential-stdin`, `--usehttp`, `--allow-this-host`, `--
 rearm tea machine resolve --tei "tei://demo.rearmhq.com/uuid/b9f115fb-6688-4a3f-a262-3acc04e1fc9e"
 rearm tea machine release --api-root https://demo.rearmhq.com/tea --product-release b9f115fb-6688-4a3f-a262-3acc04e1fc9e
 rearm tea machine releases --api-root https://demo.rearmhq.com/tea --product <uuid> --max-pages 10
+rearm tea machine products --api-root https://demo.rearmhq.com/tea --page-size 50
+rearm tea machine components --api-root https://demo.rearmhq.com/tea --id-type PURL --id-value=pkg:generic/example/component
 rearm tea machine download --api-root https://demo.rearmhq.com/tea --component-release <uuid> \
     --collection-version 1 --artifact-type BOM --dir /tmp/intake/run-1
 ```
@@ -351,6 +355,23 @@ rearm tea machine download --api-root https://demo.rearmhq.com/tea --component-r
 - `page.stoppedBy` is `END` (no further page; `nextPageToken` is `null`), `MAX_PAGES` or `OUTPUT_BYTES`. With the last two, run the verb again with `--page-token=<nextPageToken>` (always the `=` form: a token may start with `-`); the whole list is the concatenation of the runs until `END`. `pagesRead` is the number of pages in this document.
 - A page is added whole or not at all: when it would take the document past `--max-output-bytes` it is dropped and `nextPageToken` fetches it again. When the first page of a run alone is too large the run fails (`OUTPUT_BYTES`).
 - `--page-size` 1 to 100 (default 100), `--max-pages` 1 to 1000 (default 50). An empty `--page-token` is a usage error. A server token that could not be passed back (a control character) is `INVALID_RESPONSE`.
+
+`TEA_PRODUCT_LIST` and `TEA_COMPONENT_LIST` (the key `components` in place of `products`): one page of the products or the components of a server. One run is one list request; the verb does not walk pages.
+
+```json
+{"formatVersion":1,"kind":"TEA_PRODUCT_LIST","server":{"rootUrl":"https://tea.example.com/tea","apiVersion":"1.0.0"},"products":[{"uuid":"11111111-1111-4111-8111-111111111111","name":"Example Product","identifiers":[{"idType":"PURL","idValue":"pkg:generic/example/product"}]}],"page":{"nextPageToken":"b3BhcXVl","rowsReceived":1,"cutBy":"NONE"}}
+```
+
+A run with `--max-rows 1` against a server that answered three rows:
+
+```json
+{"formatVersion":1,"kind":"TEA_COMPONENT_LIST","server":{"rootUrl":"https://tea.example.com/tea","apiVersion":"1.0.0"},"components":[{"uuid":"33333333-3333-4333-8333-333333333333","name":"Example Component","identifiers":[]}],"page":{"nextPageToken":null,"rowsReceived":3,"cutBy":"MAX_ROWS"}}
+```
+
+- A row is the `product` of `TEA_PRODUCT` (`uuid`, `name`, `identifiers`), which is all a TEA 1.0.0 product or component has. Rows are in the server's order (by name, then uuid). An empty list is `[]` with exit code 0.
+- `page.nextPageToken` is the server's token when it said another page exists, else `null`. Read the next page with `--page-token=<nextPageToken>` (the `=` form) and the same `--id-type`, `--id-value` and `--sort-order` as the run that returned it. A server answers 400 to an expired or conflicting token (`FAILED`, `httpStatus` 400): start again without a token.
+- `--id-type` and `--id-value` (always together, the value in the `=` form) list only the items that carry this identifier; the type is `CPE`, `TEI`, `PURL` or `COMPLIANCE_DOCUMENT`. `--sort-order` is `asc` or `desc`, by name; without it the server's order applies (ascending in TEA 1.0.0).
+- `--page-size` (1 to 100, default 100) is what the server is asked for. A server may answer more rows than asked, or its whole list in one page: `page.rowsReceived` is the number of rows it sent, the document keeps the first `--max-rows` of them (1 to 10000, default 1000), and `page.cutBy` is `MAX_ROWS` when rows were left out, else `NONE` (an open enumeration: any other value also means that rows are missing). Rows left out are not what the next token returns: narrow the list with an identifier, or raise `--max-rows`.
 
 `TEA_RELEASE`: two requests, the release with its latest collection and its lifecycle.
 
@@ -402,7 +423,8 @@ Every limit is a flag with a default; none can be switched off (no range include
 | --- | --- | --- | --- |
 | `--max-document-bytes` | 16 MiB | 1 KiB to 256 MiB | `DOCUMENT_BYTES` (one JSON answer; the well-known document 64 KiB and the discovery answer 1 MiB are fixed) |
 | `--max-redirects` | 5 | 1 to 20 | `REDIRECT_LIMIT` (exit code 5) |
-| `--page-size`, `--max-pages` | 100, 50 | 1 to 100, 1 to 1000 | not an error: `page.stoppedBy` is `MAX_PAGES` |
+| `--page-size`, `--max-pages` (`releases`) | 100, 50 | 1 to 100, 1 to 1000 | not an error: `page.stoppedBy` is `MAX_PAGES` |
+| `--page-size`, `--max-rows` (`products`, `components`) | 100, 1000 | 1 to 100, 1 to 10000 | not an error: `page.cutBy` is `MAX_ROWS` |
 | `--max-string-bytes` | 8192 | 256 to 1 MiB | `STRING_BYTES` (the message names the field, never its value) |
 | `--max-output-bytes` | 32 MiB | 64 KiB to 1 GiB | `OUTPUT_BYTES` (for `releases`: `page.stoppedBy`) |
 | `--max-artifact-bytes` | 100 MiB | 1 to 16 GiB | row `ARTIFACT_BYTES` |

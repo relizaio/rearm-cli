@@ -44,6 +44,8 @@ func teaRequired(t *testing.T, verb teaMachineVerb) []string {
 		return []string{"--api-root", teaBoundsRoot, "--product", teaProduct}
 	case teaVerbRelease:
 		return []string{"--api-root", teaBoundsRoot, "--product-release", teaPR1}
+	case teaVerbProducts, teaVerbComponents:
+		return []string{"--api-root", teaBoundsRoot}
 	}
 	return []string{"--api-root", teaBoundsRoot, "--product-release", teaPR1, "--collection-version", "1",
 		"--dir", filepath.Join(t.TempDir(), "out")}
@@ -90,6 +92,10 @@ func TestTeaMachineLimitRanges(t *testing.T) {
 		{teaVerbDownload, "max-files", 1, 100000, i, "1 to 100000"},
 		{teaVerbReleases, "page-size", 1, 100, i, "1 to 100"},
 		{teaVerbReleases, "max-pages", 1, 1000, i, "1 to 1000"},
+		{teaVerbProducts, "page-size", 1, 100, i, "1 to 100"},
+		{teaVerbProducts, "max-rows", 1, 10000, i, "1 to 10000"},
+		{teaVerbComponents, "page-size", 1, 100, i, "1 to 100"},
+		{teaVerbComponents, "max-rows", 1, 10000, i, "1 to 10000"},
 	}
 	for _, c := range cases {
 		for _, v := range []struct {
@@ -113,9 +119,10 @@ func TestTeaMachineFlagDefaults(t *testing.T) {
 		"connect-timeout": "5s", "deadline": "10m0s", "max-document-bytes": "16777216", "max-redirects": "5",
 		"max-string-bytes": "8192", "max-output-bytes": "33554432", "max-artifact-bytes": "104857600",
 		"max-total-bytes": "1073741824", "max-files": "200", "page-size": "100", "max-pages": "50", "useport": "443",
+		"max-rows": "1000",
 	}
 	seen := map[string]bool{}
-	for _, verb := range []teaMachineVerb{teaVerbResolve, teaVerbProduct, teaVerbComponent, teaVerbReleases, teaVerbRelease, teaVerbDownload} {
+	for _, verb := range []teaMachineVerb{teaVerbResolve, teaVerbProduct, teaVerbComponent, teaVerbProducts, teaVerbComponents, teaVerbReleases, teaVerbRelease, teaVerbDownload} {
 		c := &cobra.Command{Use: string(verb)}
 		addTeaMachineFlags(c, verb)
 		for name, def := range want {
