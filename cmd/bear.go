@@ -78,18 +78,20 @@ var enrichCmd = &cobra.Command{
 func init() {
 	const resilientDnsHelp = "Use resilient DNS for BEAR calls — skip the k8s search-domain expansion (treat host as FQDN) and retry transient resolver errors. Set --resilientDns=false when BEAR is in-cluster and only resolvable via search domains (e.g. http://bear.rearm.svc.cluster.local)."
 
+	const bearApiKeyHelp = "BEAR API Key. Can also be set in the environment variable REARM_BEARAPIKEY, which keeps the key off the command line; the flag wins when both are given"
+
 	enrichSupplierCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichSupplierCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichSupplierCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichSupplierCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichSupplierCmd)
 
 	enrichLicenseCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichLicenseCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichLicenseCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichLicenseCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichLicenseCmd)
 
 	enrichCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichCmd.PersistentFlags().StringArrayVar(&skipPatterns, "skipPattern", []string{}, "Skip components whose purl contains this pattern (can be specified multiple times)")
 	enrichCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichCmd)
