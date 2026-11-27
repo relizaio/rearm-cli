@@ -43,7 +43,7 @@ In API-key mode the CLI keeps the exchanged access token in `~/.rearm.env.tokens
 8. [Add Outbound Deliverables to Release](#8-use-case-add-outbound-deliverables-to-release)
 9. [xBOM Utilities](docs/bomutils.md)
     1. [Fix incorrect OCI purl generated via cdxgen](docs/bomutils.md#91-fix-incorrect-oci-purl-generated-via-cdxgen)
-    2. [BOM supplier enrichment with BEAR](docs/bomutils.md#92-bom-supplier-enrichment-with-bear)
+    2. [BOM Enrichment with BEAR](docs/bomutils.md#92-bom-enrichment-with-bear)
     3. [Convert SPDX to CycloneDX](docs/bomutils.md#93-convert-spdx-to-cyclonedx)
     4. [Merge Multiple BOMs](docs/bomutils.md#94-merge-multiple-boms)
     5. [Score an SBOM against CISA, NTIA and FDA minimum elements](docs/bomutils.md#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)

@@ -9,6 +9,7 @@ Base Command: `bomutils`
    - [Enrich Supplier Only](#921-enrich-supplier-only)
    - [Enrich License Only](#922-enrich-license-only)
    - [Enrich Both Supplier and License](#923-enrich-both-supplier-and-license)
+   - [Passing the BEAR API key in the environment](#passing-the-bear-api-key-in-the-environment)
 3. [Convert SPDX to CycloneDX](#93-convert-spdx-to-cyclonedx)
 4. [Merge Multiple BOMs](#94-merge-multiple-boms)
 5. [Score an SBOM against CISA, NTIA and FDA minimum elements](#95-score-an-sbom-against-cisa-ntia-and-fda-minimum-elements)
@@ -108,12 +109,40 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 
 ### Flags
 
-- **--bearUri** - URI of BEAR service to use, defaults to https://beardemo.rearmhq.com
-- **--bearApiKey** - API Key for BEAR service authentication
+- **--bearUri** - URI of the BEAR service to use, required: there is no default. An absolute http or https URI with a host. Can also be set in `REARM_BEARURI`
+- **--bearApiKey** - API Key for BEAR service authentication. Can also be set in the environment variable `REARM_BEARAPIKEY`, see below
 - **--skipPattern** - Skip components whose purl contains this pattern (can be specified multiple times, only for `enrich` command)
 - **--infile (-f)** - input cyclonedx sbom json file (optional - reads from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json (optional - writes to stdout when not specified)
 - **--debug (-d)** - set to "true" to print enrichment statistics
+
+The BEAR URI is required. A run without one, from the flag, from `REARM_BEARURI` (an empty variable counts as not set) or from the configuration file, is refused before the BOM is read and before anything is sent: exit code 2 and one line on stderr. A value that is not an absolute http or https URI with a host is refused the same way. Breaking change: earlier versions used the public demo instance https://beardemo.rearmhq.com when no URI was given. A caller who relied on that now passes `--bearUri https://beardemo.rearmhq.com` or sets `REARM_BEARURI=https://beardemo.rearmhq.com`.
+
+### Passing the BEAR API key in the environment
+
+The three commands `enrich`, `enrichsupplier` and `enrichlicense` read the BEAR API key from the environment variable `REARM_BEARAPIKEY` when `--bearApiKey` is not given. This is the way to pass the key without putting it on the command line.
+
+Why: a command line can be read by other processes and users of the machine through the process list, and it stays in the shell history and in CI logs. Take the value from a CI secret or a secret manager rather than typing it in front of the command, which would put it in the shell history again.
+
+What it does not do: the environment of a running process can be read by the same user and by root. The variable takes the key out of the process list; it is not a secret store.
+
+The rules:
+
+- The name is exact and in upper case: `REARM_BEARAPIKEY`.
+- An empty variable counts as not set.
+- The flag wins when both are given, also an empty one: `--bearApiKey=` sends no key.
+
+Where the key goes: to the BEAR URI of the run. There is no default instance: a run without a URI is refused before anything is sent, so a key cannot go to an instance nobody named. The URI can come from `--bearUri`, from `REARM_BEARURI` or from the configuration file; the first line of the output, `Using BEAR at <uri>`, names it. Set both variables for the run that needs them rather than in a shell profile.
+
+```bash
+docker run --rm -e REARM_BEARAPIKEY registry.relizahub.com/library/rearm-cli    \
+    bomutils enrich \
+    --bearUri https://mybear.com \
+    -f input-bom.json \
+    -o output-bom.json
+```
+
+`-e REARM_BEARAPIKEY` without a value makes docker take the variable from the calling environment, so the key is not on the docker command line either.
 
 ## 9.3 Convert SPDX to CycloneDX
 

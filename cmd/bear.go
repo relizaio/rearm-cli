@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -78,18 +79,22 @@ var enrichCmd = &cobra.Command{
 func init() {
 	const resilientDnsHelp = "Use resilient DNS for BEAR calls — skip the k8s search-domain expansion (treat host as FQDN) and retry transient resolver errors. Set --resilientDns=false when BEAR is in-cluster and only resolvable via search domains (e.g. http://bear.rearm.svc.cluster.local)."
 
-	enrichSupplierCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichSupplierCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	const bearApiKeyHelp = "BEAR API Key. Can also be set in the environment variable REARM_BEARAPIKEY, which keeps the key off the command line; the flag wins when both are given"
+
+	const bearUriHelp = "BEAR URI to use, required: there is no default. Can also be set in the environment variable REARM_BEARURI; the flag wins when both are given"
+
+	enrichSupplierCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "", bearUriHelp)
+	enrichSupplierCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichSupplierCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichSupplierCmd)
 
-	enrichLicenseCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichLicenseCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichLicenseCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "", bearUriHelp)
+	enrichLicenseCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichLicenseCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichLicenseCmd)
 
-	enrichCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "https://beardemo.rearmhq.com", "BEAR URI to use")
-	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", "BEAR API Key")
+	enrichCmd.PersistentFlags().StringVar(&bearUri, "bearUri", "", bearUriHelp)
+	enrichCmd.PersistentFlags().StringVar(&bearApiKey, "bearApiKey", "", bearApiKeyHelp)
 	enrichCmd.PersistentFlags().StringArrayVar(&skipPatterns, "skipPattern", []string{}, "Skip components whose purl contains this pattern (can be specified multiple times)")
 	enrichCmd.PersistentFlags().BoolVar(&resilientBearDns, "resilientDns", true, resilientDnsHelp)
 	bomUtils.AddCommand(enrichCmd)
@@ -147,7 +152,42 @@ type BearEnrichBatchResponse struct {
 	} `json:"data"`
 }
 
+// The two refusal lines of a run without a usable BEAR URI. Both are fixed
+// texts: the value is never printed, so nothing of a mistyped URI (userinfo
+// included) reaches a log.
+const (
+	bearUriMissingLine = "Error: no BEAR URI given: pass --bearUri or set REARM_BEARURI (there is no default)"
+	bearUriInvalidLine = "Error: the BEAR URI is not valid: --bearUri or REARM_BEARURI must be an absolute http or https URI with a host"
+)
+
+// checkBearUri returns the empty string for a usable BEAR URI, else the
+// refusal line. Usable means: the value, exactly as given, parses, its scheme
+// is http or https (the parser lower-cases it) and its host part is not empty.
+// A path, a trailing slash, userinfo, a query or a fragment are not looked at.
+func checkBearUri(uri string) string {
+	if uri == "" {
+		return bearUriMissingLine
+	}
+	u, err := url.Parse(uri)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return bearUriInvalidLine
+	}
+	return ""
+}
+
+// requireBearUri refuses the run, before the BOM is read and before anything
+// is sent, when no usable BEAR URI came from --bearUri, REARM_BEARURI or the
+// configuration file: the refusal line on stderr and exit code 2. There is no
+// default instance, so a key never goes to a server the caller did not name.
+func requireBearUri() {
+	if line := checkBearUri(bearUri); line != "" {
+		fmt.Fprintln(os.Stderr, line)
+		os.Exit(2)
+	}
+}
+
 func enrichSupplierFunc() {
+	requireBearUri()
 	fmt.Println("Using BEAR at", bearUri)
 
 	bom := readBom()
@@ -210,6 +250,7 @@ func enrichSupplierFunc() {
 }
 
 func enrichLicenseFunc() {
+	requireBearUri()
 	fmt.Println("Using BEAR at", bearUri)
 
 	bom := readBom()
@@ -272,6 +313,7 @@ func enrichLicenseFunc() {
 }
 
 func enrichFunc() {
+	requireBearUri()
 	fmt.Println("Using BEAR at", bearUri)
 
 	bom := readBom()
