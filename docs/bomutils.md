@@ -109,12 +109,14 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 
 ### Flags
 
-- **--bearUri** - URI of BEAR service to use, defaults to https://beardemo.rearmhq.com. Can also be set in `REARM_BEARURI`
+- **--bearUri** - URI of the BEAR service to use, required: there is no default. An absolute http or https URI with a host. Can also be set in `REARM_BEARURI`
 - **--bearApiKey** - API Key for BEAR service authentication. Can also be set in the environment variable `REARM_BEARAPIKEY`, see below
 - **--skipPattern** - Skip components whose purl contains this pattern (can be specified multiple times, only for `enrich` command)
 - **--infile (-f)** - input cyclonedx sbom json file (optional - reads from stdin when not specified)
 - **--outfile (-o)** - output file path to write bom json (optional - writes to stdout when not specified)
 - **--debug (-d)** - set to "true" to print enrichment statistics
+
+The BEAR URI is required. A run without one, from the flag, from `REARM_BEARURI` (an empty variable counts as not set) or from the configuration file, is refused before the BOM is read and before anything is sent: exit code 2 and one line on stderr. A value that is not an absolute http or https URI with a host is refused the same way. Breaking change: earlier versions used the public demo instance https://beardemo.rearmhq.com when no URI was given. A caller who relied on that now passes `--bearUri https://beardemo.rearmhq.com` or sets `REARM_BEARURI=https://beardemo.rearmhq.com`.
 
 ### Passing the BEAR API key in the environment
 
@@ -130,7 +132,7 @@ The rules:
 - An empty variable counts as not set.
 - The flag wins when both are given, also an empty one: `--bearApiKey=` sends no key.
 
-Where the key goes: to the BEAR URI of the run, whatever it is, and that is the public default instance (https://beardemo.rearmhq.com) when neither `--bearUri` nor `REARM_BEARURI` is given. So give the URI whenever a key is set, and set the variable for the run that needs it rather than in a shell profile.
+Where the key goes: to the BEAR URI of the run. There is no default instance: a run without a URI is refused before anything is sent, so a key cannot go to an instance nobody named. The URI can come from `--bearUri`, from `REARM_BEARURI` or from the configuration file; the first line of the output, `Using BEAR at <uri>`, names it. Set both variables for the run that needs them rather than in a shell profile.
 
 ```bash
 docker run --rm -e REARM_BEARAPIKEY registry.relizahub.com/library/rearm-cli    \
