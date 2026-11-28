@@ -705,6 +705,17 @@ Flags stand for:
 
 This use case adds outbound deliverables to a ReARM Release. Release must be in Pending or Draft lifecycle.
 
+Accepted keys: a component API key (for releases of its own component), an organization read-write key, or a Free Form
+key, personal key or GitHub Actions identity (`--auth github-oidc`) that may write the release's component: write
+permission on the organization, on a perspective that contains the component, or on the component itself. A permission
+on the release or branch alone is not enough. A personal key also needs its owner to hold that permission, and what it
+adds is recorded as the owner's. A release whose component the key may not write (a read-only key included), or a
+release that is not of the component named with `--component`, gets the answer a release that does not exist gets:
+`Release not found. Provide either 'release' UUID or 'component' + 'version'.`
+When `--component` names a component the key may not write, the answer is the one a missing component gets:
+`Component not found in this organization`. A component API key that names another component, and any other key type
+(organization read-only, instance or cluster keys), is refused with `Not authorized`.
+
 Sample command:
 
 ```bash
@@ -721,7 +732,7 @@ docker run --rm registry.relizahub.com/library/rearm-cli    \
 ```
 
 Flags stand for:
-- **--component** - Component UUID for this release, required if organization wide API Key is used
+- **--component** - Component UUID for this release, required with --version unless a component API key is used (with --releaseid it is optional)
 - **--cpuarr** - Array of CPU architectures supported by this Deliverable (optional, multiple allowed)
 - **--dateend** - Deliverable Build End date and time (optional, multiple allowed)
 - **--datestart** - Deliverable Build Start date and time (optional, multiple allowed)
