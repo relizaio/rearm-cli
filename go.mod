@@ -11,7 +11,7 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/oolong-project/tea-client-go v0.1.0
-	github.com/relizaio/rearm-client-go v0.12.1-0.20261125151852-ec4e15c60a3f
+	github.com/relizaio/rearm-client-go v0.12.1-0.20261128103259-1ab933e8eb58
 	github.com/spdx/tools-golang v0.5.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
