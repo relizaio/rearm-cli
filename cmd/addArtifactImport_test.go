@@ -39,7 +39,7 @@ func counts(total, aa, staged, unchanged, unmatched, errored, ar, deferred, awai
 func oneEntry(t *testing.T, typ string, summary any, more ...string) (childResult, *fakeServer) {
 	t.Helper()
 	dir := t.TempDir()
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{"release/0": summary}})
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{"release/0": summary}})
 	args := addArtifactArgs(append([]string{"--artifacts", jsonArg(t, []any{art(artFile(t, dir, "doc.json"), typ, "d")})}, more...)...)
 	return runImportChild(t, f.srv.URL, "addartifact", args, childOpts{}), f
 }
@@ -70,6 +70,9 @@ func TestStagedStatementsImportWithTheNote(t *testing.T) {
 	reqs, _ := f.recorded()
 	if len(reqs) != 2 || reqs[0].OperationName != "ImportSummaryProbe" || reqs[1].OperationName != "AddArtifactProgrammaticWithImports" {
 		t.Fatalf("want the probe then the upload, got %+v", reqs)
+	}
+	if probeName(t, reqs[0]) != rearm.ImportSummaryTypeName || strings.Count(reqs[0].Query, "__type") != 1 {
+		t.Fatalf("want one probe for ImportSummary with one __type, got %s %s", reqs[0].Variables, reqs[0].Query)
 	}
 	if strings.Contains(reqs[1].Query, "inboundDeliverableDetails") || strings.Contains(reqs[1].Query, "sourceCodeEntryDetails") || strings.Contains(reqs[1].Query, "statementsAwaitingReconcile") {
 		t.Errorf("selection: %s", reqs[1].Query)
@@ -127,7 +130,7 @@ func TestOutcomeByCounts(t *testing.T) {
 // r7
 func TestReleaseAndDeliverableEntriesAreAttributed(t *testing.T) {
 	dir := t.TempDir()
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{
 		summaries: map[string]any{
 			"release/0":       sum("proposalsAutoAccepted", 2),
 			"deliverable/0/0": sum("statementsTotal", 1, "statementsErrored", 1),
@@ -215,7 +218,7 @@ func TestAttributionIsByTheCheckTagOnly(t *testing.T) {
 		}, 3, `import VEX --deliverablearts[0].artifacts[0] "same": NOT FOUND IN ANSWER: the artifact could not be identified in the server's answer`},
 	}
 	for _, c := range cases {
-		f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{
+		f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{
 			summaries: map[string]any{"release/0": imported, "deliverable/0/0": imported}, mutate: c.mutate})
 		res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs(c.flag, c.input), childOpts{})
 		if res.exit != c.exit {
@@ -234,7 +237,7 @@ func TestAnAnswerWithDataAndErrorsIsGated(t *testing.T) {
 	var dataJSON string
 	f := newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 		if r.OperationName == rearm.ImportSummaryProbeOperationName {
-			return 200, probeBody(currentSummaryFields, nil)
+			return answerProbe(t, r, probeTypes{ImportSummary: currentSummaryFields})
 		}
 		a := fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}}.build(t, r)
 		a["inboundDeliverableDetails"] = []any{}
@@ -265,7 +268,7 @@ func TestAServerWithoutSummariesIsNotReported(t *testing.T) {
 	for _, allow := range []bool{false, true} {
 		f := newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 			if r.OperationName == rearm.ImportSummaryProbeOperationName {
-				return 200, probeBody(nil, nil)
+				return answerProbe(t, r, probeTypes{})
 			}
 			return 200, dataBody(map[string]any{"addArtifactProgrammatic": map[string]any{"uuid": "rel-1"}})
 		})
@@ -278,8 +281,9 @@ func TestAServerWithoutSummariesIsNotReported(t *testing.T) {
 		wantExit(t, res, exit)
 		wantLines(t, res, []string{`import VEX --artifacts[0] "v": NOT REPORTED: this server does not report import results`, want})
 		reqs, _ := f.recorded()
-		if len(reqs) != 2 || reqs[1].OperationName != "AddArtifactProgrammatic" {
-			t.Errorf("want the probe and a legacy upload, got %+v", reqs)
+		if len(reqs) != 3 || probeName(t, reqs[0]) != rearm.ImportSummaryTypeName || probeName(t, reqs[1]) != rearm.VexImportSummaryTypeName ||
+			reqs[2].OperationName != "AddArtifactProgrammatic" {
+			t.Errorf("want the probes for ImportSummary and VexImportSummary, then a legacy upload, got %+v", reqs)
 		}
 	}
 }
@@ -287,12 +291,16 @@ func TestAServerWithoutSummariesIsNotReported(t *testing.T) {
 // r11
 func TestAServerWithOnlyVexImportSummary(t *testing.T) {
 	dir := t.TempDir()
-	f := importServer(t, probeBody(nil, vexSummaryFields), fakeAnswer{field: rearm.VexImportSummaryField, summaries: map[string]any{
+	f := importServer(t, probeTypes{VexImportSummary: vexSummaryFields}, fakeAnswer{field: rearm.VexImportSummaryField, summaries: map[string]any{
 		"release/0": sum("statementsTotal", 2, "proposalsAutoAccepted", 2, "proposalsCreated", 0, "proposalsAutoRejected", 0,
 			"attestationsDeferred", 0, "statementsUnmatched", 0, "statementsErrored", 0, "errorMessages", []any{})}})
 	res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--artifacts", jsonArg(t, []any{art(artFile(t, dir, "vex.json"), "VEX", "v")})), childOpts{})
 	wantExit(t, res, 0)
 	reqs, _ := f.recorded()
+	if len(reqs) != 3 || reqs[0].OperationName != rearm.ImportSummaryProbeOperationName || probeName(t, reqs[0]) != rearm.ImportSummaryTypeName ||
+		reqs[1].OperationName != rearm.ImportSummaryProbeOperationName || probeName(t, reqs[1]) != rearm.VexImportSummaryTypeName {
+		t.Fatalf("want the probes for ImportSummary and VexImportSummary, then the upload, got %+v", reqs)
+	}
 	if q := uploads(reqs)[0].Query; !strings.Contains(q, " vexImportSummary {") || strings.Contains(q, " importSummary {") {
 		t.Errorf("selection: %s", q)
 	}
@@ -323,7 +331,7 @@ func TestARefusedOrFailedUploadAddsItsLine(t *testing.T) {
 	input := jsonArg(t, []any{art(artFile(t, dir, "vex.json"), "VEX", "v")})
 	f := newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 		if r.OperationName == rearm.ImportSummaryProbeOperationName {
-			return 200, probeBody(currentSummaryFields, nil)
+			return answerProbe(t, r, probeTypes{ImportSummary: currentSummaryFields})
 		}
 		return 200, errorsBody(map[string]any{"addArtifactProgrammatic": nil}, "Not authorized")
 	})
@@ -336,7 +344,7 @@ func TestARefusedOrFailedUploadAddsItsLine(t *testing.T) {
 
 	f = newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 		if r.OperationName == rearm.ImportSummaryProbeOperationName {
-			return 200, probeBody(currentSummaryFields, nil)
+			return answerProbe(t, r, probeTypes{ImportSummary: currentSummaryFields})
 		}
 		return 502, "bad gateway"
 	})
@@ -355,7 +363,7 @@ func TestHostileValuesPrintOnOneLine(t *testing.T) {
 	for i := 0; i < 23; i++ {
 		messages = append(messages, fmt.Sprintf("m%d", i))
 	}
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{
 		summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1, "errorMessages", messages,
 			"demotions", []any{map[string]any{"reason": "bad reason", "count": 1}})},
 		mutate: func(a map[string]any) { a["artifactDetails"].([]any)[0].(map[string]any)["uuid"] = "x" },
@@ -391,7 +399,7 @@ func TestHostileValuesPrintOnOneLine(t *testing.T) {
 func preconditionServer(t *testing.T, refusals int, other string) *fakeServer {
 	return newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 		if r.OperationName == rearm.ImportSummaryProbeOperationName {
-			return 200, probeBody(currentSummaryFields, nil)
+			return answerProbe(t, r, probeTypes{ImportSummary: currentSummaryFields})
 		}
 		if other != "" {
 			return 200, errorsBody(map[string]any{"addArtifactProgrammatic": nil}, other)
@@ -694,7 +702,7 @@ func TestAllowImportFailureIsReadOnlyFromTheCommandLine(t *testing.T) {
 		return []string{"--config", p, "--debug", "true"}
 	}
 	importSrv := func() *fakeServer {
-		return importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{"release/0": errored}})
+		return importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{"release/0": errored}})
 	}
 	releaseSrv := func() *fakeServer {
 		return newFakeServer(t, func(n int, r recordedRequest) (int, string) {

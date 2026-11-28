@@ -97,7 +97,8 @@ Ordering:
 Result and exit:
   The import summary of each VEX or SAFETY_CONTEXT artifact is printed on stderr; stdout keeps the JSON answer.
   The exit is 3 when an artifact imported nothing or its result is unknown (the artifacts are stored, so a re-run uploads them again).
-  --allow-import-failure exits 0 and still prints the summary.
+  --allow-import-failure exits 0 and still prints the summary, once the upload completed.
+  When the server refuses the question about which import result fields it reports, nothing is uploaded and the exit is 1, also with --allow-import-failure; a re-run is safe.
   --artifacts cannot be combined with the advanced flags.
   A VEX or SAFETY_CONTEXT artifact on a source code entry (` + "`--scearts`" + `) or nested under another artifact is refused unless --allow-import-failure is given, because its result cannot be checked (use --releasearts; the import runs against the release either way).
   addrelease, addreleases, addodeliverable and getversion never import such an artifact and refuse it unless --allow-import-failure is given.

@@ -1014,13 +1014,13 @@ An artifact counts as imported when the server stored at least one of its statem
 
 | Exit | Meaning |
 |---|---|
-| 0 | every VEX or SAFETY_CONTEXT artifact imported something (or `--allow-import-failure` was given) |
-| 1 | the call did not complete or nothing was sent: an input error, the server refused the call, a transport error, or `--wait-for-sbom` ran out |
+| 0 | every VEX or SAFETY_CONTEXT artifact imported something (or the upload completed and `--allow-import-failure` was given) |
+| 1 | the call did not complete or nothing was sent: an input error, the server refused the call, the server refused the CLI's question about which import result fields it reports, a transport error, or `--wait-for-sbom` ran out |
 | 3 | the upload completed, but an artifact imported nothing or its result is unknown; the artifacts are stored, so a re-run uploads them again |
 
 **Flags for the import:**
 
-- **--allow-import-failure** - exit 0 even when a VEX or SAFETY_CONTEXT artifact imported nothing or its result is unknown (the summary is still printed); also uploads such an artifact on a source code entry or nested under another artifact, unchecked. It is read only from the command line: `REARM_ALLOW_IMPORT_FAILURE` and the config file do not set it, so put it on the step's own command.
+- **--allow-import-failure** - exit 0 even when a VEX or SAFETY_CONTEXT artifact imported nothing or its result is unknown (the summary is still printed); also uploads such an artifact on a source code entry or nested under another artifact, unchecked. It is read only from the command line: `REARM_ALLOW_IMPORT_FAILURE` and the config file do not set it, so put it on the step's own command. It does not cover a server that refuses the CLI's question about which import result fields it reports: the CLI then uploads nothing and exits 1 with "Error: could not read which import result fields this server reports: ...; nothing was uploaded", with or without this flag, and re-running the step is safe.
 - **--wait-for-sbom** - retry the upload while the release has no indexed SBOM, for at most this long (e.g. `10m`); `0` (the default) does not wait.
 
 **What is refused before any request:**

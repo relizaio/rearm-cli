@@ -50,7 +50,7 @@ func TestArtifactCarriesEveryArtifactInputField(t *testing.T) {
 // c2
 func TestImportFieldsAreSent(t *testing.T) {
 	dir := t.TempDir()
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{
 		"release/0": sum("proposalsAutoAccepted", 1), "release/1": sum("proposalsAutoAccepted", 1)}})
 	extra := []any{"importScope", "RELEASE", "importMode", "STAGE", "userIssuerClassOverride", "VENDOR", "status", "COMPLETE",
 		"digestRecords", []any{map[string]any{"algo": "SHA_256", "digest": strings.Repeat("a", 64), "scope": "ORIGINAL_FILE"}}}
@@ -122,7 +122,7 @@ func TestUnknownKeysAreRefusedBeforeAnyRequest(t *testing.T) {
 // c4
 func TestCaseVariantsOfKnownKeysAndCRLFAreAccepted(t *testing.T) {
 	dir := t.TempDir()
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
 	p, _ := json.Marshal(artFile(t, dir, "vex.json"))
 	input := "[\r\n  {\"filePath\": " + string(p) + ",\r\n   \"type\": \"VEX\",\r\n   \"ImportScope\": \"RELEASE\",\r\n   \"DISPLAYIDENTIFIER\": \"v\"}\r\n]\r\n"
 	res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--artifacts", input), childOpts{})
@@ -148,7 +148,7 @@ func TestDeprecatedAliasesAreForwardedWithNotices(t *testing.T) {
 			`notice: --artifacts[0]: "importScope" (RELEASE) is used and "vexScope" (ORG) is ignored`}},
 		{[]any{"vexImportMode", "STAGE", "importMode", "STAGE"}, []string{`notice: --artifacts[0]: "vexImportMode" is deprecated; use "importMode"`}},
 	} {
-		f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
+		f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
 		res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--artifacts", jsonArg(t, []any{art(vex, "VEX", "v", c.extra...)})), childOpts{})
 		wantExit(t, res, 0)
 		lines := res.stderrLines()
@@ -178,7 +178,7 @@ func TestANestedImportableEntryIsRefused(t *testing.T) {
 	wantLines(t, res, []string{"Error: --artifacts[0].artifacts[0]: a VEX or SAFETY_CONTEXT artifact nested under another artifact is stored but never imported; list it at the top level, or pass --allow-import-failure to upload it anyway"})
 	wantNoRequests(t, f)
 
-	f = importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{})
+	f = importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{})
 	res = runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--artifacts", jsonArg(t, input), "--allow-import-failure"), childOpts{})
 	wantExit(t, res, 0)
 	wantLines(t, res, []string{
@@ -236,7 +236,7 @@ func TestArtifactsBesideAnAdvancedFlagIsRefused(t *testing.T) {
 		wantLines(t, res, []string{want})
 		wantNoRequests(t, f)
 	}
-	f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
+	f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{summaries: map[string]any{"release/0": sum("proposalsAutoAccepted", 1)}})
 	res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--artifacts", jsonArg(t, []any{art(vex, "VEX", "v")})), childOpts{})
 	wantExit(t, res, 0)
 	reqs, _ := f.recorded()
@@ -287,7 +287,7 @@ func TestCheckTagsGoOnCheckedEntriesOnly(t *testing.T) {
 	sce := jsonArg(t, []any{map[string]any{"sce": "s-1", "artifacts": []any{art(artFile(t, dir, "svex.json"), "VEX", "sv")}}})
 	var previous []string
 	for run := 0; run < 2; run++ {
-		f := importServer(t, probeBody(currentSummaryFields, nil), fakeAnswer{})
+		f := importServer(t, probeTypes{ImportSummary: currentSummaryFields}, fakeAnswer{})
 		res := runImportChild(t, f.srv.URL, "addartifact", addArtifactArgs("--releasearts", release, "--deliverablearts", deliverable, "--scearts", sce, "--allow-import-failure"), childOpts{})
 		wantExit(t, res, 0)
 		reqs, _ := f.recorded()
