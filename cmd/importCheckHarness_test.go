@@ -266,11 +266,49 @@ func probeType(fields []string) any {
 	return map[string]any{"fields": fs}
 }
 
-// probeBody answers the probe with the two types' fields (nil: the type is absent).
-func probeBody(importSummary, vexImportSummary []string) string {
-	b, _ := json.Marshal(map[string]any{"data": map[string]any{
-		"importSummary": probeType(importSummary), "vexImportSummary": probeType(vexImportSummary)}})
-	return string(b)
+// probeTypes are the fields of the two summary types a fake server has (nil: the type is absent).
+type probeTypes struct {
+	ImportSummary, VexImportSummary []string
+}
+
+// badFaithBody is the answer of a server that keeps graphql-java's good-faith introspection limit
+// to a request selecting __type or __Type.fields more than once.
+const badFaithBody = `{"errors":[{"message":"This request is not asking for introspection in good faith - __Type.fields is present too often!","extensions":{"classification":"BadFaithIntrospection"}}]}`
+
+// answerProbe answers one probe request as a server with the good-faith introspection limit:
+// a query with more than one __type or fields is refused, otherwise the type named by the variable
+// `name` is answered from p.
+func answerProbe(t *testing.T, r recordedRequest, p probeTypes) (int, string) {
+	t.Helper()
+	if strings.Count(r.Query, "__type") > 1 || strings.Count(r.Query, "fields") > 1 {
+		return 200, badFaithBody
+	}
+	var vars struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(r.Variables, &vars)
+	var fields []string
+	switch vars.Name {
+	case rearm.ImportSummaryTypeName:
+		fields = p.ImportSummary
+	case rearm.VexImportSummaryTypeName:
+		fields = p.VexImportSummary
+	default:
+		t.Errorf("the probe asks for an unknown type %q: %s", vars.Name, r.Variables)
+	}
+	return 200, dataBody(map[string]any{"__type": probeType(fields)})
+}
+
+// probeName is the type a probe request asks for.
+func probeName(t *testing.T, r recordedRequest) string {
+	t.Helper()
+	var vars struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(r.Variables, &vars); err != nil {
+		t.Errorf("probe variables: %v", err)
+	}
+	return vars.Name
 }
 
 func dataBody(data map[string]any) string {
@@ -360,11 +398,11 @@ func (f fakeAnswer) build(t *testing.T, req recordedRequest) map[string]any {
 	return answer
 }
 
-// importServer answers the probe with probe and every upload with the fake answer.
-func importServer(t *testing.T, probe string, answer fakeAnswer) *fakeServer {
+// importServer answers each probe request from p and every upload with the fake answer.
+func importServer(t *testing.T, p probeTypes, answer fakeAnswer) *fakeServer {
 	return newFakeServer(t, func(n int, r recordedRequest) (int, string) {
 		if r.OperationName == rearm.ImportSummaryProbeOperationName {
-			return 200, probe
+			return answerProbe(t, r, p)
 		}
 		return 200, dataBody(map[string]any{"addArtifactProgrammatic": answer.build(t, r)})
 	})
